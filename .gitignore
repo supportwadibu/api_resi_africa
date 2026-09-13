@@ -1,0 +1,33 @@
+# Dependencies and AdonisJS build
+node_modules
+build
+tmp/*
+!tmp/.gitkeep
+
+# Secrets
+.env
+.env.local
+.env.production.local
+.env.development.local
+
+# Comptes de service Firebase — contiennent une clé privée donnant un accès
+# administrateur complet au projet (lecture/écriture de toutes les données,
+# contournement des règles de sécurité). Ne jamais committer.
+*firebase-adminsdk*.json
+service-account*.json
+secrets/
+
+# Frontend assets compiled code
+public/assets
+
+# Build tools specific
+npm-debug.log
+yarn-error.log
+
+# Editors specific
+.fleet
+.idea
+.vscode
+
+# Platform specific
+.DS_Store

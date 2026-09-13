@@ -1,0 +1,27 @@
+import { SUBSCRIPTION_STATUSES } from '#utils/enums/subscription_status'
+
+import vine from '@vinejs/vine'
+
+export const subscribeToPlanValidator = vine.compile(
+  vine.object({
+    plan_id: vine.string().trim().minLength(24).maxLength(24),
+    payment_reference: vine.string().trim().maxLength(120).optional(),
+    auto_renew: vine.boolean().optional(),
+  })
+)
+
+export const listSubscriptionsValidator = vine.compile(
+  vine.object({
+    status: vine.enum(SUBSCRIPTION_STATUSES).optional(),
+    user_id: vine.string().trim().minLength(24).maxLength(24).optional(),
+    is_trial: vine.boolean().optional(),
+    page: vine.number().positive().withoutDecimals().optional(),
+    per_page: vine.number().positive().withoutDecimals().max(100).optional(),
+  })
+)
+
+export const cancelSubscriptionValidator = vine.compile(
+  vine.object({
+    reason: vine.string().trim().minLength(3).maxLength(500).optional(),
+  })
+)

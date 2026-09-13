@@ -1,0 +1,6 @@
+export { CreateExpenseUseCase } from './create_expense.use_case.ts'
+export { DeleteExpenseUseCase } from './delete_expense.use_case.ts'
+export { FindExpenseUseCase } from './find_expense.use_case.ts'
+export { GetExpenseSummaryUseCase } from './get_expense_summary.use_case.ts'
+export { ListOwnerExpensesUseCase } from './list_owner_expenses.use_case.ts'
+export { UpdateExpenseUseCase } from './update_expense.use_case.ts'
