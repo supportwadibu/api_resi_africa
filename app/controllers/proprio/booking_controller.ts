@@ -10,6 +10,7 @@ import {
   CheckOutBookingUseCase,
   CreateOwnerBookingUseCase,
   ExtendOwnerBookingUseCase,
+  GetBookingStatsUseCase,
   ListOwnerBookingsUseCase,
 } from '../../features/bookings/use_cases/index.ts'
 
@@ -23,6 +24,21 @@ export default class ProprioBookingController {
     })
     const result = await new ListOwnerBookingsUseCase().execute(userId, payload)
     return ctx.response.ok(result)
+  }
+
+  /**
+   * Chiffres du tableau de bord des réservations : occupation du mois,
+   * séjours à venir et en cours, revenu du mois rapporté au précédent.
+   *
+   * Sans paramètre de période : l'écran affiche le mois en cours, et laisser
+   * le cadrage au client ferait diverger les trois tuiles et le bloc revenus.
+   */
+  async stats(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const stats = await new GetBookingStatsUseCase().execute(userId)
+    return ctx.response.ok({ data: stats })
   }
 
   async store(ctx: HttpContext) {

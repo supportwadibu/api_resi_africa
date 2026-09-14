@@ -148,3 +148,31 @@ export interface ListBookingsOutput {
 export interface CancelBookingInput {
   reason?: string
 }
+
+/**
+ * Revenu du mois en cours rapporté au précédent.
+ *
+ * Le montant est le revenu **constaté** au prorata des jours, comme le relevé
+ * financier : un séjour à cheval sur deux mois ne doit pas imputer son total
+ * aux deux, sinon le tableau de bord et le rapport se contrediraient.
+ */
+export interface BookingRevenueStatsDto {
+  current_month: number
+  previous_month: number
+  /**
+   * Variation en pourcentage d'un mois à l'autre, `null` quand le mois
+   * précédent est à zéro : une croissance depuis rien n'a pas de valeur, et
+   * afficher « +100 % » laisserait croire à un doublement.
+   */
+  growth_percent: number | null
+}
+
+export interface BookingStatsDto {
+  /** Part des jours-bien occupés sur le mois en cours, de 0 à 1. */
+  taux_occupation: number
+  /** Séjours confirmés dont l'arrivée reste à venir. */
+  upcoming: number
+  /** Séjours en cours : le client est arrivé et n'a pas encore quitté. */
+  in_progress: number
+  revenue: BookingRevenueStatsDto
+}

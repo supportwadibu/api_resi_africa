@@ -1,8 +1,18 @@
 import Booking, { type BookingRecord } from '#models/booking'
 import Property from '#models/property'
 
+import {
+  countInProgress,
+  countUpcoming,
+  growthPercent,
+  monthWindow,
+  occupancyForWindow,
+  revenueForMonth,
+} from '../booking_stats.ts'
+
 import type {
   BookingDto,
+  BookingStatsDto,
   BookingStatus,
   CreateCalculatedBookingInput,
   ListBookingsInput,
@@ -205,6 +215,47 @@ export class BookingRepository {
       total,
       page,
       perPage,
+    }
+  }
+
+  /**
+   * Chiffres du tableau de bord : occupation, séjours à venir et en cours,
+   * revenu du mois rapporté au précédent.
+   *
+   * Une seule lecture couvre les deux mois — `findForRevenue` filtre en
+   * mémoire, si bien que demander chaque mois séparément doublerait les
+   * lectures Firestore pour le même jeu de documents.
+   */
+  async stats(owner_id: string, now: Date = new Date()): Promise<BookingStatsDto> {
+    const current = monthWindow(now)
+    const previous = monthWindow(now, -1)
+
+    // Sans borne haute : les compteurs portent aussi sur les séjours à venir
+    // au-delà du mois en cours, qu'une fenêtre fermée écarterait. La lecture
+    // reste unique, `findForRevenue` filtrant en mémoire.
+    const [bookings, propertyStats] = await Promise.all([
+      Booking.findForRevenue(owner_id, { from: previous.from }),
+      Property.statsByOwner(owner_id),
+    ])
+
+    const currentRevenue = revenueForMonth(bookings, current)
+    const previousRevenue = revenueForMonth(bookings, previous)
+
+    return {
+      // `published + rented` : un bien réservé passe en « rented » et sort des
+      // publiés, alors qu'il fait toujours partie du parc exploité.
+      taux_occupation: occupancyForWindow(
+        bookings,
+        propertyStats.published + propertyStats.rented,
+        current
+      ),
+      upcoming: countUpcoming(bookings, now),
+      in_progress: countInProgress(bookings),
+      revenue: {
+        current_month: currentRevenue,
+        previous_month: previousRevenue,
+        growth_percent: growthPercent(currentRevenue, previousRevenue),
+      },
     }
   }
 }

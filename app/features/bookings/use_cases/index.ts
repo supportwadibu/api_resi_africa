@@ -7,3 +7,4 @@ export { default as CreateOwnerBookingUseCase } from './create_owner_booking.use
 export { default as CheckOutBookingUseCase } from './check_out_booking.use_case.ts'
 export { default as ExtendOwnerBookingUseCase } from './extend_owner_booking.use_case.ts'
 export { default as GetAvailabilityUseCase } from './get_availability.use_case.ts'
+export { default as GetBookingStatsUseCase } from './get_booking_stats.use_case.ts'
