@@ -155,6 +155,8 @@ export interface UpdatePropertyInput {
 
 export interface ListPropertiesFilters {
   owner_id?: string
+  /** Unités rattachées à une résidence, pour sa fiche de détail. */
+  residence_id?: string
   status?: PropertyStatus
   property_type?: PropertyType
   city?: string

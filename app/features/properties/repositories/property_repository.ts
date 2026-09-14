@@ -103,6 +103,7 @@ export class PropertyRepository {
     const { data, total } = await Property.paginate(
       {
         owner_id: filters.owner_id || undefined,
+        residence_id: filters.residence_id || undefined,
         status: filters.status,
         property_type: filters.property_type,
         city: filters.city,

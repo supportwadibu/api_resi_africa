@@ -160,6 +160,10 @@ export const updatePropertyValidator = vine.compile(
  */
 export const listOwnerPropertiesValidator = vine.compile(
   vine.object({
+    // Unités d'une résidence, pour sa fiche de détail. Le contrôle de
+    // propriété reste porté par `owner_id`, posé par le contrôleur : un
+    // identifiant deviné ne doit pas lister le parc d'un autre compte.
+    residence_id: vine.string().trim().minLength(1).optional(),
     status: vine.enum(PROPERTY_STATUSES).optional(),
     property_type: vine.enum(PROPERTY_TYPES).optional(),
     page: vine.number().positive().withoutDecimals().optional(),

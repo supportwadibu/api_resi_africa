@@ -285,6 +285,8 @@ function withDefaults(input: Partial<PropertyDocument>): PropertyDocument {
 /** Critères de recherche du catalogue public et de l'espace propriétaire. */
 export interface PropertyFilters {
   owner_id?: string
+  /** Unités d'une résidence donnée. */
+  residence_id?: string
   status?: PropertyStatus
   property_type?: PropertyType
   city?: string
@@ -312,6 +314,7 @@ function buildQuery(filters: PropertyFilters): FirebaseFirestore.Query<PropertyD
   let query = properties() as FirebaseFirestore.Query<PropertyDocument>
 
   if (filters.owner_id) query = query.where('owner_id', '==', filters.owner_id)
+  if (filters.residence_id) query = query.where('residence_id', '==', filters.residence_id)
   if (filters.status) query = query.where('status', '==', filters.status)
   if (filters.property_type) query = query.where('property_type', '==', filters.property_type)
   if (filters.furnishing) query = query.where('details.furnishing', '==', filters.furnishing)
