@@ -3,6 +3,7 @@ import { test } from '@japa/runner'
 import {
   countInProgress,
   countUpcoming,
+  elapsedWindow,
   growthPercent,
   monthWindow,
   occupancyForWindow,
@@ -51,14 +52,29 @@ test.group('countUpcoming', () => {
         booking({ start_date: new Date('2026-03-20T12:00:00Z') }),
         booking({ start_date: new Date('2026-03-28T12:00:00Z') }),
       ],
-      NOW
+      NOW,
+      monthWindow(NOW)
     )
 
     assert.equal(count, 2)
   })
 
   test('écarte un séjour confirmé déjà commencé', ({ assert }) => {
-    const count = countUpcoming([booking({ start_date: new Date('2026-03-10T12:00:00Z') })], NOW)
+    const count = countUpcoming(
+      [booking({ start_date: new Date('2026-03-10T12:00:00Z') })],
+      NOW,
+      monthWindow(NOW)
+    )
+
+    assert.equal(count, 0)
+  })
+
+  test('écarte une arrivée postérieure au mois affiché', ({ assert }) => {
+    const count = countUpcoming(
+      [booking({ start_date: new Date('2026-08-12T12:00:00Z') })],
+      NOW,
+      monthWindow(NOW)
+    )
 
     assert.equal(count, 0)
   })
@@ -71,7 +87,8 @@ test.group('countUpcoming', () => {
         booking({ status: 'completed', start_date: future }),
         booking({ status: 'cancelled', start_date: future }),
       ],
-      NOW
+      NOW,
+      monthWindow(NOW)
     )
 
     assert.equal(count, 0)
@@ -80,13 +97,46 @@ test.group('countUpcoming', () => {
 
 test.group('countInProgress', () => {
   test('compte les séjours au statut en cours', ({ assert }) => {
-    const count = countInProgress([
-      booking({ status: 'in_progress' }),
-      booking({ status: 'in_progress' }),
-      booking({ status: 'confirmed' }),
-    ])
+    const count = countInProgress(
+      [
+        booking({ status: 'in_progress' }),
+        booking({ status: 'in_progress' }),
+        booking({ status: 'confirmed' }),
+      ],
+      monthWindow(NOW)
+    )
 
     assert.equal(count, 2)
+  })
+
+  test('retient un séjour entamé le mois précédent et toujours actif', ({ assert }) => {
+    const count = countInProgress(
+      [
+        booking({
+          status: 'in_progress',
+          start_date: new Date('2026-02-25T12:00:00Z'),
+          end_date: new Date('2026-03-04T12:00:00Z'),
+        }),
+      ],
+      monthWindow(NOW)
+    )
+
+    assert.equal(count, 1)
+  })
+
+  test('écarte un séjour entièrement hors du mois affiché', ({ assert }) => {
+    const count = countInProgress(
+      [
+        booking({
+          status: 'in_progress',
+          start_date: new Date('2026-01-10T12:00:00Z'),
+          end_date: new Date('2026-01-14T12:00:00Z'),
+        }),
+      ],
+      monthWindow(NOW)
+    )
+
+    assert.equal(count, 0)
   })
 })
 
@@ -124,6 +174,24 @@ test.group('revenueForMonth', () => {
   })
 })
 
+test.group('elapsedWindow', () => {
+  test('arrête la fenêtre à l’instant courant', ({ assert }) => {
+    const { from, to } = elapsedWindow(monthWindow(NOW), NOW)
+
+    assert.equal(from.toISOString(), '2026-03-01T00:00:00.000Z')
+    assert.equal(to.toISOString(), NOW.toISOString())
+  })
+
+  test('un mois révolu garde sa borne de fin', ({ assert }) => {
+    // Le mois précédent est entièrement écoulé : le tronquer à « maintenant »
+    // l'allongerait au lieu de le raccourcir.
+    const previous = monthWindow(NOW, -1)
+    const { to } = elapsedWindow(previous, NOW)
+
+    assert.equal(to.toISOString(), previous.to.toISOString())
+  })
+})
+
 test.group('occupancyForWindow', () => {
   test('rapporte les jours occupés à la capacité du parc', ({ assert }) => {
     // 10 jours occupés sur un parc d'un bien, en mars (31 jours).
@@ -139,6 +207,23 @@ test.group('occupancyForWindow', () => {
     )
 
     assert.closeTo(rate, 10 / 31, 0.001)
+  })
+
+  test('sur le mois écoulé, le dénominateur suit les jours passés', ({ assert }) => {
+    // Du 1er au 11 mars, lu le 15 à midi : 10 jours occupés sur les 15 jours
+    // entamés depuis le 1er, et non sur les 31 du mois entier.
+    const rate = occupancyForWindow(
+      [
+        booking({
+          start_date: new Date('2026-03-01T12:00:00Z'),
+          end_date: new Date('2026-03-11T12:00:00Z'),
+        }),
+      ],
+      1,
+      elapsedWindow(monthWindow(NOW), NOW)
+    )
+
+    assert.closeTo(rate, 10 / 15, 0.01)
   })
 
   test('un parc plus grand dilue le taux', ({ assert }) => {

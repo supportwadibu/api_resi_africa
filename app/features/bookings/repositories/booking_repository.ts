@@ -4,6 +4,7 @@ import Property from '#models/property'
 import {
   countInProgress,
   countUpcoming,
+  elapsedWindow,
   growthPercent,
   monthWindow,
   occupancyForWindow,
@@ -230,11 +231,11 @@ export class BookingRepository {
     const current = monthWindow(now)
     const previous = monthWindow(now, -1)
 
-    // Sans borne haute : les compteurs portent aussi sur les séjours à venir
-    // au-delà du mois en cours, qu'une fenêtre fermée écarterait. La lecture
-    // reste unique, `findForRevenue` filtrant en mémoire.
+    // Du 1er du mois précédent à la fin du mois en cours : tous les chiffres
+    // de l'écran tiennent dans cette fenêtre, le mois précédent ne servant
+    // qu'à la comparaison de revenu.
     const [bookings, propertyStats] = await Promise.all([
-      Booking.findForRevenue(owner_id, { from: previous.from }),
+      Booking.findForRevenue(owner_id, { from: previous.from, to: current.to }),
       Property.statsByOwner(owner_id),
     ])
 
@@ -242,15 +243,19 @@ export class BookingRepository {
     const previousRevenue = revenueForMonth(bookings, previous)
 
     return {
+      // Sur les jours écoulés, et non le mois entier : c'est la convention de
+      // l'onglet Statistiques, et rapporter au mois complet donnerait un taux
+      // structurellement bas les premiers jours du mois.
+      //
       // `published + rented` : un bien réservé passe en « rented » et sort des
       // publiés, alors qu'il fait toujours partie du parc exploité.
       taux_occupation: occupancyForWindow(
         bookings,
         propertyStats.published + propertyStats.rented,
-        current
+        elapsedWindow(current, now)
       ),
-      upcoming: countUpcoming(bookings, now),
-      in_progress: countInProgress(bookings),
+      upcoming: countUpcoming(bookings, now, current),
+      in_progress: countInProgress(bookings, current),
       revenue: {
         current_month: currentRevenue,
         previous_month: previousRevenue,

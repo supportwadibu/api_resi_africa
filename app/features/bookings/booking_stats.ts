@@ -47,20 +47,56 @@ export function monthWindow(reference: Date, offset = 0): MonthWindow {
 }
 
 /**
- * Séjours confirmés dont l'arrivée reste à venir.
+ * Fenêtre tronquée à l'instant courant.
+ *
+ * Le taux d'occupation se mesure sur les jours **écoulés** : rapporté au mois
+ * entier, il serait structurellement bas en début de mois — le 2 septembre,
+ * un mois entièrement réservé afficherait moins de 10 %, le dénominateur
+ * valant déjà trente jours.
+ *
+ * C'est aussi la convention de l'onglet Statistiques, qui interroge le relevé
+ * financier du 1er à aujourd'hui. Deux taux d'occupation divergents dans la
+ * même application n'auraient pas de lecture possible.
+ *
+ * Un mois déjà révolu garde sa borne : la tronquer l'allongerait.
+ */
+export function elapsedWindow(window: MonthWindow, now: Date): MonthWindow {
+  return { from: window.from, to: now < window.to ? now : window.to }
+}
+
+/**
+ * Séjours confirmés dont l'arrivée reste à venir **dans le mois affiché**.
  *
  * Distinct de « en cours » : la période est bloquée, le client n'est pas
  * encore là. Un séjour confirmé mais déjà commencé n'est plus à venir même si
  * son statut n'a pas encore basculé — la bascule dépend d'une action du
  * propriétaire au comptoir, qui peut tarder.
+ *
+ * Borné au mois comme les autres chiffres de l'écran : ces tuiles sont lues
+ * d'un seul coup d'œil à côté du revenu mensuel, et un carnet de commandes
+ * s'étendant jusqu'en décembre y passerait pour le mois en cours.
  */
-export function countUpcoming(bookings: StatsBooking[], now: Date): number {
-  return bookings.filter((b) => b.status === 'confirmed' && b.start_date > now).length
+export function countUpcoming(bookings: StatsBooking[], now: Date, window: MonthWindow): number {
+  return bookings.filter(
+    (b) => b.status === 'confirmed' && b.start_date > now && b.start_date < window.to
+  ).length
 }
 
-/** Séjours en cours : le client est arrivé et n'a pas encore quitté. */
-export function countInProgress(bookings: StatsBooking[]): number {
-  return bookings.filter((b) => b.status === 'in_progress').length
+/**
+ * Séjours en cours dont la période touche le mois affiché.
+ *
+ * Un séjour entamé le mois précédent et non encore clos occupe bien le bien
+ * aujourd'hui : l'écarter ferait afficher « 0 en cours » à un propriétaire
+ * dont le client est dans les murs.
+ */
+export function countInProgress(bookings: StatsBooking[], window: MonthWindow): number {
+  return bookings.filter(
+    (b) =>
+      b.status === 'in_progress' &&
+      // Chevauchement, et non inclusion : la même règle que le revenu.
+      b.start_date < window.to &&
+      (b.end_date ?? b.start_date) >= window.from
+  ).length
 }
 
 /**

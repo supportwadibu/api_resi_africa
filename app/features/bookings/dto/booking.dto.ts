@@ -167,12 +167,24 @@ export interface BookingRevenueStatsDto {
   growth_percent: number | null
 }
 
+/**
+ * Chiffres du tableau de bord, tous cadrés sur le **mois en cours**.
+ *
+ * Le cadrage commun est la propriété qui compte : ces valeurs sont affichées
+ * côte à côte, et un compteur portant sur une autre période y serait lu comme
+ * s'il décrivait le mois.
+ */
 export interface BookingStatsDto {
-  /** Part des jours-bien occupés sur le mois en cours, de 0 à 1. */
+  /**
+   * Part des jours-bien occupés sur les jours **écoulés** du mois, de 0 à 1.
+   *
+   * Même convention que l'onglet Statistiques : rapporté au mois entier, le
+   * taux serait structurellement bas les premiers jours du mois.
+   */
   taux_occupation: number
-  /** Séjours confirmés dont l'arrivée reste à venir. */
+  /** Séjours confirmés dont l'arrivée reste à venir d'ici la fin du mois. */
   upcoming: number
-  /** Séjours en cours : le client est arrivé et n'a pas encore quitté. */
+  /** Séjours en cours dont la période touche le mois. */
   in_progress: number
   revenue: BookingRevenueStatsDto
 }
