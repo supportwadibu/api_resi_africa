@@ -40,6 +40,7 @@ export const COLLECTIONS = {
   promoCodeUsages: 'promo_code_usages',
   typeOfPieces: 'type_of_pieces',
   clients: 'clients',
+  feedbacks: 'feedbacks',
 } as const
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS]

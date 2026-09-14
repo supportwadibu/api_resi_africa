@@ -5,6 +5,7 @@ import router from '@adonisjs/core/services/router'
 const AuthController = () => import('#controllers/auth/auth_controller')
 const CronController = () => import('#controllers/cron_controller')
 const AdminPlansController = () => import('#controllers/admin/plans_controller')
+const AdminFeedbackController = () => import('#controllers/admin/feedback_controller')
 const ProprioProfileController = () => import('#controllers/proprio/profile_controller')
 const ProprioPropertyController = () => import('#controllers/proprio/property_controller')
 const ProprioPropertyImageController = () =>
@@ -15,6 +16,7 @@ const ProprioClientController = () => import('#controllers/proprio/client_contro
 const ProprioExpenseController = () => import('#controllers/proprio/expense_controller')
 const ProprioFinanceController = () => import('#controllers/proprio/finance_controller')
 const ProprioSubscriptionController = () => import('#controllers/proprio/subscription_controller')
+const ProprioFeedbackController = () => import('#controllers/proprio/feedback_controller')
 const ClientPropertyController = () => import('#controllers/client/property_controller')
 const ClientBookingController = () => import('#controllers/client/booking_controller')
 const ClientBookingPaymentController = () =>
@@ -58,6 +60,15 @@ router
           })
           .prefix('plans')
           .as('plans')
+
+        router
+          .group(() => {
+            router.get('/', [AdminFeedbackController, 'index'])
+            router.get(':id', [AdminFeedbackController, 'show'])
+            router.patch(':id/status', [AdminFeedbackController, 'updateStatus'])
+          })
+          .prefix('feedbacks')
+          .as('feedbacks')
       })
       .prefix('admin')
       .as('admin')
@@ -144,6 +155,14 @@ router
           })
           .prefix('finance')
           .as('finance')
+
+        router
+          .group(() => {
+            router.get('/', [ProprioFeedbackController, 'index'])
+            router.post('/', [ProprioFeedbackController, 'store'])
+          })
+          .prefix('feedbacks')
+          .as('feedbacks')
 
         router.get('subscription', [ProprioSubscriptionController, 'show']).as('subscription')
       })

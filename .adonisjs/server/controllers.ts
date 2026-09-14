@@ -6,6 +6,7 @@
 export const controllers = {
   AccessTokens: () => import('#controllers/access_tokens_controller'),
   admin: {
+    Feedback: () => import('#controllers/admin/feedback_controller'),
     Owners: () => import('#controllers/admin/owners_controller'),
     Plans: () => import('#controllers/admin/plans_controller'),
   },
@@ -24,6 +25,7 @@ export const controllers = {
     Booking: () => import('#controllers/proprio/booking_controller'),
     Client: () => import('#controllers/proprio/client_controller'),
     Expense: () => import('#controllers/proprio/expense_controller'),
+    Feedback: () => import('#controllers/proprio/feedback_controller'),
     Finance: () => import('#controllers/proprio/finance_controller'),
     Profile: () => import('#controllers/proprio/profile_controller'),
     Property: () => import('#controllers/proprio/property_controller'),
