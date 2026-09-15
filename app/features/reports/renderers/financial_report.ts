@@ -3,6 +3,7 @@ import type { ReportContext } from '#features/reports/dto/report.dto'
 import {
   escapeHtml,
   formatAmount,
+  formatDays,
   formatPercent,
   renderDocument,
 } from '#features/reports/renderers/layout'
@@ -49,7 +50,7 @@ function renderKeyFigures(summary: FinancialReportData['overview']['summary']): 
         <div class="card"><div class="card-label">Bénéfice net</div><div class="card-value">${formatAmount(summary.benefice_net)}</div></div>
         <div class="card"><div class="card-label">Taux d'occupation</div><div class="card-value">${formatPercent(summary.taux_occupation)}</div></div>
         <div class="card"><div class="card-label">Réservations</div><div class="card-value">${summary.reservations}</div></div>
-        <div class="card"><div class="card-label">Séjour moyen</div><div class="card-value">${summary.moyen_sejour} j</div></div>
+        <div class="card"><div class="card-label">Séjour moyen</div><div class="card-value">${formatDays(summary.moyen_sejour)}</div></div>
       </div>
     </section>`
 }

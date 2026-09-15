@@ -58,6 +58,21 @@ test.group('renderFinancialReport', () => {
     assert.include(html, '60 %')
   })
 
+  test('arrondit le séjour moyen au dixième', ({ assert }) => {
+    // `moyen_sejour` arrive en quotient brut de `FinanceSummaryDto` :
+    // « 4.333333333333333 j » sur un document destiné à une banque.
+    const html = renderFinancialReport(
+      {
+        ...data,
+        overview: { ...data.overview, summary: { ...data.overview.summary, moyen_sejour: 13 / 3 } },
+      },
+      context
+    )
+
+    assert.include(html, '4,3 j')
+    assert.notInclude(html, '4.333')
+  })
+
   test('trace une courbe des revenus', ({ assert }) => {
     const html = renderFinancialReport(data, context)
 

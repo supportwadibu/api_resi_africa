@@ -64,6 +64,15 @@ test.group('renderPerformanceReport', () => {
     assert.include(html, 'jours écoulés')
   })
 
+  test('arrondit le séjour moyen au dixième', ({ assert }) => {
+    // `average_stay` est un quotient brut aligné sur `moyen_sejour` de Finance :
+    // imprimé tel quel, « 4.333333333333333 j » sortirait sur le document.
+    const html = renderPerformanceReport({ ...data, average_stay: 13 / 3 }, context)
+
+    assert.include(html, '4,3 j')
+    assert.notInclude(html, '4.333')
+  })
+
   test('ne divise pas par zéro sur un parc sans jour disponible', ({ assert }) => {
     const html = renderPerformanceReport(
       { ...data, occupied_days: 0, available_days: 0, gross_revenue: 0, properties: [] },

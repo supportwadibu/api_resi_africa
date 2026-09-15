@@ -4,6 +4,7 @@ import type { ReportContext } from '#features/reports/dto/report.dto'
 import {
   escapeHtml,
   formatAmount,
+  formatDays,
   formatPercent,
   renderDocument,
 } from '#features/reports/renderers/layout'
@@ -34,7 +35,7 @@ function renderKeyFigures(data: PerformanceReportData): string {
       <div class="cards">
         <div class="card"><div class="card-label">Taux d'occupation</div><div class="card-value">${formatPercent(ratio)}</div></div>
         <div class="card"><div class="card-label">Jours occupés</div><div class="card-value">${data.occupied_days} / ${data.available_days}</div></div>
-        <div class="card"><div class="card-label">Séjour moyen</div><div class="card-value">${data.average_stay} j</div></div>
+        <div class="card"><div class="card-label">Séjour moyen</div><div class="card-value">${formatDays(data.average_stay)}</div></div>
         <div class="card"><div class="card-label">RevPAR</div><div class="card-value">${formatAmount(revpar)}</div></div>
       </div>
     </section>`
