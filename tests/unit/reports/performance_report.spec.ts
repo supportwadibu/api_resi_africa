@@ -58,10 +58,17 @@ test.group('renderPerformanceReport', () => {
     assert.notInclude(html, 'Répartition par bien')
   })
 
-  test('porte la note sur la mesure en jours écoulés', ({ assert }) => {
+  test('porte la note sur la convention de mesure de l’écran Finance', ({ assert }) => {
+    // La note annonçait auparavant une mesure « sur les jours écoulés », que le
+    // calcul en amont n'applique pas : c'est la fenêtre demandée entière, comme
+    // `FinanceRepository.occupancyRate`. Une note qui décrit une autre
+    // convention que le calcul empêche le lecteur de rapprocher le PDF d'un
+    // écran.
     const html = renderPerformanceReport(data, context)
 
-    assert.include(html, 'jours écoulés')
+    assert.include(html, 'capacité du parc')
+    assert.include(html, 'période demandée')
+    assert.notInclude(html, 'jours écoulés')
   })
 
   test('arrondit le séjour moyen au dixième', ({ assert }) => {

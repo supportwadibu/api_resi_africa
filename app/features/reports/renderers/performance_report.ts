@@ -113,21 +113,25 @@ function renderPropertiesTable(properties: PerformancePropertyRow[]): string {
 }
 
 /**
- * L'occupation se mesure sur les jours **écoulés** de la période, jamais sur
- * le mois calendaire entier — même convention que `booking_stats.ts`
- * (`elapsedWindow`) et l'onglet Statistiques du mobile. Diverger ferait
- * afficher deux taux d'occupation contradictoires pour la même période dans
- * la même application : le rapport hérite du taux déjà calculé en amont, il
- * ne le recalcule pas sur une fenêtre différente.
+ * La note décrit la convention réellement appliquée en amont — celle de
+ * l'écran Finance : fenêtre demandée entière, jours pondérés par type de
+ * séjour. Une note qui annoncerait une autre convention que celle du calcul
+ * serait pire que pas de note du tout, le lecteur ne pouvant plus rapprocher
+ * le PDF d'aucun écran.
  */
 function renderMethodNote(): string {
   return `
     <section>
       <h2>Note de méthode</h2>
-      <p>Le taux d'occupation est mesuré sur les jours écoulés de la période, et
-      non sur sa durée calendaire totale — la même convention que l'onglet
-      Statistiques de l'application mobile, pour qu'un même mois n'affiche
+      <p>Le taux d'occupation rapporte les jours réellement occupés à la
+      capacité du parc sur la période demandée — nombre de biens exploités
+      multiplié par la durée de la période. Une demi-journée compte pour une
+      demi-journée d'immobilisation. Une période en cours est comptée dans son
+      intégralité, y compris ses jours à venir : c'est la convention de l'écran
+      Finance de l'application mobile, pour qu'une même période n'affiche
       jamais deux taux différents.</p>
+      <p>Le séjour moyen est le total des jours d'occupation de la période
+      divisé par le nombre de réservations, selon la même règle.</p>
     </section>`
 }
 

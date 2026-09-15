@@ -1,7 +1,7 @@
 import { DomainError } from '#utils/domain_error'
 
 import BookingPaymentRepository from '#features/booking_payments/repositories/booking_payment_repository'
-import { elapsedWindow, type MonthWindow } from '#features/bookings/booking_stats'
+import { occupancyForWindow, type MonthWindow } from '#features/bookings/booking_stats'
 import BookingRepository from '#features/bookings/repositories/booking_repository'
 import { stayTypeOccupancyDays, type StayType } from '#features/bookings/stay_type'
 import ClientRepository from '#features/clients/repositories/client_repository'
@@ -12,7 +12,7 @@ import { daysWithinWindow } from '#features/finance/revenue_split'
 import GetFinanceOverviewUseCase from '#features/finance/use_cases/get_finance_overview.use_case'
 import OwnerRepository from '#features/owners/repositories/owner_repository'
 import PropertyRepository from '#features/properties/repositories/property_repository'
-import { occupancyRatio } from '#features/reports/metrics/occupancy'
+import { averageStay } from '#features/reports/metrics/average_stay'
 import { buildSettlement } from '#features/reports/metrics/payments'
 import { resolveReportPeriod } from '#features/reports/report_period'
 import {
@@ -119,9 +119,15 @@ function windowDays(window: { from: Date; to: Date }): number {
 
 /**
  * Jours-bien occupés d'un lot de réservations sur une fenêtre, pondérés par
- * type de séjour — même primitive que `occupancyForWindow` de
- * `booking_stats.ts`, pour que le rapport performance ne recalcule jamais un
- * taux d'occupation par une autre voie que le tableau de bord.
+ * type de séjour.
+ *
+ * C'est le **numérateur** d'`occupancyForWindow` (`booking_stats.ts`) et de
+ * `moyen_sejour` (`FinanceRepository.overview`), avec la même formule : jours
+ * bornés à la fenêtre puis pondérés par `stayTypeOccupancyDays`. Il est
+ * reconstitué ici parce que le document l'expose brut — « 22 / 31 jours », le
+ * séjour moyen — là où ces deux primitives ne rendent qu'un ratio. Toute
+ * divergence de formule ferait afficher au PDF des jours qui ne correspondent
+ * pas au taux affiché juste à côté.
  */
 function occupiedDaysInWindow(
   bookings: readonly BookingDto[],
@@ -347,59 +353,57 @@ export class GenerateReportUseCase {
       (property) => property.status === 'published' || property.status === 'rented'
     )
 
-    // L'occupation se lit sur les jours **écoulés**, jamais sur la durée
-    // calendaire entière : un mois en cours afficherait sinon un taux
-    // structurellement bas les premiers jours, et un rapport édité le 2 du
-    // mois contredirait celui édité le 30 — même convention que l'onglet
-    // Statistiques et `booking_stats.ts`.
-    const elapsed = elapsedWindow({ from: window.from, to: window.to }, new Date())
+    // Fenêtre **brute**, non tronquée à aujourd'hui.
+    //
+    // `FinanceRepository.occupancyRate` rapporte les jours occupés à
+    // `range.from`/`range.to` tels que demandés. Tronquer ici aux jours écoulés
+    // ferait afficher ~100 % sur le PDF là où l'écran Finance, édité le même
+    // jour sur la même période, afficherait ~16 % — le rapport doit reproduire
+    // les chiffres de l'écran, jamais en produire que l'écran ne sait pas
+    // atteindre.
+    //
+    // La convention en jours écoulés reste celle de l'onglet Statistiques
+    // (`elapsedWindow`), qui lit un mois en cours : elle ne s'applique pas à un
+    // rapport dont la période est choisie explicitement par le propriétaire.
+    const availableDays = windowDays(window) * exploitedProperties.length
+    const occupiedDays = Math.min(availableDays, occupiedDaysInWindow(bookings, window))
+    const grossRevenue = aggregateGrossRevenue(bookings, window)
 
-    const availableDays = windowDays(elapsed) * exploitedProperties.length
-    // Plafonné à la capacité du parc, comme `FinanceRepository.occupancyRate` :
-    // le renderer divise `occupied_days` par `available_days` sans reprendre ce
-    // plafond lui-même, et un séjour débordant la fenêtre pousserait sinon le
-    // taux affiché au-delà de 100 % — un chiffre que l'écran Finance, qui
-    // applique ce même plafond, ne peut jamais produire pour la même période.
-    const occupiedDays = Math.min(availableDays, occupiedDaysInWindow(bookings, elapsed))
-    const grossRevenue = aggregateGrossRevenue(bookings, elapsed)
-    const averageStay = bookings.length
-      ? Math.round(bookings.reduce((sum, b) => sum + b.days_count, 0) / bookings.length)
-      : 0
+    // Le numérateur est le total **non plafonné** : le plafond d'`occupiedDays`
+    // borne un taux d'occupation à 100 %, il n'a pas de sens sur une durée
+    // moyenne — c'est aussi ce que fait `FinanceRepository.overview`, qui
+    // divise `totalDays` brut.
+    const stayAverage = averageStay(occupiedDaysInWindow(bookings, window), bookings.length)
 
-    // Le dénominateur est la capacité du **parc**, pas un seul bien : le
-    // numérateur (`occupiedDaysInWindow`) cumule les jours occupés sur tous
-    // les biens exploités, et le rapporter aux seuls jours calendaires du
-    // mois gonflait le ratio d'un facteur égal au nombre de biens — voir
-    // `occupancyRatio`. Même capacité que `availableDays` ci-dessus, mois par
-    // mois.
-    const monthlyOccupancy = splitIntoMonths(elapsed).map((month) => ({
+    // `occupancyForWindow` plutôt qu'un ratio recomposé à la main : c'est la
+    // primitive dont dérive déjà le tableau de bord, plafond à 1 compris. Le
+    // dénominateur y est la capacité du **parc** — les jours calendaires seuls
+    // gonfleraient le ratio d'un facteur égal au nombre de biens.
+    const monthlyOccupancy = splitIntoMonths(window).map((month) => ({
       month: MONTH_LABELS[month.from.getUTCMonth()],
-      ratio: occupancyRatio(
-        occupiedDaysInWindow(bookings, month),
-        windowDays(month) * exploitedProperties.length
-      ),
+      ratio: occupancyForWindow(bookings, exploitedProperties.length, month),
     }))
 
     const propertyRows: PerformancePropertyRow[] = exploitedProperties.map((property) => {
       const propertyBookings = bookings.filter((b) => b.property_id === property.id)
-      const propertyAvailableDays = windowDays(elapsed)
+      const propertyAvailableDays = windowDays(window)
 
       return {
         property_title: property.title,
         // Même plafond que ci-dessus, appliqué à la capacité d'un seul bien.
         occupied_days: Math.min(
           propertyAvailableDays,
-          occupiedDaysInWindow(propertyBookings, elapsed)
+          occupiedDaysInWindow(propertyBookings, window)
         ),
         available_days: propertyAvailableDays,
-        gross_revenue: aggregateGrossRevenue(propertyBookings, elapsed),
+        gross_revenue: aggregateGrossRevenue(propertyBookings, window),
       }
     })
 
     const data: PerformanceReportData = {
       occupied_days: occupiedDays,
       available_days: availableDays,
-      average_stay: averageStay,
+      average_stay: stayAverage,
       gross_revenue: grossRevenue,
       monthly_occupancy: monthlyOccupancy,
       properties: propertyRows,
