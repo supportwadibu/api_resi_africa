@@ -1,3 +1,4 @@
+import { occupancyRatio } from '#features/reports/metrics/occupancy'
 import { computeRevpar } from '#features/reports/metrics/revpar'
 import type { ReportContext } from '#features/reports/dto/report.dto'
 import {
@@ -21,16 +22,6 @@ export interface PerformanceReportData {
   gross_revenue: number
   monthly_occupancy: Array<{ month: string; ratio: number }>
   properties: PerformancePropertyRow[]
-}
-
-/**
- * Taux d'occupation d'un dénominateur qui peut être nul en tout début de
- * période : 0 est la seule réponse lisible, `NaN` traverserait le PDF.
- */
-function occupancyRatio(occupiedDays: number, availableDays: number): number {
-  if (availableDays <= 0) return 0
-
-  return occupiedDays / availableDays
 }
 
 function renderKeyFigures(data: PerformanceReportData): string {
