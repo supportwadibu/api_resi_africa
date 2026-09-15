@@ -82,6 +82,23 @@ export class BookingPaymentRepository {
     return BookingPaymentRepository.toDto(doc)
   }
 
+  /**
+   * Paiements encaissés (`success`) d'un propriétaire sur une période.
+   *
+   * Manquait au dépôt : jusqu'ici seules des recherches unitaires par
+   * réservation ou par identifiant de checkout existaient. Le rapport
+   * « réservations » a besoin d'un encaissé par séjour sur l'ensemble d'une
+   * période — l'ajouter ici plutôt que de laisser un use case interroger
+   * Firestore directement.
+   */
+  async findSettledByOwner(
+    ownerId: string,
+    range: { from?: Date; to?: Date } = {}
+  ): Promise<BookingPaymentDto[]> {
+    const docs = await BookingPayment.findSettledByOwner(ownerId, range)
+    return docs.map((doc) => BookingPaymentRepository.toDto(doc))
+  }
+
   async findByProviderCheckoutId(providerCheckoutId: string): Promise<BookingPaymentDto | null> {
     const doc = await BookingPayment.findByCheckoutId(providerCheckoutId)
     return doc ? BookingPaymentRepository.toDto(doc) : null

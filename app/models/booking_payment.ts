@@ -144,6 +144,29 @@ const BookingPayment = {
     return toDocs<BookingPaymentDocument>(snapshot.docs)
   },
 
+  /**
+   * Paiements d'un propriétaire sur une fenêtre, pour l'encaissé d'un rapport.
+   *
+   * Filtré sur `paid_at` et non `created_at` : un paiement initié en fin de
+   * période mais confirmé après appartient à la période où l'argent est
+   * effectivement arrivé. Deux égalités (`owner_id`, `status`) et une
+   * inégalité sur un troisième champ n'ont besoin d'aucun index composite au-delà
+   * de ceux déjà déclarés pour `booking_id`/`status`, Firestore indexant chaque
+   * champ simple par défaut.
+   */
+  async findSettledByOwner(
+    ownerId: string,
+    range: { from?: Date; to?: Date } = {}
+  ): Promise<BookingPaymentRecord[]> {
+    let query = payments().where('owner_id', '==', ownerId).where('status', '==', 'success')
+
+    if (range.from) query = query.where('paid_at', '>=', range.from)
+    if (range.to) query = query.where('paid_at', '<', range.to)
+
+    const snapshot = await query.get()
+    return toDocs<BookingPaymentDocument>(snapshot.docs)
+  },
+
   async paginateByClient(
     clientId: string,
     options: { limit: number; offset: number }
