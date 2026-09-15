@@ -38,6 +38,10 @@ export function formatPercent(ratio: number): string {
  * Feuille de style commune aux trois rapports. Les couleurs sont reprises
  * telles quelles de `app_colors.dart`, seule source de vérité de la palette
  * produit, pour qu'un PDF et l'app mobile ne divergent jamais visuellement.
+ * `--color-text` correspond à `AppColors.textPrimary` (pas `AppColors.black`,
+ * réservée à un autre usage) et `--color-secondary` à `AppColors.textSecondary` :
+ * ce sont les teintes que 31 écrans mobiles utilisent déjà pour le texte
+ * courant et atténué, un rapport en noir pur aurait détonné visuellement.
  *
  * Aucune police ni feuille externe : Chromium rend ces PDF hors ligne côté
  * serveur, et une ressource distante indisponible se traduirait par une
@@ -46,11 +50,12 @@ export function formatPercent(ratio: number): string {
 const STYLE = `
   :root {
     --color-background: #F5F4F8;
-    --color-text: #000000;
+    --color-text: #1A1A2E;
     --color-primary: #3322AC;
     --color-primary-dark: #0F074E;
     --color-border: #E0E0E0;
-    --color-secondary: #757575;
+    --color-secondary: #8A8A9A;
+    --color-card-background: #FFFFFF;
     --color-success: #059669;
     --color-warning: #D97706;
     --color-error: #DC2626;
