@@ -169,6 +169,38 @@ const STYLE = `
     padding: 2mm;
     text-align: left;
   }
+
+  /*
+   * auto-fit + minmax répartit les cartes sur autant de colonnes que la
+   * largeur A4 (210mm, marges 18/16mm) en laisse tenir, sans jamais en
+   * étirer une seule sur toute la ligne : 4 cartes (performance) tiennent
+   * sur une rangée, 6 (bilan financier) se répartissent sur deux.
+   */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(40mm, 1fr));
+    gap: 4mm;
+  }
+
+  .card {
+    background: var(--color-card-background);
+    border: 1px solid var(--color-border);
+    border-radius: 2mm;
+    padding: 3mm;
+    /* Une carte coupée en deux entre deux pages serait illisible. */
+    page-break-inside: avoid;
+  }
+
+  .card-label {
+    font-size: 8pt;
+    color: var(--color-secondary);
+  }
+
+  .card-value {
+    font-size: 13pt;
+    font-weight: 700;
+    color: var(--color-text);
+  }
 `
 
 /**
