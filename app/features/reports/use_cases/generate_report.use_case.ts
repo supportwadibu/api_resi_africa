@@ -20,6 +20,7 @@ import { occupancyRatio } from '../metrics/occupancy.ts'
 import { buildSettlement } from '../metrics/payments.ts'
 import { resolveReportPeriod } from '../report_period.ts'
 import { renderFinancialReport, type FinancialReportData } from '../renderers/financial_report.ts'
+import { reportFooterText } from '../renderers/layout.ts'
 import {
   renderPerformanceReport,
   type PerformancePropertyRow,
@@ -186,7 +187,7 @@ export class GenerateReportUseCase {
 
     try {
       const html = await this.renderHtml(owner_id, input, period.window, context)
-      const pdf = await renderPdf(html)
+      const pdf = await renderPdf(html, { footerText: reportFooterText(context) })
       const filename = buildFilename(input.type, period.label, now)
       const stored = await uploadReport(pdf, filename)
 

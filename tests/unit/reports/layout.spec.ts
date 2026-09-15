@@ -2,8 +2,10 @@ import { test } from '@japa/runner'
 import {
   escapeHtml,
   formatAmount,
+  formatDays,
   formatPercent,
   renderDocument,
+  reportFooterText,
 } from '#features/reports/renderers/layout'
 
 const context = {
@@ -38,6 +40,22 @@ test.group('formatAmount', () => {
   })
 })
 
+test.group('formatDays', () => {
+  test('arrondit un quotient brut au dixième', ({ assert }) => {
+    // `moyen_sejour` est un quotient non arrondi : « 4.333333333333333 j » sur
+    // un document destiné à une banque.
+    assert.equal(formatDays(13 / 3), '4,3 j')
+  })
+
+  test('n’ajoute pas de décimale à une durée entière', ({ assert }) => {
+    assert.equal(formatDays(4), '4 j')
+  })
+
+  test('rend 0 j sur une période sans réservation', ({ assert }) => {
+    assert.equal(formatDays(0), '0 j')
+  })
+})
+
 test.group('formatPercent', () => {
   test('rend un ratio en pourcentage entier', ({ assert }) => {
     assert.equal(formatPercent(0.734), '73 %')
@@ -68,13 +86,6 @@ test.group('renderDocument', () => {
     assert.include(html, 'Toutes mes résidences')
   })
 
-  test('répète la période en pied de page', ({ assert }) => {
-    const html = renderDocument({ title: 'Bilan financier', context, sections: [] })
-
-    assert.include(html, '@page')
-    assert.include(html, 'position: running(footer)')
-  })
-
   test('assemble les sections dans l’ordre reçu', ({ assert }) => {
     const html = renderDocument({
       title: 'T',
@@ -83,5 +94,30 @@ test.group('renderDocument', () => {
     })
 
     assert.isBelow(html.indexOf('Première'), html.indexOf('Seconde'))
+  })
+})
+
+/**
+ * Le pied n'est plus produit par le HTML du document mais par le
+ * `footerTemplate` de Puppeteer : ce qui compte est que son contenu — enseigne,
+ * résidence, période — soit bien composé, et qu'il ne soit pas dupliqué dans le
+ * corps (il s'imprimerait alors une fois de plus, avant la page de garde).
+ */
+test.group('reportFooterText', () => {
+  test('porte l’enseigne, la résidence et la période', ({ assert }) => {
+    assert.equal(reportFooterText(context), 'RESI · Résidence Les Cocotiers · Mars 2026')
+  })
+
+  test('annonce tout le parc quand aucune résidence n’est filtrée', ({ assert }) => {
+    assert.equal(
+      reportFooterText({ ...context, residence_name: null }),
+      'RESI · Toutes mes résidences · Mars 2026'
+    )
+  })
+
+  test('n’est pas imprimé dans le corps du document', ({ assert }) => {
+    const html = renderDocument({ title: 'Bilan financier', context, sections: [] })
+
+    assert.notInclude(html, reportFooterText(context))
   })
 })

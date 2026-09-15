@@ -35,6 +35,18 @@ export function formatPercent(ratio: number): string {
 }
 
 /**
+ * Durée en jours, arrondie au dixième.
+ *
+ * `moyen_sejour` est un quotient brut (`totalDays / bookings.length`) : imprimé
+ * tel quel, « 4.333333333333333 j » s'afficherait sur un document que le
+ * propriétaire présente à sa banque. Le dixième suffit à distinguer deux
+ * périodes sans suggérer une précision que la donnée n'a pas.
+ */
+export function formatDays(value: number): string {
+  return `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(value)} j`
+}
+
+/**
  * Feuille de style commune aux trois rapports. Les couleurs sont reprises
  * telles quelles de `app_colors.dart`, seule source de vérité de la palette
  * produit, pour qu'un PDF et l'app mobile ne divergent jamais visuellement.
@@ -73,39 +85,22 @@ const STYLE = `
     font-size: 11pt;
   }
 
-  @page {
-    size: A4;
-    margin: 18mm 16mm 22mm;
-  }
-
   /*
-   * position: running(footer) place l'élément dans la marge de bas de page
-   * de @page, où il se répète automatiquement sur chaque feuille imprimée.
-   * C'est la seule façon en CSS papier d'obtenir un pied de page constant
-   * sans dupliquer le HTML par page.
+   * Ni règle @page ni pied de page ici : les marges et le pied répété sont
+   * portés par page.pdf() dans pdf_renderer.ts. Chromium n'accorde de place à
+   * footerTemplate que dans les marges qu'on lui passe, et deux jeux de marges
+   * se cumuleraient.
    */
-  .footer {
-    position: running(footer);
-    display: flex;
-    justify-content: space-between;
-    font-size: 8pt;
-    color: var(--color-secondary);
-    border-top: 1px solid var(--color-border);
-    padding-top: 2mm;
-  }
-
-  .footer .page-count::after {
-    content: counter(page) ' / ' counter(pages);
-  }
-
-  @page {
-    @bottom-center {
-      content: element(footer);
-    }
-  }
 
   .cover {
-    height: 100%;
+    /*
+     * Hauteur de la zone imprimable d'une A4 : 297mm moins les marges haute et
+     * basse passées à page.pdf() (18 + 22). En vh, elle dépendrait du viewport
+     * de rendu et non du papier ; en pourcentage, elle se résoudrait à auto,
+     * le body n'ayant pas de hauteur propre — la page de garde cesserait
+     * d'occuper sa feuille entière.
+     */
+    min-height: 257mm;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -212,6 +207,19 @@ function residenceLabel(context: ReportContext): string {
   return context.residence_name ?? 'Toutes mes résidences'
 }
 
+/**
+ * Texte du pied de page répété : « RESI · <résidence> · <période> ».
+ *
+ * Exporté parce que le pied n'est pas imprimé par le HTML du document mais par
+ * le `footerTemplate` de Puppeteer — seul mécanisme que Chromium sait répéter
+ * sur chaque feuille. La spec fait de cette répétition une exigence : une
+ * feuille détachée du rapport ne doit pas pouvoir passer pour celle d'un autre
+ * mois.
+ */
+export function reportFooterText(context: ReportContext): string {
+  return `RESI · ${residenceLabel(context)} · ${context.period.label}`
+}
+
 function formatGeneratedAt(date: Date): string {
   return new Intl.DateTimeFormat('fr-FR', {
     dateStyle: 'long',
@@ -221,8 +229,11 @@ function formatGeneratedAt(date: Date): string {
 }
 
 /**
- * Assemble le document complet : page de garde, pied de page répété, puis
- * les sections fournies par le renderer appelant, dans l'ordre reçu.
+ * Assemble le document complet : page de garde puis les sections fournies par
+ * le renderer appelant, dans l'ordre reçu.
+ *
+ * Le pied de page n'y figure pas : il est répété page après page par Chromium
+ * à l'impression, depuis `reportFooterText`.
  */
 export function renderDocument(input: {
   title: string
@@ -243,11 +254,6 @@ export function renderDocument(input: {
     <style>${STYLE}</style>
   </head>
   <body>
-    <div class="footer">
-      <span>RESI · ${safeResidence} · ${escapeHtml(context.period.label)}</span>
-      <span class="page-count"></span>
-    </div>
-
     <div class="cover">
       <div class="title">${safeTitle}</div>
       <div class="owner">${owner}</div>
