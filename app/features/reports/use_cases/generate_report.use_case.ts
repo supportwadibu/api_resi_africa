@@ -12,25 +12,34 @@ import { daysWithinWindow } from '#features/finance/revenue_split'
 import GetFinanceOverviewUseCase from '#features/finance/use_cases/get_finance_overview.use_case'
 import OwnerRepository from '#features/owners/repositories/owner_repository'
 import PropertyRepository from '#features/properties/repositories/property_repository'
-import ResidenceRepository from '#features/residences/repositories/residence_repository'
-import { renderPdf } from '#services/pdf_renderer'
-import { uploadReport } from '#services/report_storage'
-
-import { occupancyRatio } from '../metrics/occupancy.ts'
-import { buildSettlement } from '../metrics/payments.ts'
-import { resolveReportPeriod } from '../report_period.ts'
-import { renderFinancialReport, type FinancialReportData } from '../renderers/financial_report.ts'
-import { reportFooterText } from '../renderers/layout.ts'
+import { occupancyRatio } from '#features/reports/metrics/occupancy'
+import { buildSettlement } from '#features/reports/metrics/payments'
+import { resolveReportPeriod } from '#features/reports/report_period'
+import {
+  renderFinancialReport,
+  type FinancialReportData,
+} from '#features/reports/renderers/financial_report'
+import { reportFooterText } from '#features/reports/renderers/layout'
 import {
   renderPerformanceReport,
   type PerformancePropertyRow,
   type PerformanceReportData,
-} from '../renderers/performance_report.ts'
-import { renderReservationsReport, type ReservationRow } from '../renderers/reservations_report.ts'
+} from '#features/reports/renderers/performance_report'
+import {
+  renderReservationsReport,
+  type ReservationRow,
+} from '#features/reports/renderers/reservations_report'
+import ResidenceRepository from '#features/residences/repositories/residence_repository'
+import { renderPdf } from '#services/pdf_renderer'
+import { uploadReport } from '#services/report_storage'
 
 import type { BookingDto } from '#features/bookings/dto/booking.dto'
 import type { ExpenseDto } from '#features/expenses/dto/expense.dto'
-import type { GenerateReportInput, GeneratedReportDto, ReportContext } from '../dto/report.dto.ts'
+import type {
+  GenerateReportInput,
+  GeneratedReportDto,
+  ReportContext,
+} from '#features/reports/dto/report.dto'
 
 /**
  * Nombre maximal de biens lus pour composer un rapport.
