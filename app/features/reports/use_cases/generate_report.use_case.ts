@@ -34,6 +34,7 @@ import { renderPdf } from '#services/pdf_renderer'
 import { uploadReport } from '#services/report_storage'
 
 import type { BookingDto } from '#features/bookings/dto/booking.dto'
+import type { ClientDto } from '#features/clients/dto/client.dto'
 import type { ExpenseDto } from '#features/expenses/dto/expense.dto'
 import type {
   GenerateReportInput,
@@ -457,7 +458,15 @@ export class GenerateReportUseCase {
         // pas de `client_snapshot`.
         client_name: booking.client?.full_name ?? client?.full_name ?? '—',
         client_phone: booking.client?.phone ?? client?.phone ?? '—',
-        has_id_document: client?.documents_status === 'complete',
+        // Le dépôt du **recto**, pas la complétude du dossier : la colonne est
+        // libellée « Fournie / Non fournie » et atteste d'un dépôt, jamais
+        // d'un dossier complet. `documents_status` ne vaut `complete` qu'avec
+        // recto **et** verso — un client n'ayant déposé que le recto de sa CNI,
+        // cas courant, sortirait en « Non fournie ».
+        //
+        // `false` quand la fiche est introuvable : le carnet peut avoir été
+        // purgé après le séjour, et l'absence de fiche ne prouve pas un dépôt.
+        has_id_document: client?.has_document_front ?? false,
         days_count: booking.days_count,
         total_amount: booking.total_amount,
         settled_amount: settlement.settled_amount,
@@ -489,24 +498,23 @@ export class GenerateReportUseCase {
     return map
   }
 
-  /** Fiches carnet d'un lot de réservations, scopées au propriétaire. */
-  private async clientsByIds(
-    owner_id: string,
-    ids: string[]
-  ): Promise<Map<string, { full_name: string; phone: string; documents_status: string }>> {
-    const map = new Map<string, { full_name: string; phone: string; documents_status: string }>()
+  /**
+   * Fiches carnet d'un lot de réservations, scopées au propriétaire.
+   *
+   * `findById` rend un `ClientRecord` brut — la forme du document Firestore.
+   * Le passer par `ClientRepository.toDto` avant de le remonter tient le
+   * contrat repository → DTO respecté partout ailleurs, et applique au
+   * passage les replis du DTO : une fiche écrite avant l'ajout d'un champ n'en
+   * porte pas la clé.
+   */
+  private async clientsByIds(owner_id: string, ids: string[]): Promise<Map<string, ClientDto>> {
+    const map = new Map<string, ClientDto>()
     if (ids.length === 0) return map
 
     await Promise.all(
       ids.map(async (id) => {
         const client = await this.clientRepo.findById(id, owner_id)
-        if (client) {
-          map.set(id, {
-            full_name: client.full_name,
-            phone: client.phone,
-            documents_status: client.documents_status,
-          })
-        }
+        if (client) map.set(id, ClientRepository.toDto(client))
       })
     )
 
