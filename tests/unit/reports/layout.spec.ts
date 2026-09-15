@@ -1,5 +1,10 @@
 import { test } from '@japa/runner'
-import { escapeHtml, formatAmount, formatPercent, renderDocument } from '#features/reports/renderers/layout'
+import {
+  escapeHtml,
+  formatAmount,
+  formatPercent,
+  renderDocument,
+} from '#features/reports/renderers/layout'
 
 const context = {
   owner_name: 'Kouassi & Fils',
