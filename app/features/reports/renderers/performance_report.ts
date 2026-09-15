@@ -124,12 +124,14 @@ function renderMethodNote(): string {
     <section>
       <h2>Note de méthode</h2>
       <p>Le taux d'occupation rapporte les jours réellement occupés à la
-      capacité du parc sur la période demandée — nombre de biens exploités
-      multiplié par la durée de la période. Une demi-journée compte pour une
-      demi-journée d'immobilisation. Une période en cours est comptée dans son
-      intégralité, y compris ses jours à venir : c'est la convention de l'écran
-      Finance de l'application mobile, pour qu'une même période n'affiche
-      jamais deux taux différents.</p>
+      capacité sur la période demandée — nombre de biens retenus multiplié par
+      la durée de la période. Sur une résidence, la capacité est celle de
+      toutes ses unités, y compris celles qui ne sont pas encore publiées ; sur
+      l'ensemble du parc, celle des biens publiés ou loués. Une demi-journée
+      compte pour une demi-journée d'immobilisation. Une période en cours est
+      comptée dans son intégralité, y compris ses jours à venir : c'est la
+      convention de l'écran Finance de l'application mobile, pour qu'une même
+      période n'affiche jamais deux taux différents.</p>
       <p>Le séjour moyen est le total des jours d'occupation de la période
       divisé par le nombre de réservations, selon la même règle.</p>
     </section>`

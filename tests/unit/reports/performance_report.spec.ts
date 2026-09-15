@@ -66,9 +66,21 @@ test.group('renderPerformanceReport', () => {
     // écran.
     const html = renderPerformanceReport(data, context)
 
-    assert.include(html, 'capacité du parc')
     assert.include(html, 'période demandée')
     assert.notInclude(html, 'jours écoulés')
+  })
+
+  test('annonce les deux dénominateurs de capacité', ({ assert }) => {
+    // `FinanceRepository.overview` emploie deux dénominateurs : toutes les
+    // unités d'une résidence (`draft` comprises) quand le rapport est scopé,
+    // les seuls biens publiés ou loués sinon. La note promet l'égalité avec
+    // l'écran Finance : elle doit donc dire laquelle des deux capacités
+    // s'applique, sans quoi le lecteur ne peut pas refaire le calcul.
+    const html = renderPerformanceReport(data, context)
+
+    assert.include(html, 'toutes ses unités')
+    assert.include(html, 'pas encore publiées')
+    assert.include(html, 'publiés ou loués')
   })
 
   test('arrondit le séjour moyen au dixième', ({ assert }) => {

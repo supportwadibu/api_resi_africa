@@ -346,12 +346,26 @@ export class GenerateReportUseCase {
       }),
     ])
 
-    // Même périmètre que `booking_stats.ts` et le relevé financier : un bien
-    // réservé passe en « rented » et sort des publiés, mais fait toujours
-    // partie du parc exploité.
-    const exploitedProperties = properties.data.filter(
-      (property) => property.status === 'published' || property.status === 'rented'
-    )
+    // Deux périmètres, exactement comme `FinanceRepository.overview` :
+    //
+    // - sans résidence, le parc exploité est `published + rented` — un bien
+    //   réservé passe en « rented » et sort des publiés, mais reste exploité ;
+    // - restreint à une résidence, la capacité est celle de **toutes** ses
+    //   unités, `draft` comprises (`Property.findIdsByResidence`, qui ne filtre
+    //   sur aucun statut).
+    //
+    // Cette seconde branche n'est pas un oubli de Finance : une résidence de dix
+    // unités dont trois en préparation reste une résidence de dix unités, et
+    // l'occupation que son propriétaire compare d'un mois à l'autre doit se
+    // lire sur un dénominateur qui ne bouge pas quand il publie une unité de
+    // plus. Reprendre ici le filtre de statut diviserait par sept là où l'écran
+    // divise par dix — un taux 43 % plus haut sur le PDF, pour la même période,
+    // sur le cas d'usage le plus courant du rapport.
+    const exploitedProperties = input.residence_id
+      ? properties.data
+      : properties.data.filter(
+          (property) => property.status === 'published' || property.status === 'rented'
+        )
 
     // Fenêtre **brute**, non tronquée à aujourd'hui.
     //
