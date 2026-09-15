@@ -94,13 +94,18 @@ const STYLE = `
 
   .cover {
     /*
-     * Hauteur de la zone imprimable d'une A4 : 297mm moins les marges haute et
-     * basse passées à page.pdf() (18 + 22). En vh, elle dépendrait du viewport
-     * de rendu et non du papier ; en pourcentage, elle se résoudrait à auto,
-     * le body n'ayant pas de hauteur propre — la page de garde cesserait
-     * d'occuper sa feuille entière.
+     * Zone imprimable d'une A4 : 297mm moins les marges haute et basse passées
+     * a page.pdf() (18 + 22), soit 257mm — volontairement minoré d'un
+     * millimetre. Chromium convertit les mm en px a 96 dpi (257mm ~ 971,3px)
+     * et arrondit : une hauteur egale au pixel pres a la place disponible
+     * bascule sur une page blanche supplementaire, que page-break-after rendrait
+     * doublement visible. Ne pas « corriger » vers 257 en refaisant le calcul.
+     *
+     * En vh la hauteur suivrait le viewport de rendu et non le papier ; en
+     * pourcentage elle se resoudrait a auto, le body n'ayant pas de hauteur
+     * propre — la page de garde cesserait d'occuper sa feuille.
      */
-    min-height: 257mm;
+    min-height: 256mm;
     display: flex;
     flex-direction: column;
     justify-content: center;
