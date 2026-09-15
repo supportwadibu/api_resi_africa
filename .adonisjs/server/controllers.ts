@@ -30,6 +30,7 @@ export const controllers = {
     Profile: () => import('#controllers/proprio/profile_controller'),
     Property: () => import('#controllers/proprio/property_controller'),
     PropertyImage: () => import('#controllers/proprio/property_image_controller'),
+    Report: () => import('#controllers/proprio/report_controller'),
     Residence: () => import('#controllers/proprio/residence_controller'),
     Subscription: () => import('#controllers/proprio/subscription_controller'),
   },
