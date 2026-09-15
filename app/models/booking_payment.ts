@@ -149,10 +149,12 @@ const BookingPayment = {
    *
    * Filtré sur `paid_at` et non `created_at` : un paiement initié en fin de
    * période mais confirmé après appartient à la période où l'argent est
-   * effectivement arrivé. Deux égalités (`owner_id`, `status`) et une
-   * inégalité sur un troisième champ n'ont besoin d'aucun index composite au-delà
-   * de ceux déjà déclarés pour `booking_id`/`status`, Firestore indexant chaque
-   * champ simple par défaut.
+   * effectivement arrivé. Deux égalités (`owner_id`, `status`) combinées à une
+   * inégalité sur un troisième champ (`paid_at`) **exigent** un index composite
+   * Firestore — sans lui, la requête échoue en `FAILED_PRECONDITION`. Il est
+   * déclaré dans `firestore.indexes.json` (`booking_payments` :
+   * `owner_id` ASC, `status` ASC, `paid_at` ASC) et doit être déployé avant que
+   * cette méthode ne fonctionne en environnement réel.
    */
   async findSettledByOwner(
     ownerId: string,

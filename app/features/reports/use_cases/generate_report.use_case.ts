@@ -7,6 +7,7 @@ import { stayTypeOccupancyDays, type StayType } from '#features/bookings/stay_ty
 import ClientRepository from '#features/clients/repositories/client_repository'
 import ExpenseRepository from '#features/expenses/repositories/expense_repository'
 import { aggregateGrossRevenue } from '#features/finance/repositories/finance_repository'
+import { belongsToResidence } from '#features/finance/residence_scope'
 import { daysWithinWindow } from '#features/finance/revenue_split'
 import GetFinanceOverviewUseCase from '#features/finance/use_cases/get_finance_overview.use_case'
 import OwnerRepository from '#features/owners/repositories/owner_repository'
@@ -15,6 +16,7 @@ import ResidenceRepository from '#features/residences/repositories/residence_rep
 import { renderPdf } from '#services/pdf_renderer'
 import { uploadReport } from '#services/report_storage'
 
+import { occupancyRatio } from '../metrics/occupancy.ts'
 import { buildSettlement } from '../metrics/payments.ts'
 import { resolveReportPeriod } from '../report_period.ts'
 import { renderFinancialReport, type FinancialReportData } from '../renderers/financial_report.ts'
@@ -26,6 +28,7 @@ import {
 import { renderReservationsReport, type ReservationRow } from '../renderers/reservations_report.ts'
 
 import type { BookingDto } from '#features/bookings/dto/booking.dto'
+import type { ExpenseDto } from '#features/expenses/dto/expense.dto'
 import type { GenerateReportInput, GeneratedReportDto, ReportContext } from '../dto/report.dto.ts'
 
 /**
@@ -254,49 +257,47 @@ export class GenerateReportUseCase {
    *
    * Restreintes à une résidence, les charges retenues par `overview` sont ses
    * charges communes **et** celles de ses unités (deux champs distincts —
-   * `residence_id`, `property_id` — voir `residence_scope.ts`). Une ventilation
-   * qui ne lirait que `residence_id` sous-compterait les charges d'unité, et son
-   * total ne recollerait plus avec le chiffre clé affiché juste au-dessus.
+   * `residence_id`, `property_id`). Classées ici avec `belongsToResidence`,
+   * la même fonction que `FinanceRepository.overview`, sur un seul lot de
+   * dépenses déjà chargé — jamais deux requêtes `summary` filtrées
+   * séparément puis additionnées : une dépense historique portant à la fois
+   * `residence_id` et `property_id` remonterait alors dans les deux et serait
+   * comptée deux fois, ce que `belongsToResidence` (qui teste `residence_id`
+   * en priorité) exclut par construction.
    */
   private async expensesByCategory(
     owner_id: string,
     residence_id: string | undefined,
     window: { from: Date; to: Date }
   ): Promise<FinancialReportData['expenses_by_category']> {
-    if (!residence_id) {
-      const summary = await this.expenseRepo.summary({ owner_id, from: window.from, to: window.to })
-      return summary.by_category.map((bucket) => ({
-        category: bucket.category,
-        amount: bucket.amount,
-      }))
+    const expenses = await this.expenseRepo.findAllForOwner(owner_id, window)
+
+    const scoped = residence_id
+      ? await this.filterByResidence(expenses, owner_id, residence_id)
+      : expenses
+
+    const merged = new Map<string, number>()
+    for (const expense of scoped) {
+      merged.set(expense.category, (merged.get(expense.category) ?? 0) + expense.amount)
     }
 
+    return [...merged.entries()].map(([category, amount]) => ({ category, amount }))
+  }
+
+  /** Dépenses d'une résidence : ses charges communes et celles de ses unités. */
+  private async filterByResidence(
+    expenses: ExpenseDto[],
+    owner_id: string,
+    residence_id: string
+  ): Promise<ExpenseDto[]> {
     const units = await this.propertyRepo.paginate({
       owner_id,
       residence_id,
       per_page: MAX_PROPERTIES,
     })
+    const unitIds = new Set(units.data.map((unit) => unit.id))
 
-    const summaries = await Promise.all([
-      this.expenseRepo.summary({ owner_id, residence_id, from: window.from, to: window.to }),
-      ...units.data.map((unit) =>
-        this.expenseRepo.summary({
-          owner_id,
-          property_id: unit.id,
-          from: window.from,
-          to: window.to,
-        })
-      ),
-    ])
-
-    const merged = new Map<string, number>()
-    for (const summary of summaries) {
-      for (const bucket of summary.by_category) {
-        merged.set(bucket.category, (merged.get(bucket.category) ?? 0) + bucket.amount)
-      }
-    }
-
-    return [...merged.entries()].map(([category, amount]) => ({ category, amount }))
+    return expenses.filter((expense) => belongsToResidence(expense, residence_id, unitIds))
   }
 
   private async renderPerformance(
@@ -330,25 +331,44 @@ export class GenerateReportUseCase {
     // Statistiques et `booking_stats.ts`.
     const elapsed = elapsedWindow({ from: window.from, to: window.to }, new Date())
 
-    const occupiedDays = occupiedDaysInWindow(bookings, elapsed)
     const availableDays = windowDays(elapsed) * exploitedProperties.length
+    // Plafonné à la capacité du parc, comme `FinanceRepository.occupancyRate` :
+    // le renderer divise `occupied_days` par `available_days` sans reprendre ce
+    // plafond lui-même, et un séjour débordant la fenêtre pousserait sinon le
+    // taux affiché au-delà de 100 % — un chiffre que l'écran Finance, qui
+    // applique ce même plafond, ne peut jamais produire pour la même période.
+    const occupiedDays = Math.min(availableDays, occupiedDaysInWindow(bookings, elapsed))
     const grossRevenue = aggregateGrossRevenue(bookings, elapsed)
     const averageStay = bookings.length
       ? Math.round(bookings.reduce((sum, b) => sum + b.days_count, 0) / bookings.length)
       : 0
 
+    // Le dénominateur est la capacité du **parc**, pas un seul bien : le
+    // numérateur (`occupiedDaysInWindow`) cumule les jours occupés sur tous
+    // les biens exploités, et le rapporter aux seuls jours calendaires du
+    // mois gonflait le ratio d'un facteur égal au nombre de biens — voir
+    // `occupancyRatio`. Même capacité que `availableDays` ci-dessus, mois par
+    // mois.
     const monthlyOccupancy = splitIntoMonths(elapsed).map((month) => ({
       month: MONTH_LABELS[month.from.getUTCMonth()],
-      ratio: occupiedDaysInWindow(bookings, month) / windowDays(month),
+      ratio: occupancyRatio(
+        occupiedDaysInWindow(bookings, month),
+        windowDays(month) * exploitedProperties.length
+      ),
     }))
 
     const propertyRows: PerformancePropertyRow[] = exploitedProperties.map((property) => {
       const propertyBookings = bookings.filter((b) => b.property_id === property.id)
+      const propertyAvailableDays = windowDays(elapsed)
 
       return {
         property_title: property.title,
-        occupied_days: occupiedDaysInWindow(propertyBookings, elapsed),
-        available_days: windowDays(elapsed),
+        // Même plafond que ci-dessus, appliqué à la capacité d'un seul bien.
+        occupied_days: Math.min(
+          propertyAvailableDays,
+          occupiedDaysInWindow(propertyBookings, elapsed)
+        ),
+        available_days: propertyAvailableDays,
         gross_revenue: aggregateGrossRevenue(propertyBookings, elapsed),
       }
     })
