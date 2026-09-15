@@ -297,7 +297,13 @@ export class GenerateReportUseCase {
       merged.set(expense.category, (merged.get(expense.category) ?? 0) + expense.amount)
     }
 
-    return [...merged.entries()].map(([category, amount]) => ({ category, amount }))
+    // Trié par montant décroissant, comme `Expense.summary` : la ventilation
+    // sert à repérer les postes les plus lourds. Sans tri, l'ordre suivrait
+    // celui des documents Firestore, et deux éditions du même rapport
+    // listeraient les catégories différemment.
+    return [...merged.entries()]
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount)
   }
 
   /** Dépenses d'une résidence : ses charges communes et celles de ses unités. */
