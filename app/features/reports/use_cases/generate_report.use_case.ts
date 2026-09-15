@@ -194,8 +194,15 @@ export class GenerateReportUseCase {
       generated_at: now,
     }
 
+    // Les lectures Firestore sont **hors** du `try` : un index composite
+    // manquant est un défaut de déploiement que le handler d'exceptions sait
+    // reconnaître et renvoyer en `missing_firestore_index`, avec l'URL de
+    // création de l'index dans le message. L'attraper ici le convertirait en
+    // « Réessayez » — une invitation à répéter une panne qui ne se résoudra
+    // jamais seule, et la perte de l'URL qui la répare.
+    const html = await this.renderHtml(owner_id, input, period.window, context)
+
     try {
-      const html = await this.renderHtml(owner_id, input, period.window, context)
       const pdf = await renderPdf(html, { footerText: reportFooterText(context) })
       const filename = buildFilename(input.type, period.label, now)
       const stored = await uploadReport(pdf, filename)
@@ -207,10 +214,9 @@ export class GenerateReportUseCase {
         period: { from: period.from_date, to: period.to_date },
       }
     } catch (error) {
-      // Les erreurs métier (période invalide, résidence introuvable) sont déjà
-      // levées plus haut en `DomainError` : ce qui atterrit ici vient du rendu
-      // PDF ou du téléversement Cloudinary, deux services externes dont
-      // l'échec ne doit jamais remonter en `Error` brute jusqu'au client.
+      // Seuls le rendu PDF et le téléversement Cloudinary passent par ici :
+      // deux services externes dont l'échec est transitoire, et dont l'erreur
+      // brute ne doit jamais remonter telle quelle jusqu'au client.
       if (error instanceof DomainError) throw error
 
       throw new DomainError(
