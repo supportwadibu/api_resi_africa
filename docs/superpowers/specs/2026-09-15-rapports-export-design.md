@@ -134,6 +134,7 @@ bornes résolues, pour afficher « Mars 2026 » sans refaire le calcul.
 
 | Code | Statut | Cas |
 |---|---|---|
+| `owner_not_found` | 404 | Le jeton porte un `owner_id` sans fiche propriétaire. Le rapport nomme le propriétaire en page de garde : sans fiche, il n'y a pas de document à composer |
 | `residence_not_found` | 404 | Résidence inconnue ou appartenant à un autre propriétaire. Code déjà levé par `GetFinanceOverviewUseCase` |
 | `invalid_report_period` | 422 | `custom` sans `from`/`to`, ou `from` postérieur à `to` |
 | `report_period_too_large` | 422 | Plage au-delà de 24 mois |
