@@ -1,0 +1,225 @@
+import type { ReportContext } from '#features/reports/dto/report.dto'
+
+/**
+ * Échappe les caractères qui feraient basculer une saisie libre (nom de
+ * client, de résidence) hors du texte HTML. Ordre important : `&` doit être
+ * traité en premier, sinon les remplacements suivants ré-échapperaient le
+ * `&` qu'ils viennent d'introduire.
+ */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+const AMOUNT_FORMATTER = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 })
+
+/**
+ * Le franc CFA n'a pas de subdivision monétaire en usage : afficher des
+ * centimes suggérerait une précision que la monnaie n'a pas.
+ */
+export function formatAmount(value: number): string {
+  return `${AMOUNT_FORMATTER.format(Math.round(value))} FCFA`
+}
+
+/**
+ * Ratio 0–1 vers un pourcentage entier. Le taux d'occupation ou de conversion
+ * n'a pas besoin de décimale ici : le PDF vise un propriétaire qui compare
+ * des mois entre eux, pas un pilotage à la décimale près.
+ */
+export function formatPercent(ratio: number): string {
+  return `${Math.round(ratio * 100)} %`
+}
+
+/**
+ * Feuille de style commune aux trois rapports. Les couleurs sont reprises
+ * telles quelles de `app_colors.dart`, seule source de vérité de la palette
+ * produit, pour qu'un PDF et l'app mobile ne divergent jamais visuellement.
+ *
+ * Aucune police ni feuille externe : Chromium rend ces PDF hors ligne côté
+ * serveur, et une ressource distante indisponible se traduirait par une
+ * police de repli silencieuse plutôt que par une erreur visible.
+ */
+const STYLE = `
+  :root {
+    --color-background: #F5F4F8;
+    --color-text: #000000;
+    --color-primary: #3322AC;
+    --color-primary-dark: #0F074E;
+    --color-border: #E0E0E0;
+    --color-secondary: #757575;
+    --color-success: #059669;
+    --color-warning: #D97706;
+    --color-error: #DC2626;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-background);
+    color: var(--color-text);
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+    font-size: 11pt;
+  }
+
+  @page {
+    size: A4;
+    margin: 18mm 16mm 22mm;
+  }
+
+  /*
+   * position: running(footer) place l'élément dans la marge de bas de page
+   * de @page, où il se répète automatiquement sur chaque feuille imprimée.
+   * C'est la seule façon en CSS papier d'obtenir un pied de page constant
+   * sans dupliquer le HTML par page.
+   */
+  .footer {
+    position: running(footer);
+    display: flex;
+    justify-content: space-between;
+    font-size: 8pt;
+    color: var(--color-secondary);
+    border-top: 1px solid var(--color-border);
+    padding-top: 2mm;
+  }
+
+  .footer .page-count::after {
+    content: counter(page) ' / ' counter(pages);
+  }
+
+  @page {
+    @bottom-center {
+      content: element(footer);
+    }
+  }
+
+  .cover {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    page-break-after: always;
+  }
+
+  .cover .title {
+    color: var(--color-primary-dark);
+    font-size: 22pt;
+    font-weight: 700;
+    margin-bottom: 4mm;
+  }
+
+  .cover .owner {
+    color: var(--color-primary);
+    font-size: 14pt;
+    margin-bottom: 2mm;
+  }
+
+  .cover .residence {
+    font-size: 12pt;
+    margin-bottom: 2mm;
+  }
+
+  .cover .period {
+    color: var(--color-secondary);
+    font-size: 11pt;
+  }
+
+  .cover .generated-at {
+    margin-top: 8mm;
+    color: var(--color-secondary);
+    font-size: 9pt;
+  }
+
+  section {
+    margin-bottom: 10mm;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    /* Autorise la coupure entre lignes d'un tableau long, contrairement à
+       .cover qui doit rester d'un seul tenant. */
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  th,
+  td {
+    border-bottom: 1px solid var(--color-border);
+    padding: 2mm;
+    text-align: left;
+  }
+`
+
+/**
+ * Résout le libellé de résidence affiché en page de garde et en pied de
+ * page. `null` signifie que le rapport porte sur tout le parc du
+ * propriétaire, jamais une absence de donnée à masquer.
+ */
+function residenceLabel(context: ReportContext): string {
+  return context.residence_name ?? 'Toutes mes résidences'
+}
+
+function formatGeneratedAt(date: Date): string {
+  return new Intl.DateTimeFormat('fr-FR', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+    timeZone: 'Africa/Abidjan',
+  }).format(date)
+}
+
+/**
+ * Assemble le document complet : page de garde, pied de page répété, puis
+ * les sections fournies par le renderer appelant, dans l'ordre reçu.
+ */
+export function renderDocument(input: {
+  title: string
+  context: ReportContext
+  sections: string[]
+}): string {
+  const { title, context, sections } = input
+  const residence = residenceLabel(context)
+  const owner = escapeHtml(context.owner_name)
+  const safeResidence = escapeHtml(residence)
+  const safeTitle = escapeHtml(title)
+
+  return `<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>${safeTitle}</title>
+    <style>${STYLE}</style>
+  </head>
+  <body>
+    <div class="footer">
+      <span>RESI · ${safeResidence} · ${escapeHtml(context.period.label)}</span>
+      <span class="page-count"></span>
+    </div>
+
+    <div class="cover">
+      <div class="title">${safeTitle}</div>
+      <div class="owner">${owner}</div>
+      <div class="residence">${safeResidence}</div>
+      <div class="period">${escapeHtml(context.period.label)}</div>
+      <div class="generated-at">Édité le ${formatGeneratedAt(context.generated_at)}</div>
+    </div>
+
+    ${sections.join('\n')}
+  </body>
+</html>`
+}
