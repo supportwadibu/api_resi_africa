@@ -300,6 +300,14 @@ Stables, consommés par le mobile.
 | `manager_not_assigned` | 403 | Aucune affectation active pour ce gérant. |
 | `out_of_scope` | 403 | La ressource existe mais est hors périmètre. |
 | `property_not_owned` | 422 | Logement affecté n'appartenant pas au propriétaire. |
+| `manager_already_exists` | 409 | Un compte porte déjà cet e-mail ou ce téléphone. |
+| `manager_contact_required` | 422 | Ni e-mail ni téléphone : le gérant n'aurait aucun moyen de se connecter. |
+| `manager_not_found` | 404 | Gérant inconnu, ou rattaché à un autre propriétaire. |
+
+`manager_not_found` est un 404 là où les accès d'un gérant rendent un 403
+`out_of_scope`. La différence est voulue : un gérant sait qu'il travaille sur un
+parc dont une partie lui échappe, tandis qu'un propriétaire interrogeant le
+gérant d'autrui ne doit pas apprendre que ce compte existe.
 
 `out_of_scope` est un 403, jamais un 404. Un 404 laisserait deviner par
 tâtonnement quels identifiants existent chez le propriétaire.
