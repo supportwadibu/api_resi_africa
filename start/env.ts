@@ -58,6 +58,16 @@ export default await Env.create(new URL('../', import.meta.url), {
   /** Dossier racine des rapports PDF édités. Par défaut `resi/reports`. */
   CLOUDINARY_REPORTS_FOLDER: Env.schema.string.optional(),
 
+  /**
+   * Chemin du binaire Chromium utilisé pour rendre les rapports PDF.
+   *
+   * Renseigné par l'image Docker, qui installe Chromium via apt. Absent en
+   * développement : Puppeteer retombe alors sur le navigateur qu'il a
+   * téléchargé dans le cache de l'utilisateur — lequel ne survit pas à un
+   * hébergement qui reconstruit l'environnement d'exécution après le build.
+   */
+  PUPPETEER_EXECUTABLE_PATH: Env.schema.string.optional(),
+
   // JWT
   JWT_ACCESS_SECRET: Env.schema.string(),
   JWT_REFRESH_SECRET: Env.schema.string(),

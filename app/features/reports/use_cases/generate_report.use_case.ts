@@ -1,4 +1,5 @@
 import { DomainError } from '#utils/domain_error'
+import logger from '@adonisjs/core/services/logger'
 
 import BookingPaymentRepository from '#features/booking_payments/repositories/booking_payment_repository'
 import { occupancyForWindow, type MonthWindow } from '#features/bookings/booking_stats'
@@ -209,9 +210,18 @@ export class GenerateReportUseCase {
     // jamais seule, et la perte de l'URL qui la répare.
     const html = await this.renderHtml(owner_id, input, period.window, context)
 
+    // L'étape courante est suivie pour que le journal dise *laquelle* des deux
+    // a cédé : le message rendu au client est le même, mais un rendu qui échoue
+    // (Chromium absent de l'image, police manquante) et un téléversement qui
+    // échoue (identifiants Cloudinary, réseau) ne se réparent pas au même
+    // endroit, et rien dans la trace ne les distinguait.
+    let stage: 'rendu PDF' | 'téléversement Cloudinary' = 'rendu PDF'
+
     try {
       const pdf = await renderPdf(html, { footerText: reportFooterText(context) })
       const filename = buildFilename(input.type, period.label, now)
+
+      stage = 'téléversement Cloudinary'
       const stored = await uploadReport(pdf, filename)
 
       return {
@@ -225,6 +235,14 @@ export class GenerateReportUseCase {
       // deux services externes dont l'échec est transitoire, et dont l'erreur
       // brute ne doit jamais remonter telle quelle jusqu'au client.
       if (error instanceof DomainError) throw error
+
+      // Sans cette trace, la cause réelle est perdue : le client reçoit
+      // « Réessayez » et l'exploitant ne voit que cette `DomainError`, jamais
+      // l'erreur d'origine qui dit quoi réparer.
+      logger.error(
+        { err: error, stage, report_type: input.type },
+        `Génération de rapport interrompue pendant le ${stage}`
+      )
 
       throw new DomainError(
         'report_generation_failed',
