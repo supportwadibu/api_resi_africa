@@ -61,3 +61,30 @@ test.group('ClientRepository.toDto', () => {
     assert.isNull(dto.stats.last_stay_at)
   })
 })
+
+/**
+ * `created_by` doit traverser la conversion.
+ *
+ * `toDto` énumère ses champs un à un : l'oublier ne casse rien de visible, mais
+ * c'est ce champ qui retient une fiche dans le carnet de son créateur tant
+ * qu'elle n'a aucune réservation. Perdu ici, une fiche saisie au comptoir
+ * disparaîtrait de la liste du gérant entre sa création et la réservation
+ * qu'elle sert — sans la moindre erreur.
+ */
+test.group('ClientRepository.toDto — auteur de la saisie', () => {
+  test('reporte l’auteur quand la fiche en porte un', ({ assert }) => {
+    const dto = ClientRepository.toDto({ ...record, created_by: 'gerant-1' })
+
+    assert.equal(dto.created_by, 'gerant-1')
+  })
+
+  test('rend null sur une fiche antérieure au rôle gérant', ({ assert }) => {
+    // Absent signifie « saisie par le propriétaire », seul acteur possible
+    // avant cette version.
+    assert.isNull(ClientRepository.toDto(record).created_by)
+  })
+
+  test('rend null sur une valeur nulle explicite', ({ assert }) => {
+    assert.isNull(ClientRepository.toDto({ ...record, created_by: null }).created_by)
+  })
+})
