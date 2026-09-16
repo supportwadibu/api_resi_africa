@@ -227,13 +227,30 @@ const Expense = {
    * charges communes et celles de ses unités — que `summary` ne sait pas
    * combiner : ses filtres sont des égalités, et un `where` sur `residence_id`
    * exclurait les charges d'unité.
+   *
+   * `scopePropertyIds` restreint la lecture au périmètre de l'appelant. Absent
+   * ou `null`, le relevé reste celui du propriétaire — aucun appelant existant
+   * ne change de comportement.
    */
   async findAllForOwner(
     ownerId: string,
-    range: { from?: Date; to?: Date } = {}
+    range: { from?: Date; to?: Date } = {},
+    scopePropertyIds?: string[] | null
   ): Promise<ExpenseRecord[]> {
-    const filters: ExpenseFilters = { owner_id: ownerId, ...range }
-    const snapshot = await buildQuery({ owner_id: ownerId }).get()
+    const filters: ExpenseFilters = {
+      owner_id: ownerId,
+      ...range,
+      scope_property_ids: scopePropertyIds,
+    }
+
+    // Le périmètre est confié à `buildQuery`, qui le délègue à Firestore quand
+    // il tient dans l'opérateur `in` ; les bornes de date restent en mémoire,
+    // pour ne pas exiger d'index composite. `matchesInMemory` réapplique les
+    // deux, et reste la seule barrière sur liste vide ou de plus de 30.
+    const snapshot = await buildQuery({
+      owner_id: ownerId,
+      scope_property_ids: scopePropertyIds,
+    }).get()
 
     return toDocs<ExpenseDocument>(snapshot.docs).filter((doc) => matchesInMemory(doc, filters))
   },

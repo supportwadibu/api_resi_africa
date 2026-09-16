@@ -408,6 +408,66 @@ export function needsInMemoryScope(filters: PropertyFilters): boolean {
   return Array.isArray(ids) && (ids.length === 0 || ids.length > FIRESTORE_IN_LIMIT)
 }
 
+/** Agrégats du parc, dans la forme rendue par `statsByOwner`. */
+export interface OwnerPropertyStats {
+  total: number
+  published: number
+  rented: number
+  draft: number
+  total_views: number
+}
+
+/**
+ * Les agrégats serveur doivent-ils céder la place à un comptage en mémoire ?
+ *
+ * Vrai pour les deux listes que Firestore ne sait pas passer à `in` : la liste
+ * vide et celle de plus de 30 entrées. Faux sans périmètre, ce qui laisse le
+ * chemin du propriétaire strictement inchangé — cinq agrégats serveur, aucun
+ * document rapatrié.
+ */
+export function needsInMemoryStats(scopePropertyIds?: string[] | null): boolean {
+  if (!Array.isArray(scopePropertyIds)) return false
+  return scopePropertyIds.length === 0 || scopePropertyIds.length > FIRESTORE_IN_LIMIT
+}
+
+/**
+ * Recompose les agrégats du parc depuis les documents.
+ *
+ * Employé quand le périmètre ne peut être confié à Firestore : les agrégats
+ * serveur ne savent pas filtrer sur une liste que `in` refuse, et les laisser
+ * porter sur `owner_id` seul livrerait au gérant la taille du parc entier —
+ * qui sert de dénominateur au taux d'occupation.
+ *
+ * `metadata.views_count` est lu avec un repli : les biens antérieurs au
+ * compteur ne le portent pas.
+ */
+export function computeStatsInMemory(docs: readonly PropertyRecord[]): OwnerPropertyStats {
+  const stats: OwnerPropertyStats = { total: 0, published: 0, rented: 0, draft: 0, total_views: 0 }
+
+  for (const doc of docs) {
+    stats.total += 1
+    if (doc.status === 'published') stats.published += 1
+    if (doc.status === 'rented') stats.rented += 1
+    if (doc.status === 'draft') stats.draft += 1
+    stats.total_views += doc.metadata?.views_count ?? 0
+  }
+
+  return stats
+}
+
+/**
+ * Restreint une liste d'identifiants à un périmètre.
+ *
+ * `null` ou `undefined` signifie « aucune restriction » — la liste est rendue
+ * intacte —, et se distingue du tableau vide, qui ne laisse rien passer.
+ */
+export function intersectScope(ids: string[], scopePropertyIds?: string[] | null): string[] {
+  if (!Array.isArray(scopePropertyIds)) return ids
+
+  const allowed = new Set(scopePropertyIds)
+  return ids.filter((id) => allowed.has(id))
+}
+
 /** Indique si des critères doivent être évalués en mémoire. */
 function needsInMemoryFilter(filters: PropertyFilters): boolean {
   return (
@@ -560,12 +620,28 @@ const Property = {
    * Nécessaire au relevé financier : les charges d'une résidence sont ses
    * charges communes **plus** celles de ses unités, et Firestore ne sait pas
    * joindre les deux collections.
+   *
+   * `scopePropertyIds` restreint le résultat au périmètre de l'appelant. Absent
+   * ou `null`, la liste est celle de toutes les unités — aucun appelant existant
+   * ne change de comportement. Sans cette restriction, une résidence de dix
+   * logements dont six sont confiés rendrait ses dix unités, et le taux
+   * d'occupation du gérant serait divisé par une capacité qui n'est pas la
+   * sienne.
    */
-  async findIdsByResidence(residenceId: string): Promise<string[]> {
+  async findIdsByResidence(
+    residenceId: string,
+    scopePropertyIds?: string[] | null
+  ): Promise<string[]> {
     if (!residenceId) return []
     const snapshot = await properties().where('residence_id', '==', residenceId).select().get()
 
-    return snapshot.docs.map((doc) => doc.id)
+    // Intersection en mémoire plutôt qu'un second `where` : la requête porte
+    // déjà sur `residence_id`, et le `in` sur `documentId()` refuserait la
+    // liste vide comme celle de plus de 30 logements.
+    return intersectScope(
+      snapshot.docs.map((doc) => doc.id),
+      scopePropertyIds
+    )
   },
 
   /**
@@ -580,14 +656,43 @@ const Property = {
     return countQuery(properties().where('residence_id', '==', residenceId))
   },
 
-  async statsByOwner(ownerId: string): Promise<{
-    total: number
-    published: number
-    rented: number
-    draft: number
-    total_views: number
-  }> {
-    const base = properties().where('owner_id', '==', ownerId)
+  /**
+   * `scopePropertyIds` restreint les agrégats au périmètre de l'appelant.
+   * Absent ou `null`, le chemin du propriétaire est strictement inchangé : cinq
+   * agrégats serveur, aucun document rapatrié. C'est la lecture la plus
+   * exposée — elle alimente le tableau de bord et le dénominateur du taux
+   * d'occupation, et non restreinte elle révélerait au gérant la taille du parc
+   * entier.
+   */
+  async statsByOwner(
+    ownerId: string,
+    scopePropertyIds?: string[] | null
+  ): Promise<OwnerPropertyStats> {
+    let base = properties().where(
+      'owner_id',
+      '==',
+      ownerId
+    ) as FirebaseFirestore.Query<PropertyDocument>
+
+    // Les deux listes que `in` refuse — vide, ou de plus de 30 — imposent de
+    // rapatrier les documents et de recompter : un agrégat serveur ne sait pas
+    // filtrer ce que la requête n'exprime pas.
+    if (needsInMemoryStats(scopePropertyIds)) {
+      if (scopePropertyIds!.length === 0) {
+        return { total: 0, published: 0, rented: 0, draft: 0, total_views: 0 }
+      }
+
+      const snapshot = await base.get()
+      const scoped = toDocs<PropertyDocument>(snapshot.docs).filter((doc) =>
+        scopePropertyIds!.includes(doc._id)
+      )
+
+      return computeStatsInMemory(scoped)
+    }
+
+    if (scopePropertyIds) {
+      base = base.where(FieldPath.documentId(), 'in', scopePropertyIds)
+    }
 
     const [total, published, rented, draft, totalViews] = await Promise.all([
       countQuery(base),

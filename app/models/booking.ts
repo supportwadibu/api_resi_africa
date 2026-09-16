@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 
 import type { StayType } from '#features/bookings/stay_type'
 import type { ActorScope } from '#features/managers/scope'
-import { FIRESTORE_IN_LIMIT, filterByScope } from '#features/managers/scope'
+import { FIRESTORE_IN_LIMIT, filterByScope, isWithinScope } from '#features/managers/scope'
 import {
   collection,
   COLLECTIONS,
@@ -161,6 +161,25 @@ function buildQuery(filters: BookingFilters): FirebaseFirestore.Query<BookingDoc
 export function needsInMemoryScope(filters: BookingFilters): boolean {
   const ids = filters.scope_property_ids
   return Array.isArray(ids) && (ids.length === 0 || ids.length > FIRESTORE_IN_LIMIT)
+}
+
+/**
+ * La réservation relève-t-elle du périmètre ?
+ *
+ * `null` ou `undefined` signifie « aucune restriction » — le propriétaire —, et
+ * se distingue du tableau vide, qui est un gérant sans affectation et ne doit
+ * rien voir. Une réservation sans `property_id` n'est rattachable à aucun
+ * logement confié : elle est écartée de tout périmètre restreint.
+ */
+export function matchesRevenueScope(
+  doc: { property_id?: string | null },
+  scopePropertyIds?: string[] | null
+): boolean {
+  if (!Array.isArray(scopePropertyIds)) return true
+  return isWithinScope(
+    { ownerId: '', actorId: '', propertyIds: scopePropertyIds },
+    doc.property_id ?? null
+  )
 }
 
 /** Périmètre sous la forme attendue par `filterByScope`. */
@@ -425,16 +444,41 @@ const Booking = {
    *
    * Le chevauchement est évalué en mémoire : Firestore n'accepte qu'un champ en
    * inégalité par requête, et il en faudrait deux (`start_date`, `end_date`).
+   *
+   * `scope.property_ids` restreint la lecture au périmètre de l'appelant. Absent
+   * ou `null`, la lecture reste celle du propriétaire — aucun appelant existant
+   * ne change de comportement. C'est la source du chiffre d'affaires et du taux
+   * d'occupation : sans ce paramètre, un relevé de gérant porterait les
+   * encaissements de logements qui ne lui sont pas confiés.
    */
   async findForRevenue(
     ownerId: string,
     range: { from?: Date; to?: Date } = {},
-    scope: { residence_id?: string } = {}
+    scope: { residence_id?: string; property_ids?: string[] | null } = {}
   ): Promise<BookingRecord[]> {
-    const snapshot = await bookings().where('owner_id', '==', ownerId).get()
+    let query = bookings().where(
+      'owner_id',
+      '==',
+      ownerId
+    ) as FirebaseFirestore.Query<BookingDocument>
+
+    // Filtrage délégué à Firestore tant que la liste tient dans la limite de
+    // l'opérateur `in` ; au-delà — et sur liste vide, où `in` lève aussi —
+    // `matchesRevenueScope` reprend après lecture.
+    const ids = scope.property_ids
+    if (ids && ids.length > 0 && ids.length <= FIRESTORE_IN_LIMIT) {
+      query = query.where('property_id', 'in', ids)
+    }
+
+    const snapshot = await query.get()
 
     return toDocs<BookingDocument>(snapshot.docs).filter((doc) => {
       if (doc.status === 'cancelled') return false
+
+      // Second passage du périmètre : il ne retire rien quand Firestore a déjà
+      // filtré, et il est la seule barrière dans les deux cas qu'il ne sait pas
+      // exprimer.
+      if (!matchesRevenueScope(doc, scope.property_ids)) return false
 
       // Le rattachement est lu sur la réservation et non sur l’unité : il y a
       // été figé à la création, et une unité déplacée depuis ne doit pas
