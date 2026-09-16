@@ -39,6 +39,13 @@ export interface CreateClientInput {
   whatsapp?: string | null
   id_document_type?: ClientIdDocumentType | null
   id_document_number?: string | null
+  /**
+   * Acteur ayant saisi la fiche — un gérant —, `null` ou absent pour le
+   * propriétaire. Posé par le contrôleur depuis `ctx.scope`, jamais par le
+   * client. C'est aussi ce qui rend la fiche visible à son créateur avant sa
+   * première réservation : voir `filterClientsForScope`.
+   */
+  created_by?: string | null
 }
 
 export interface UpdateClientInput {

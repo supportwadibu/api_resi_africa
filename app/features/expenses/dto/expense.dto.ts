@@ -47,6 +47,12 @@ export interface CreateExpenseInput {
   amount: number
   spent_at: Date
   note?: string | null
+  /**
+   * Acteur ayant saisi la dépense — un gérant —, `null` ou absent pour le
+   * propriétaire. Posé par le contrôleur depuis `ctx.scope`, jamais par le
+   * client. Donnée d'audit, n'entrant dans aucun calcul.
+   */
+  created_by?: string | null
 }
 
 export interface UpdateExpenseInput {

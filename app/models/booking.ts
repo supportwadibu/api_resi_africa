@@ -182,6 +182,75 @@ export function matchesRevenueScope(
   )
 }
 
+/** Champs d'une réservation comptoir, avant composition du document. */
+export interface OwnerBookingInput {
+  owner_id: string
+  property_id: string
+  residence_id?: string | null
+  client_id: string
+  client_snapshot: { full_name: string; phone: string }
+  status: BookingStatus
+  stay_type: StayType
+  check_in_at: Date
+  check_out_at: Date
+  days_count: number
+  daily_price: number
+  expected_amount: number
+  received_amount: number
+  deposit_amount: number
+  message: string | null
+  client_request_id: string | null
+  /** Acteur ayant saisi, `null` pour le propriétaire. Donnée d'audit. */
+  created_by?: string | null
+}
+
+/**
+ * Compose le document d'une réservation comptoir.
+ *
+ * Extraite de `createOwnerBooking` pour être éprouvée sans Firestore : la
+ * composition énumère ses champs un à un, si bien qu'un `created_by` calculé en
+ * amont s'y perdrait sans la moindre erreur de compilation. Le seul recours
+ * contre cet oubli silencieux est un test, et un test suppose une fonction pure.
+ */
+export function buildOwnerBookingPayload(input: OwnerBookingInput, now: Date): BookingDocument {
+  return {
+    property_id: input.property_id,
+    residence_id: input.residence_id ?? null,
+    owner_id: input.owner_id,
+    client_id: input.client_id,
+    status: input.status,
+    // Les deux couples de dates sont écrits ensemble et tenus identiques :
+    // `start_date` reste la source pour Finance et les écrans existants.
+    start_date: input.check_in_at,
+    end_date: input.check_out_at,
+    check_in_at: input.check_in_at,
+    check_out_at: input.check_out_at,
+    days_count: input.days_count,
+    daily_price: input.daily_price,
+    duration_discount_percent: 0,
+    subtotal_amount: input.expected_amount,
+    // L'écart entre attendu et négocié est une remise consentie.
+    discount_amount: Math.max(0, input.expected_amount - input.received_amount),
+    total_amount: input.received_amount,
+    expected_amount: input.expected_amount,
+    received_amount: input.received_amount,
+    deposit_amount: input.deposit_amount,
+    promo_code: null,
+    message: input.message,
+    source: 'offline',
+    stay_type: input.stay_type,
+    client_snapshot: input.client_snapshot,
+    client_request_id: input.client_request_id,
+    sync_status: 'synced',
+    cancelled_at: null,
+    completed_at: null,
+    cancellation_reason: null,
+    created_by: input.created_by ?? null,
+    created_at: now,
+    updated_at: now,
+  }
+}
+
 /** Périmètre sous la forme attendue par `filterByScope`. */
 function scopeOf(filters: BookingFilters): ActorScope {
   // `ownerId` et `actorId` ne servent pas au filtrage par périmètre ; seul
@@ -646,64 +715,14 @@ const Booking = {
    *
    * @throws `booking_period_conflict` si `detectConflict` retourne `true`
    */
-  async createOwnerBooking(input: {
-    owner_id: string
-    property_id: string
-    residence_id?: string | null
-    client_id: string
-    client_snapshot: { full_name: string; phone: string }
-    status: BookingStatus
-    stay_type: StayType
-    check_in_at: Date
-    check_out_at: Date
-    days_count: number
-    daily_price: number
-    expected_amount: number
-    received_amount: number
-    deposit_amount: number
-    message: string | null
-    client_request_id: string | null
-    created_by?: string | null
-    detectConflict: (active: BookingRecord[]) => boolean
-  }): Promise<BookingRecord> {
+  async createOwnerBooking(
+    input: OwnerBookingInput & {
+      detectConflict: (active: BookingRecord[]) => boolean
+    }
+  ): Promise<BookingRecord> {
     const now = new Date()
 
-    const payload: BookingDocument = {
-      property_id: input.property_id,
-      residence_id: input.residence_id ?? null,
-      owner_id: input.owner_id,
-      client_id: input.client_id,
-      status: input.status,
-      // Les deux couples de dates sont écrits ensemble et tenus identiques :
-      // `start_date` reste la source pour Finance et les écrans existants.
-      start_date: input.check_in_at,
-      end_date: input.check_out_at,
-      check_in_at: input.check_in_at,
-      check_out_at: input.check_out_at,
-      days_count: input.days_count,
-      daily_price: input.daily_price,
-      duration_discount_percent: 0,
-      subtotal_amount: input.expected_amount,
-      // L'écart entre attendu et négocié est une remise consentie.
-      discount_amount: Math.max(0, input.expected_amount - input.received_amount),
-      total_amount: input.received_amount,
-      expected_amount: input.expected_amount,
-      received_amount: input.received_amount,
-      deposit_amount: input.deposit_amount,
-      promo_code: null,
-      message: input.message,
-      source: 'offline',
-      stay_type: input.stay_type,
-      client_snapshot: input.client_snapshot,
-      client_request_id: input.client_request_id,
-      sync_status: 'synced',
-      cancelled_at: null,
-      completed_at: null,
-      cancellation_reason: null,
-      created_by: input.created_by ?? null,
-      created_at: now,
-      updated_at: now,
-    }
+    const payload = buildOwnerBookingPayload(input, now)
 
     const docRef = input.client_request_id
       ? bookings().doc(Booking.ownerRequestDocId(input.owner_id, input.client_request_id))

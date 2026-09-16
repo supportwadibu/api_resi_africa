@@ -118,6 +118,10 @@ export class CreateOwnerBookingUseCase {
         deposit_amount: input.deposit_amount ?? 0,
         message: input.message ?? null,
         client_request_id: input.client_request_id ?? null,
+        // Traçabilité : le propriétaire reste `owner_id`, l'auteur réel — un
+        // gérant — est consigné ici. Énumération champ par champ : l'omettre
+        // perdrait l'auteur sans aucune erreur de compilation.
+        created_by: input.created_by ?? null,
         detectConflict: (active) =>
           findOverlappingPeriod(
             { check_in_at: checkIn, check_out_at: checkOut },

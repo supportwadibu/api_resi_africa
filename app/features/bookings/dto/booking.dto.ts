@@ -80,6 +80,12 @@ export interface CreateOwnerBookingInput {
   /** Immédiat : la réservation naît `in_progress`. */
   is_check_in: boolean
   client_request_id?: string | null
+  /**
+   * Acteur ayant réellement saisi la réservation — un gérant —, `null` ou
+   * absent pour le propriétaire. Posé par le contrôleur depuis `ctx.scope`,
+   * jamais par le client.
+   */
+  created_by?: string | null
 }
 
 export interface BookingPropertySummary {
