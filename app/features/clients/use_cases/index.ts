@@ -5,3 +5,4 @@ export { default as ListClientBookingsUseCase } from './list_client_bookings.use
 export { default as ListClientsUseCase } from './list_clients.use_case.ts'
 export { default as LookupClientUseCase } from './lookup_client.use_case.ts'
 export { default as UpdateClientUseCase } from './update_client.use_case.ts'
+export { default as GetScopedClientUseCase } from './get_scoped_client.use_case.ts'

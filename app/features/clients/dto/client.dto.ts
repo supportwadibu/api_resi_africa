@@ -25,6 +25,15 @@ export interface ClientDto {
   documents_status: 'complete' | 'pending'
   stats: ClientStatsDto
   status: ClientStatus
+  /**
+   * Acteur ayant saisi la fiche — un gérant —, `null` pour le propriétaire et
+   * sur les fiches antérieures au rôle gérant.
+   *
+   * C'est ce champ qui retient une fiche dans le carnet de son créateur tant
+   * qu'elle n'a aucune réservation : le perdre à la conversion ferait
+   * disparaître une fiche saisie au comptoir, sans aucune erreur visible.
+   */
+  created_by: string | null
   created_at: Date
   updated_at: Date
   /** URLs signées, présentes seulement sur la lecture d'une fiche. */

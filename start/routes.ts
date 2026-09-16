@@ -19,6 +19,13 @@ const ProprioReportController = () => import('#controllers/proprio/report_contro
 const ProprioSubscriptionController = () => import('#controllers/proprio/subscription_controller')
 const ProprioFeedbackController = () => import('#controllers/proprio/feedback_controller')
 const ProprioManagerController = () => import('#controllers/proprio/manager_controller')
+const GerantPropertyController = () => import('#controllers/gerant/property_controller')
+const GerantResidenceController = () => import('#controllers/gerant/residence_controller')
+const GerantBookingController = () => import('#controllers/gerant/booking_controller')
+const GerantClientController = () => import('#controllers/gerant/client_controller')
+const GerantExpenseController = () => import('#controllers/gerant/expense_controller')
+const GerantFinanceController = () => import('#controllers/gerant/finance_controller')
+const GerantProfileController = () => import('#controllers/gerant/profile_controller')
 const ClientPropertyController = () => import('#controllers/client/property_controller')
 const ClientBookingController = () => import('#controllers/client/booking_controller')
 const ClientBookingPaymentController = () =>
@@ -196,6 +203,96 @@ router
       .prefix('proprio')
       .as('proprio')
       .use([middleware.auth(), middleware.role(['proprio'])])
+
+    /**
+     * Espace du gérant.
+     *
+     * Préfixe dédié plutôt qu'une ouverture des routes `proprio` à deux rôles :
+     * le périmètre du gérant se lit d'un coup d'œil ici, et **ce qui n'y figure
+     * pas lui est fermé par construction** — non par une condition qu'on peut
+     * oublier d'écrire. Restent donc hors d'atteinte : l'abonnement et la
+     * facturation, la création et la suppression de logements et de résidences,
+     * la modification des tarifs, la gestion des gérants, les rapports
+     * exportables et les feedbacks.
+     *
+     * `scope()` s'exécute après `auth()` et `role()` : il lit l'affectation et
+     * pose `ctx.scope`, dont dépend chaque contrôleur du groupe.
+     */
+    router
+      .group(() => {
+        router
+          .group(() => {
+            router.get('/', [GerantPropertyController, 'index'])
+            // Avant `:id`, sinon « availability » serait pris pour un identifiant.
+            router.get('availability', [GerantPropertyController, 'availability'])
+            router.get(':id', [GerantPropertyController, 'show'])
+            // Disponibilité seule : ni tarif, ni mise en ligne, ni suppression.
+            router.patch(':id/availability', [GerantPropertyController, 'updateAvailability'])
+          })
+          .prefix('properties')
+          .as('properties')
+
+        // Regroupement d'affichage, en lecture seule : les résidences
+        // contenant au moins un logement du périmètre, réduites à ces
+        // logements-là.
+        router
+          .group(() => {
+            router.get('/', [GerantResidenceController, 'index'])
+          })
+          .prefix('residences')
+          .as('residences')
+
+        router
+          .group(() => {
+            router.get('/', [GerantBookingController, 'index'])
+            router.post('/', [GerantBookingController, 'store'])
+            router.get(':id', [GerantBookingController, 'show'])
+            router.patch(':id', [GerantBookingController, 'update'])
+            router.patch(':id/cancel', [GerantBookingController, 'cancel'])
+            router.post(':id/payments', [GerantBookingController, 'recordPayment'])
+          })
+          .prefix('bookings')
+          .as('bookings')
+
+        router
+          .group(() => {
+            router.get('/', [GerantClientController, 'index'])
+            router.post('/', [GerantClientController, 'store'])
+            router.get(':id', [GerantClientController, 'show'])
+            router.patch(':id', [GerantClientController, 'update'])
+          })
+          .prefix('clients')
+          .as('clients')
+
+        router
+          .group(() => {
+            router.get('/', [GerantExpenseController, 'index'])
+            router.post('/', [GerantExpenseController, 'store'])
+            router.patch(':id', [GerantExpenseController, 'update'])
+            router.delete(':id', [GerantExpenseController, 'destroy'])
+          })
+          .prefix('expenses')
+          .as('expenses')
+
+        // Brut du périmètre, jamais le net : voir `ManagerOverviewDto`.
+        router
+          .group(() => {
+            router.get('overview', [GerantFinanceController, 'overview'])
+          })
+          .prefix('finance')
+          .as('finance')
+
+        router
+          .group(() => {
+            router.get('/', [GerantProfileController, 'show'])
+            router.patch('/', [GerantProfileController, 'update'])
+          })
+          .prefix('profile')
+          .as('profile')
+      })
+      .prefix('gerant')
+      .as('gerant')
+      .use([middleware.auth(), middleware.role(['gerant']), middleware.scope()])
 
     router
       .group(() => {

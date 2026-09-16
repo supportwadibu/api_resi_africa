@@ -19,6 +19,15 @@ export const controllers = {
     Property: () => import('#controllers/client/property_controller'),
   },
   Cron: () => import('#controllers/cron_controller'),
+  gerant: {
+    Booking: () => import('#controllers/gerant/booking_controller'),
+    Client: () => import('#controllers/gerant/client_controller'),
+    Expense: () => import('#controllers/gerant/expense_controller'),
+    Finance: () => import('#controllers/gerant/finance_controller'),
+    Profile: () => import('#controllers/gerant/profile_controller'),
+    Property: () => import('#controllers/gerant/property_controller'),
+    Residence: () => import('#controllers/gerant/residence_controller'),
+  },
   NewAccount: () => import('#controllers/new_account_controller'),
   Profile: () => import('#controllers/profile_controller'),
   proprio: {

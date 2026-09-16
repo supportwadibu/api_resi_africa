@@ -108,6 +108,28 @@ export class ManagerRepository {
     return ManagerRepository.toAccountView(user)
   }
 
+  /**
+   * Empreinte du mot de passe courant, pour le contrôle de l'ancien.
+   *
+   * Rendue seule, jamais jointe à `ManagerAccountView` : ce dernier est sérialisé
+   * jusqu'au mobile, et y faire entrer l'empreinte la livrerait au client.
+   */
+  async findPasswordHash(managerId: string): Promise<string | null> {
+    const user = await User.findByIdAndRole(managerId, MANAGER_ROLE_ID)
+    return user?.password ?? null
+  }
+
+  /** Remplace l'empreinte du mot de passe. La valeur reçue est déjà hachée. */
+  async updatePassword(managerId: string, passwordHash: string): Promise<boolean> {
+    const user = await User.findByIdAndRole(managerId, MANAGER_ROLE_ID)
+    if (!user) return false
+
+    user.password = passwordHash
+    await user.save()
+
+    return true
+  }
+
   async findAssignment(managerId: string): Promise<ManagerAssignmentRecord | null> {
     return ManagerAssignment.findByManagerId(managerId)
   }

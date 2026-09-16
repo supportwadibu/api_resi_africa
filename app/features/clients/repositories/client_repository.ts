@@ -1,4 +1,5 @@
 import Client, { type ClientRecord } from '#models/client'
+import { readCreatedBy } from '#utils/created_by'
 
 import type {
   ClientDto,
@@ -33,6 +34,9 @@ export class ClientRepository {
         last_stay_at: doc.stats?.last_stay_at ?? null,
       },
       status: doc.status ?? 'active',
+      // Repli explicite : les fiches écrites avant le rôle gérant ne portent
+      // pas ce champ, et son absence signifie « saisie par le propriétaire ».
+      created_by: readCreatedBy(doc),
       created_at: doc.created_at,
       updated_at: doc.updated_at,
     }

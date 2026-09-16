@@ -71,3 +71,25 @@ export const setManagerStatusValidator = vine.compile(
     is_active: vine.boolean(),
   })
 )
+
+/**
+ * PATCH /gerant/profile
+ *
+ * Nom et mot de passe, rien d'autre. E-mail et téléphone en sont absents : ce
+ * sont les identifiants de connexion par lesquels le propriétaire retrouve le
+ * compte qu'il a ouvert, et les laisser réécrire au gérant lui permettrait d'y
+ * soustraire son compte.
+ *
+ * `current_password` est exigé par le use case dès qu'un nouveau mot de passe
+ * est soumis : sans ce contrôle, un jeton volé suffirait à verrouiller le
+ * compte.
+ */
+export const updateManagerProfileValidator = vine.compile(
+  vine.object({
+    full_name: vine.string().trim().minLength(2).maxLength(120).optional(),
+    current_password: vine.string().minLength(8).maxLength(72).optional(),
+    // 72 octets : borne de bcrypt, au-delà de laquelle la fin du mot de passe
+    // est ignorée silencieusement.
+    new_password: vine.string().minLength(8).maxLength(72).optional(),
+  })
+)
