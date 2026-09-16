@@ -291,6 +291,15 @@
         { "fieldPath": "created_at", "order": "DESCENDING" }
       ]
     },
+    {
+      "collectionGroup": "booking_payments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "owner_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "paid_at", "order": "ASCENDING" }
+      ]
+    },
 
     {
       "collectionGroup": "subscriptions",

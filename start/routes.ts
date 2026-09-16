@@ -15,6 +15,7 @@ const ProprioResidenceController = () => import('#controllers/proprio/residence_
 const ProprioClientController = () => import('#controllers/proprio/client_controller')
 const ProprioExpenseController = () => import('#controllers/proprio/expense_controller')
 const ProprioFinanceController = () => import('#controllers/proprio/finance_controller')
+const ProprioReportController = () => import('#controllers/proprio/report_controller')
 const ProprioSubscriptionController = () => import('#controllers/proprio/subscription_controller')
 const ProprioFeedbackController = () => import('#controllers/proprio/feedback_controller')
 const ClientPropertyController = () => import('#controllers/client/property_controller')
@@ -157,6 +158,13 @@ router
           })
           .prefix('finance')
           .as('finance')
+
+        router
+          .group(() => {
+            router.post('/', [ProprioReportController, 'store'])
+          })
+          .prefix('reports')
+          .as('reports')
 
         router
           .group(() => {

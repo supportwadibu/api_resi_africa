@@ -153,6 +153,27 @@ export class ExpenseRepository {
     }
   }
 
+  /**
+   * Toutes les dépenses d'un propriétaire sur une fenêtre, sans distinction de
+   * cible.
+   *
+   * Sert au relevé d'une résidence : ses charges sont ses charges communes
+   * (`residence_id`) **et** celles de ses unités (`property_id`), deux champs
+   * que `summary` ne sait pas combiner puisqu'il ne filtre que par égalité.
+   * Reprend `belongsToResidence`/`sumResidenceExpenses` de `residence_scope.ts`
+   * pour ce classement — jamais deux requêtes `summary` distinctes additionnées,
+   * qui compteraient deux fois une dépense historique portant à la fois
+   * `residence_id` et `property_id` (voir le commentaire de
+   * `belongsToResidence`).
+   */
+  async findAllForOwner(
+    owner_id: string,
+    range: { from?: Date; to?: Date } = {}
+  ): Promise<ExpenseDto[]> {
+    const docs = await Expense.findAllForOwner(owner_id, range)
+    return docs.map((doc) => ExpenseRepository.toDto(doc))
+  }
+
   async summary(filters: ListExpensesFilters): Promise<ExpenseSummaryDto> {
     const summary = await Expense.summary({
       owner_id: filters.owner_id,

@@ -220,6 +220,24 @@ export class BookingRepository {
   }
 
   /**
+   * Réservations actives d'un propriétaire chevauchant une période.
+   *
+   * Les rapports « performance » et « réservations » ont besoin d'un relevé
+   * sur une fenêtre arbitraire, ce que `paginate` — filtré sur statut, jamais
+   * sur date — ne permet pas. Enveloppe `findForRevenue`, déjà utilisé par
+   * `stats()` : même filtre (annulées exclues, chevauchement plutôt
+   * qu'inclusion), pour que ces trois lectures ne divergent jamais.
+   */
+  async findByPeriod(
+    owner_id: string,
+    range: { from?: Date; to?: Date } = {},
+    scope: { residence_id?: string } = {}
+  ): Promise<BookingDto[]> {
+    const docs = await Booking.findForRevenue(owner_id, range, scope)
+    return docs.map((doc) => BookingRepository.toDto(doc))
+  }
+
+  /**
    * Chiffres du tableau de bord : occupation, séjours à venir et en cours,
    * revenu du mois rapporté au précédent.
    *

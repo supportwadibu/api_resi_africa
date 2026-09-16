@@ -53,6 +53,7 @@ export default defineConfig({
     () => import('#providers/api_provider'),
     () => import('#providers/firebase_provider'),
     () => import('#providers/notifications_provider'),
+    () => import('#providers/pdf_renderer_provider'),
   ],
 
   /*
