@@ -3,6 +3,8 @@ import { test } from '@japa/runner'
 import { assertPropertiesOwned } from '#features/managers/use_cases/create_manager.use_case'
 import { DomainError } from '#utils/domain_error'
 
+// `loadOwnedAssignment` a son propre fichier : voir `get_manager.spec.ts`.
+
 const OWNED = [
   { _id: 'studio-1', owner_id: 'owner-1' },
   { _id: 'studio-2', owner_id: 'owner-1' },

@@ -1,7 +1,16 @@
 import vine from '@vinejs/vine'
 
-const email = () => vine.string().trim().email().toLowerCase().maxLength(254)
-const phone = () =>
+/**
+ * Coordonnées de connexion, normalisées à l'entrée.
+ *
+ * Exportées : tout flux créant un compte doit les réutiliser. Les recherches
+ * d'unicité comme l'authentification interrogent Firestore par égalité stricte,
+ * si bien qu'une adresse non abaissée en minuscules produirait un compte qui ne
+ * peut pas se connecter *et* passerait à travers le contrôle d'unicité d'un
+ * compte existant.
+ */
+export const email = () => vine.string().trim().email().toLowerCase().maxLength(254)
+export const phone = () =>
   vine
     .string()
     .trim()

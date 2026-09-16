@@ -1,3 +1,4 @@
+import { email, phone } from '#validators/auth/auth'
 import vine from '@vinejs/vine'
 
 /**
@@ -11,10 +12,12 @@ import vine from '@vinejs/vine'
 const hasLoginContact = vine.createRule((value, _options, field) => {
   const payload = value as { email?: unknown; phone?: unknown }
 
-  const email = typeof payload?.email === 'string' ? payload.email.trim() : ''
-  const phone = typeof payload?.phone === 'string' ? payload.phone.trim() : ''
+  // Noms distincts des helpers `email()` / `phone()` importés, qu'ils
+  // masqueraient autrement dans cette portée.
+  const emailValue = typeof payload?.email === 'string' ? payload.email.trim() : ''
+  const phoneValue = typeof payload?.phone === 'string' ? payload.phone.trim() : ''
 
-  if (email || phone) return
+  if (emailValue || phoneValue) return
 
   field.report(
     'Renseignez au moins un e-mail ou un numéro de téléphone.',
@@ -27,8 +30,13 @@ export const createManagerValidator = vine.compile(
   vine
     .object({
       full_name: vine.string().trim().minLength(2).maxLength(120),
-      email: vine.string().trim().email().optional(),
-      phone: vine.string().trim().minLength(8).maxLength(20).optional(),
+      // Helpers d'`auth.ts` : le gérant se connecte par le flux de connexion
+      // ordinaire, qui interroge par égalité stricte. Une adresse non abaissée
+      // ou un numéro à espaces livreraient un compte impossible à utiliser, et
+      // franchiraient le contrôle d'unicité d'un compte déjà existant — fût-il
+      // celui d'un propriétaire ou d'un admin.
+      email: email().optional(),
+      phone: phone().optional(),
       // 72 octets : borne de bcrypt, au-delà de laquelle la fin du mot de passe
       // est ignorée silencieusement.
       password: vine.string().minLength(8).maxLength(72),
@@ -41,8 +49,10 @@ export const createManagerValidator = vine.compile(
 export const updateManagerValidator = vine.compile(
   vine.object({
     full_name: vine.string().trim().minLength(2).maxLength(120).optional(),
-    email: vine.string().trim().email().nullable().optional(),
-    phone: vine.string().trim().minLength(8).maxLength(20).nullable().optional(),
+    // Mêmes helpers qu'à la création : une coordonnée modifiée sans
+    // normalisation rendrait tout aussi bien le compte inutilisable.
+    email: email().nullable().optional(),
+    phone: phone().nullable().optional(),
   })
 )
 
