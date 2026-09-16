@@ -158,7 +158,7 @@ function buildQuery(filters: BookingFilters): FirebaseFirestore.Query<BookingDoc
  * Sans ce second passage, une requête ainsi construite ne porterait aucune
  * restriction et un gérant verrait tout le compte du propriétaire.
  */
-function needsInMemoryScope(filters: BookingFilters): boolean {
+export function needsInMemoryScope(filters: BookingFilters): boolean {
   const ids = filters.scope_property_ids
   return Array.isArray(ids) && (ids.length === 0 || ids.length > FIRESTORE_IN_LIMIT)
 }

@@ -353,7 +353,7 @@ function buildQuery(filters: PropertyFilters): FirebaseFirestore.Query<PropertyD
  * - **Bornes numériques et date** : plusieurs inégalités sur des champs
  *   différents sont interdites dans une même requête Firestore.
  */
-function matchesInMemory(doc: PropertyRecord, filters: PropertyFilters): boolean {
+export function matchesInMemory(doc: PropertyRecord, filters: PropertyFilters): boolean {
   if (filters.city) {
     const wanted = filters.city.trim().toLowerCase()
     if (!doc.address.city?.toLowerCase().includes(wanted)) return false
@@ -403,7 +403,7 @@ function matchesInMemory(doc: PropertyRecord, filters: PropertyFilters): boolean
  * ce second passage, la requête ne porterait aucune restriction et un gérant
  * verrait tout le catalogue du propriétaire.
  */
-function needsInMemoryScope(filters: PropertyFilters): boolean {
+export function needsInMemoryScope(filters: PropertyFilters): boolean {
   const ids = filters.scope_property_ids
   return Array.isArray(ids) && (ids.length === 0 || ids.length > FIRESTORE_IN_LIMIT)
 }

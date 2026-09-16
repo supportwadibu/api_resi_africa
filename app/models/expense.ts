@@ -124,7 +124,7 @@ function buildQuery(filters: ExpenseFilters): FirebaseFirestore.Query<ExpenseDoc
   return query
 }
 
-function matchesInMemory(doc: ExpenseRecord, filters: ExpenseFilters): boolean {
+export function matchesInMemory(doc: ExpenseRecord, filters: ExpenseFilters): boolean {
   const spentAt = doc.spent_at?.getTime() ?? 0
 
   if (filters.from && spentAt < filters.from.getTime()) return false
