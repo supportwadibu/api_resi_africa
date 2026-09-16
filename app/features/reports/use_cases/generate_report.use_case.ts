@@ -30,9 +30,9 @@ import {
   renderReservationsReport,
   type ReservationRow,
 } from '#features/reports/renderers/reservations_report'
+import ReportGenerationRepository from '#features/reports/repositories/report_generation_repository'
 import ResidenceRepository from '#features/residences/repositories/residence_repository'
 import { renderPdf } from '#services/pdf_renderer'
-import { uploadReport } from '#services/report_storage'
 
 import type { BookingDto } from '#features/bookings/dto/booking.dto'
 import type { ClientDto } from '#features/clients/dto/client.dto'
@@ -77,14 +77,13 @@ const REPORT_TYPE_SLUGS: Record<GenerateReportInput['type'], string> = {
 }
 
 /**
- * Assainit un fragment destiné à entrer dans un nom de fichier Cloudinary.
+ * Assainit un fragment destiné à entrer dans le nom de fichier du rapport.
  *
- * `uploadReport` concatène le nom reçu tel quel dans le `public_id`, sans le
- * filtrer — c'est donc ici, avant l'appel, que la garantie doit être posée.
- * Minuscules, sans accent, uniquement `[a-z0-9-]` : même normalisation que le
- * commentaire de `document_storage.ts` sur le nom de destination d'un
- * justificatif, pour la même raison — un `../` glissé dans ce nom sortirait
- * du dossier de rapports Cloudinary.
+ * Ce nom finit dans l'en-tête `Content-Disposition` de la réponse : minuscules,
+ * sans accent, uniquement `[a-z0-9-]` — même normalisation que le commentaire
+ * de `document_storage.ts` sur le nom de destination d'un justificatif, pour
+ * une raison voisine : un caractère de contrôle glissé dans ce nom permettrait
+ * d'injecter un en-tête HTTP supplémentaire.
  */
 function slugify(value: string): string {
   return value
@@ -170,7 +169,8 @@ export class GenerateReportUseCase {
     private expenseRepo: ExpenseRepository = new ExpenseRepository(),
     private paymentRepo: BookingPaymentRepository = new BookingPaymentRepository(),
     private clientRepo: ClientRepository = new ClientRepository(),
-    private financeOverview: GetFinanceOverviewUseCase = new GetFinanceOverviewUseCase()
+    private financeOverview: GetFinanceOverviewUseCase = new GetFinanceOverviewUseCase(),
+    private reportGenerationRepo: ReportGenerationRepository = new ReportGenerationRepository()
   ) {}
 
   async execute(owner_id: string, input: GenerateReportInput): Promise<GeneratedReportDto> {
@@ -210,45 +210,58 @@ export class GenerateReportUseCase {
     // jamais seule, et la perte de l'URL qui la répare.
     const html = await this.renderHtml(owner_id, input, period.window, context)
 
-    // L'étape courante est suivie pour que le journal dise *laquelle* des deux
-    // a cédé : le message rendu au client est le même, mais un rendu qui échoue
-    // (Chromium absent de l'image, police manquante) et un téléversement qui
-    // échoue (identifiants Cloudinary, réseau) ne se réparent pas au même
-    // endroit, et rien dans la trace ne les distinguait.
-    let stage: 'rendu PDF' | 'téléversement Cloudinary' = 'rendu PDF'
+    let pdf: Buffer
+    let filename: string
 
     try {
-      const pdf = await renderPdf(html, { footerText: reportFooterText(context) })
-      const filename = buildFilename(input.type, period.label, now)
-
-      stage = 'téléversement Cloudinary'
-      const stored = await uploadReport(pdf, filename)
-
-      return {
-        url: stored.url,
-        expires_at: stored.expires_at,
-        filename,
-        period: { from: period.from_date, to: period.to_date },
-      }
+      pdf = await renderPdf(html, { footerText: reportFooterText(context) })
+      filename = buildFilename(input.type, period.label, now)
     } catch (error) {
-      // Seuls le rendu PDF et le téléversement Cloudinary passent par ici :
-      // deux services externes dont l'échec est transitoire, et dont l'erreur
-      // brute ne doit jamais remonter telle quelle jusqu'au client.
+      // Seul le rendu PDF passe par ici — Chromium absent de l'image, police
+      // manquante — dont l'erreur brute ne doit jamais remonter telle quelle
+      // jusqu'au client.
       if (error instanceof DomainError) throw error
 
       // Sans cette trace, la cause réelle est perdue : le client reçoit
       // « Réessayez » et l'exploitant ne voit que cette `DomainError`, jamais
       // l'erreur d'origine qui dit quoi réparer.
-      logger.error(
-        { err: error, stage, report_type: input.type },
-        `Génération de rapport interrompue pendant le ${stage}`
-      )
+      logger.error({ err: error, report_type: input.type }, 'Rendu du rapport PDF interrompu')
 
       throw new DomainError(
         'report_generation_failed',
         'La génération du rapport a échoué. Réessayez.',
         500
       )
+    }
+
+    // Un rapport livré compte plus que sa trace : son écriture ne doit jamais
+    // faire échouer une réponse dont le PDF est déjà prêt. Isolée dans son
+    // propre `try/catch`, sans passer par la conversion en `DomainError`
+    // ci-dessus, qui ferait sortir 500 un rapport pourtant généré avec succès.
+    try {
+      await this.reportGenerationRepo.record({
+        owner_id,
+        type: input.type,
+        residence_id: input.residence_id ?? null,
+        // Bornes de la fenêtre de calcul — celles qui ont effectivement servi
+        // à composer le rapport, pas les dates affichables `from_date`/
+        // `to_date` du DTO, dont la borne de fin est inclusive quand celle-ci
+        // (`window.to`) est exclusive.
+        period_from: period.window.from,
+        period_to: period.window.to,
+        file_size: pdf.length,
+      })
+    } catch (error) {
+      logger.error(
+        { err: error, report_type: input.type },
+        'Trace de génération de rapport non écrite'
+      )
+    }
+
+    return {
+      pdf,
+      filename,
+      period: { from: period.from_date, to: period.to_date },
     }
   }
 

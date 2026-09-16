@@ -41,6 +41,7 @@ export const COLLECTIONS = {
   typeOfPieces: 'type_of_pieces',
   clients: 'clients',
   feedbacks: 'feedbacks',
+  reportGenerations: 'report_generations',
 } as const
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS]
