@@ -11,8 +11,6 @@ import {
 } from '#services/notifications/messaging/types'
 import env from '#start/env'
 
-import logger from '@adonisjs/core/services/logger'
-
 /**
  * Construit le provider messaging selon la variable d'environnement
  * MESSAGING_PROVIDER. Lève si la valeur est inconnue ou si la config
@@ -73,11 +71,20 @@ export function buildMessagingProvider(): MessagingProvider {
   }
 }
 
+/**
+ * Ne journalise pas : cette fonction s'exécute pendant le `boot()` du provider,
+ * avant que le conteneur n'ait fourni le service de log. Un `logger.error` y
+ * levait un `TypeError` sur un `logger` encore `undefined`, et cette panne
+ * remplaçait le message qui nomme la variable manquante — on apprenait qu'il y
+ * avait un problème, jamais lequel. L'appelant journalise, lui a un logger.
+ */
 function requireEnv(key: string): string {
   const value = env.get(key as any) as string | undefined
   if (!value) {
-    logger.error({ key }, "Variable d'environnement manquante pour le provider messaging")
-    throw new Error(`Variable d'environnement requise manquante : ${key}`)
+    throw new Error(
+      `Variable d'environnement requise manquante : ${key}. ` +
+        `Renseignez-la, ou passez MESSAGING_PROVIDER à « console » pour démarrer sans envoi réel.`
+    )
   }
   return value
 }

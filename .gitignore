@@ -9,6 +9,15 @@ tmp/*
 .env.local
 .env.production.local
 .env.development.local
+# Toute variante locale de .env : seuls deux fichiers d'exemple sont versionnés.
+#
+# `.env.render.example` n'en fait volontairement pas partie : un fichier nommé
+# « exemple » invite à le remplir, et il l'a été — avec de vrais secrets JWT,
+# Cloudinary et CRON. Le tenir hors de git supprime le piège plutôt que de
+# compter sur la vigilance.
+.env.*
+!.env.example
+!.env.production.example
 
 # Comptes de service Firebase — contiennent une clé privée donnant un accès
 # administrateur complet au projet (lecture/écriture de toutes les données,
