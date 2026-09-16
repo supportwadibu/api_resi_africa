@@ -3,7 +3,7 @@ import { BaseCommand } from '@adonisjs/core/ace'
 import type { CommandOptions } from '@adonisjs/core/types/ace'
 
 /**
- * Crée les trois rôles applicatifs dans Firestore.
+ * Crée les rôles applicatifs dans Firestore.
  *
  * Sans eux, toute inscription échoue : `register_init` et `google_login`
  * cherchent le rôle par son nom et lèvent `role_not_found` s'il est absent.
@@ -14,7 +14,7 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  */
 export default class SeedRoles extends BaseCommand {
   static commandName = 'seed:roles'
-  static description = 'Crée les rôles applicatifs (admin, proprio, client) dans Firestore'
+  static description = 'Crée les rôles applicatifs (admin, proprio, client, gerant) dans Firestore'
 
   static options: CommandOptions = {
     startApp: true,
@@ -40,6 +40,11 @@ export default class SeedRoles extends BaseCommand {
         name: 'client' as const,
         description: 'Client réservant un bien',
         permissions: ['properties:read', 'bookings:create', 'bookings:read'],
+      },
+      {
+        name: 'gerant' as const,
+        description: 'Gérant : exploite les logements affectés par un propriétaire.',
+        permissions: ['properties:read', 'bookings:manage'],
       },
     ]
 

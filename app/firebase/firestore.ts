@@ -26,6 +26,7 @@ import type {
 export const COLLECTIONS = {
   users: 'users',
   roles: 'roles',
+  managerAssignments: 'manager_assignments',
   authSessions: 'auth_sessions',
   properties: 'properties',
   residences: 'residences',

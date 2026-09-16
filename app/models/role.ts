@@ -1,6 +1,6 @@
 import { COLLECTIONS, collection, toDoc, toPayload, type WithId } from '#firebase/firestore'
 
-export const ROLE_NAMES = ['admin', 'proprio', 'client'] as const
+export const ROLE_NAMES = ['admin', 'proprio', 'client', 'gerant'] as const
 export type RoleName = (typeof ROLE_NAMES)[number]
 
 export interface RoleDocument {
