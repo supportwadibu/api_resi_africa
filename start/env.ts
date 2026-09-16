@@ -55,8 +55,6 @@ export default await Env.create(new URL('../', import.meta.url), {
   CLOUDINARY_DOCUMENTS_FOLDER: Env.schema.string.optional(),
   /** Dossier racine des photos d'annonces. Par défaut `resi/properties`. */
   CLOUDINARY_PROPERTIES_FOLDER: Env.schema.string.optional(),
-  /** Dossier racine des rapports PDF édités. Par défaut `resi/reports`. */
-  CLOUDINARY_REPORTS_FOLDER: Env.schema.string.optional(),
 
   /**
    * Chemin du binaire Chromium utilisé pour rendre les rapports PDF.

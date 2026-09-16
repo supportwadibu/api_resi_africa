@@ -33,8 +33,7 @@ export interface ReportContext {
 }
 
 export interface GeneratedReportDto {
-  url: string
-  expires_at: Date
+  pdf: Buffer
   filename: string
   period: {
     from: string

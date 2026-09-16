@@ -58,16 +58,30 @@ chemins de lecture parallèles divergent tôt ou tard, et un PDF qui contredit
 l'écran est un défaut qu'on découvre chez le client, sur un document déjà
 transmis à un tiers.
 
-### L'URL du fichier est signée et périssable
+### Le PDF est renvoyé directement, rien n'est stocké
 
-Le PDF part sur Cloudinary en `type: 'authenticated'`, comme les pièces
-d'identité dans `app/services/document_storage.ts`, et l'API renvoie une URL
-signée valable quinze minutes.
+Ce choix a changé depuis la première version de cette conception. Le PDF
+partait sur Cloudinary en `type: 'authenticated'`, comme les pièces d'identité
+dans `app/services/document_storage.ts`, et l'API renvoyait une URL signée
+valable quinze minutes.
 
-Un rapport porte le chiffre d'affaires d'un propriétaire et les coordonnées de
-ses clients. Il ne doit pas être lisible par qui devine un chemin. C'est le
-`public_id` qui pourrait être persisté, jamais l'URL : une URL signée expire, et
-la stocker produirait des liens morts.
+En production, ce mode renvoie **401** : la « token-based authentication »,
+nécessaire pour signer une URL d'un document `authenticated`, n'existe pas sur
+l'offre gratuite Cloudinary. Aucun rapport ne pouvait donc être téléchargé.
+
+Plutôt que de changer d'offre ou de mode Cloudinary, l'API renvoie désormais le
+PDF **directement** dans le corps de la réponse `POST /proprio/reports`. Le
+bénéfice dépasse le contournement du 401 : un rapport porte le chiffre
+d'affaires d'un propriétaire et les coordonnées de ses clients, et ne plus le
+faire transiter par un tiers réduit d'autant la surface d'exposition de ces
+données. `app/services/report_storage.ts` a été supprimé.
+
+Une trace de chaque édition est néanmoins conservée, dans la collection
+Firestore `report_generations` (`type`, `residence_id`, la période, la taille
+du fichier produit) — pour l'observation du volume de rapports édités, jamais
+pour re-livrer le document : le PDF lui-même n'est stocké nulle part. Son
+écriture échoue sans jamais faire échouer la réponse : un rapport déjà rendu
+compte plus que sa trace.
 
 ## Contrat HTTP
 
@@ -115,20 +129,28 @@ mobile garde `'all'` dans son menu déroulant et omet la clé à la sérialisati
 
 ### Réponse
 
-```jsonc
-{
-  "data": {
-    "url": "https://res.cloudinary.com/.../rapport-financier-mars-2026.pdf?__cld_token__=...",
-    "expires_at": "2026-09-15T14:30:00.000Z",
-    "filename": "rapport-financier-mars-2026.pdf",
-    "period": { "from": "2026-03-01", "to": "2026-03-31" }
-  }
-}
+Le PDF lui-même, en corps de réponse binaire — plus de JSON sur le succès :
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="rapport-financier-mars-2026.pdf"
+Content-Length: 48213
+
+%PDF-1.4 ...
 ```
 
-`expires_at` dit au mobile que le lien est périssable : il ouvre ou partage
-immédiatement, et ne met jamais cette URL en cache SQLite. `period` porte les
-bornes résolues, pour afficher « Mars 2026 » sans refaire le calcul.
+`filename` reprend le nom construit par `buildFilename` : entièrement dérivé
+de valeurs maîtrisées côté serveur (type, période résolue, horodatage), jamais
+d'une saisie utilisateur — un en-tête HTTP construit depuis une chaîne libre
+admettrait une injection de CRLF.
+
+Le mobile distingue succès et erreur par le `Content-Type` de la réponse :
+`application/pdf` pour le document, `application/json` pour une `DomainError`
+(voir la table d'erreurs ci-dessous, inchangée). `period` n'est plus renvoyé
+dans la réponse HTTP — les bornes résolues sont déjà imprimées dans le
+document — mais restent accessibles côté serveur pour la trace de génération
+(voir plus bas).
 
 ### Erreurs
 
@@ -138,7 +160,7 @@ bornes résolues, pour afficher « Mars 2026 » sans refaire le calcul.
 | `residence_not_found` | 404 | Résidence inconnue ou appartenant à un autre propriétaire. Code déjà levé par `GetFinanceOverviewUseCase` |
 | `invalid_report_period` | 422 | `custom` sans `from`/`to`, ou `from` postérieur à `to` |
 | `report_period_too_large` | 422 | Plage au-delà de 24 mois |
-| `report_generation_failed` | 500 | Échec du rendu ou du téléversement |
+| `report_generation_failed` | 500 | Échec du rendu PDF |
 
 Une période sans aucune activité n'est **pas** une erreur : elle produit un PDF
 valide qui constate l'absence de mouvement. Un 404 ferait croire à une panne
@@ -153,15 +175,16 @@ timeout.
 ```text
 app/features/reports/
   dto/report.dto.ts
-  report_type.ts                  types, résolution des périodes
+  report_type.ts                       types, résolution des périodes
   use_cases/generate_report.use_case.ts
+  repositories/report_generation_repository.ts   trace d'édition
   renderers/
-    layout.ts                     gabarit commun, tokens CSS
+    layout.ts                          gabarit commun, tokens CSS
     financial_report.ts
     performance_report.ts
     reservations_report.ts
-app/services/pdf_renderer.ts      HTML -> PDF, isole Puppeteer
-app/services/report_storage.ts    PDF -> Cloudinary -> URL signée
+app/models/report_generation.ts        document Firestore de la trace
+app/services/pdf_renderer.ts           HTML -> PDF, isole Puppeteer
 ```
 
 Flux d'une requête :
@@ -172,13 +195,14 @@ controller            valide (type, période, residence_id)
        -> use cases métier existants      données
        -> renderer du type                données -> HTML
        -> pdf_renderer                    HTML -> Buffer
-       -> report_storage                  Buffer -> public_id -> URL signée
-  -> { data }
+       -> report_generation_repository    trace non bloquante (Firestore)
+  -> Buffer PDF, en-têtes Content-Type / Content-Disposition / Content-Length
 ```
 
 `pdf_renderer` isole Puppeteer exactement comme `document_storage` isole
-Cloudinary : si le moteur devient un jour un problème d'hébergement, il se
-remplace sans toucher aux renderers.
+Cloudinary pour les pièces d'identité et les photos d'annonces : si le moteur
+devient un jour un problème d'hébergement, il se remplace sans toucher aux
+renderers.
 
 ## Contenu des rapports
 
@@ -300,7 +324,9 @@ section.
 - validation de `custom` : `from` postérieur à `to`, plage au-delà de 24 mois ;
 - calcul du RevPAR, dont le cas `jours disponibles = 0`, qui ne doit pas
   produire `Infinity` ;
-- agrégation des paiements et détection du reste à percevoir.
+- agrégation des paiements et détection du reste à percevoir ;
+- construction du document de trace (`report_generations`) à partir d'une
+  génération réussie.
 
 Les renderers sont testés sur le **HTML produit** — présence des totaux, nombre
 de lignes attendu — jamais sur le PDF binaire : comparer des octets de PDF
@@ -311,20 +337,26 @@ donne des tests qui cassent à chaque version de Chromium.
 Le contrat engage les deux dépôts. Côté `mobile/` :
 
 - `api_endpoints.dart` : `/rapports` devient `/proprio/reports`.
+- La requête Dio doit demander une réponse binaire (`ResponseType.bytes`), pas
+  JSON : le corps de la réponse est directement le PDF, plus une enveloppe
+  `{ data }`.
 - `RapportModel`, aujourd'hui un squelette à `TODO`, devient
-  `ReportExportModel` : `url`, `expiresAt`, `filename`, `period`.
+  `ReportExportModel` : les octets du PDF et `filename`, tiré du
+  `Content-Disposition` de la réponse. Plus d'`url` ni d'`expiresAt` — rien
+  n'est stocké côté serveur, il n'y a rien à référencer par lien.
 - `ReportFormCubit.generate()` perd son `Future.delayed` et appelle le
-  repository.
-- `ReportFormState` gagne un état de résultat porteur de l'URL et un état
-  d'erreur porteur d'un message affichable.
+  repository, qui écrit le PDF reçu dans un fichier temporaire pour l'ouvrir
+  ou le partager (`share_plus` / `open_filex`, déjà utilisés ailleurs dans le
+  mobile pour les justificatifs).
+- `ReportFormState` gagne un état de résultat porteur du fichier local et un
+  état d'erreur porteur d'un message affichable — distingué du succès par le
+  `Content-Type` de la réponse (`application/pdf` contre `application/json`).
 - `PropertySelector` devient `ResidenceSelector`, et `selectedPropertyId`
   devient `selectedResidenceId`. Le widget liste déjà des résidences
   (« Toutes mes résidences ») : son nom actuel ment sur la donnée, et
   quelqu'un finirait par y brancher un bien.
 - L'enum `ReportType` perd `maintenance` et `fiscal`, avec leurs entrées dans
   `label`, `description` et `iconPath`.
-- L'URL reçue n'est jamais mise en cache SQLite : elle expire en quinze
-  minutes.
 
 ## Hors périmètre
 
