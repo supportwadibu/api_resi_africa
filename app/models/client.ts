@@ -93,6 +93,50 @@ export interface ClientFilters {
   status?: ClientStatus
 }
 
+/** Fiche telle que `Client.create` la reçoit. */
+export interface CreateClientDocumentInput {
+  owner_id: string
+  full_name: string
+  phone: string
+  whatsapp?: string | null
+  id_document_type?: ClientIdDocumentType | null
+  id_document_number?: string | null
+  id_document_front_public_id?: string | null
+  id_document_back_public_id?: string | null
+  created_by?: string | null
+}
+
+/**
+ * Compose le document d'une fiche client.
+ *
+ * Extraite de `Client.create` pour être éprouvée sans Firestore : la
+ * composition énumère ses champs un à un, si bien qu'un `created_by` calculé en
+ * amont s'y perdrait sans la moindre erreur de compilation. C'est pourtant lui
+ * qui rend une fiche saisie au comptoir visible à son créateur avant sa
+ * première réservation — perdu, la fiche disparaîtrait de son carnet.
+ */
+export function buildClientPayload(input: CreateClientDocumentInput, now: Date): ClientDocument {
+  const front = input.id_document_front_public_id ?? null
+  const back = input.id_document_back_public_id ?? null
+
+  return {
+    owner_id: input.owner_id,
+    full_name: input.full_name,
+    phone: normalizePhone(input.phone),
+    whatsapp: input.whatsapp ? normalizePhone(input.whatsapp) : null,
+    id_document_type: input.id_document_type ?? null,
+    id_document_number: input.id_document_number ?? null,
+    id_document_front_public_id: front,
+    id_document_back_public_id: back,
+    documents_status: resolveDocumentsStatus(front, back),
+    stats: { total_stays: 0, total_paid: 0, last_stay_at: null },
+    status: 'active',
+    created_by: input.created_by ?? null,
+    created_at: now,
+    updated_at: now,
+  }
+}
+
 const Client = {
   async findById(id: string): Promise<ClientRecord | null> {
     if (!id) return null
@@ -116,37 +160,8 @@ const Client = {
     return toDoc<ClientDocument>(snapshot.docs[0])
   },
 
-  async create(input: {
-    owner_id: string
-    full_name: string
-    phone: string
-    whatsapp?: string | null
-    id_document_type?: ClientIdDocumentType | null
-    id_document_number?: string | null
-    id_document_front_public_id?: string | null
-    id_document_back_public_id?: string | null
-    created_by?: string | null
-  }): Promise<ClientRecord> {
-    const now = new Date()
-    const front = input.id_document_front_public_id ?? null
-    const back = input.id_document_back_public_id ?? null
-
-    const payload: ClientDocument = {
-      owner_id: input.owner_id,
-      full_name: input.full_name,
-      phone: normalizePhone(input.phone),
-      whatsapp: input.whatsapp ? normalizePhone(input.whatsapp) : null,
-      id_document_type: input.id_document_type ?? null,
-      id_document_number: input.id_document_number ?? null,
-      id_document_front_public_id: front,
-      id_document_back_public_id: back,
-      documents_status: resolveDocumentsStatus(front, back),
-      stats: { total_stays: 0, total_paid: 0, last_stay_at: null },
-      status: 'active',
-      created_by: input.created_by ?? null,
-      created_at: now,
-      updated_at: now,
-    }
+  async create(input: CreateClientDocumentInput): Promise<ClientRecord> {
+    const payload = buildClientPayload(input, new Date())
 
     const docRef = await clients().add(toPayload(payload) as unknown as ClientDocument)
     return { ...payload, _id: docRef.id }

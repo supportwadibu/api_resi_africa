@@ -139,6 +139,11 @@ export interface ListBookingsInput {
   status?: BookingStatus
   page?: number
   per_page?: number
+  /**
+   * Logements du périmètre de l'appelant. `null` ou absent = aucune
+   * restriction. Alimenté par le middleware `scope()`, jamais par le client.
+   */
+  scope_property_ids?: string[] | null
 }
 
 export interface ListBookingsOutput {

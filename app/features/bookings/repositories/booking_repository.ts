@@ -207,6 +207,11 @@ export class BookingRepository {
         owner_id: input.owner_id || undefined,
         property_id: input.property_id || undefined,
         status: input.status,
+        // Le périmètre doit descendre jusqu'à la requête : omis ici, la liste
+        // porterait sur toutes les réservations du propriétaire sans la
+        // moindre erreur de compilation, les filtres étant recopiés champ par
+        // champ.
+        scope_property_ids: input.scope_property_ids,
       },
       { limit: perPage, offset: (page - 1) * perPage }
     )

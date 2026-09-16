@@ -66,7 +66,15 @@ function expenses() {
   return collection<ExpenseDocument>(COLLECTIONS.expenses)
 }
 
-function withDefaults(input: Partial<ExpenseDocument>): ExpenseDocument {
+/**
+ * Compose le document d'une dépense.
+ *
+ * Exportée pour être éprouvée sans Firestore : la composition énumère ses
+ * champs un à un, si bien qu'un `created_by` calculé en amont s'y perdrait sans
+ * la moindre erreur de compilation. Le seul recours contre cet oubli silencieux
+ * est un test, et un test suppose une fonction atteignable.
+ */
+export function withDefaults(input: Partial<ExpenseDocument>): ExpenseDocument {
   const now = new Date()
 
   return {
