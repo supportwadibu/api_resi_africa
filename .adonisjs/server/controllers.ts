@@ -27,6 +27,7 @@ export const controllers = {
     Expense: () => import('#controllers/proprio/expense_controller'),
     Feedback: () => import('#controllers/proprio/feedback_controller'),
     Finance: () => import('#controllers/proprio/finance_controller'),
+    Manager: () => import('#controllers/proprio/manager_controller'),
     Profile: () => import('#controllers/proprio/profile_controller'),
     Property: () => import('#controllers/proprio/property_controller'),
     PropertyImage: () => import('#controllers/proprio/property_image_controller'),

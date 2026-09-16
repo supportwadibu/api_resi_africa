@@ -18,6 +18,7 @@ const ProprioFinanceController = () => import('#controllers/proprio/finance_cont
 const ProprioReportController = () => import('#controllers/proprio/report_controller')
 const ProprioSubscriptionController = () => import('#controllers/proprio/subscription_controller')
 const ProprioFeedbackController = () => import('#controllers/proprio/feedback_controller')
+const ProprioManagerController = () => import('#controllers/proprio/manager_controller')
 const ClientPropertyController = () => import('#controllers/client/property_controller')
 const ClientBookingController = () => import('#controllers/client/booking_controller')
 const ClientBookingPaymentController = () =>
@@ -173,6 +174,22 @@ router
           })
           .prefix('feedbacks')
           .as('feedbacks')
+
+        router
+          .group(() => {
+            router.get('/', [ProprioManagerController, 'index'])
+            router.post('/', [ProprioManagerController, 'store'])
+            router.get(':id', [ProprioManagerController, 'show'])
+            router.patch(':id', [ProprioManagerController, 'update'])
+            // `PUT` : le propriétaire envoie le périmètre complet, si bien
+            // qu'un ajout et un retrait faits ensemble deviennent une seule
+            // écriture et que l'état obtenu ne dépend pas de l'ordre des
+            // requêtes.
+            router.put(':id/properties', [ProprioManagerController, 'replaceProperties'])
+            router.patch(':id/status', [ProprioManagerController, 'setStatus'])
+          })
+          .prefix('managers')
+          .as('managers')
 
         router.get('subscription', [ProprioSubscriptionController, 'show']).as('subscription')
       })
