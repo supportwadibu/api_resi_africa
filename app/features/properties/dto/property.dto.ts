@@ -172,6 +172,11 @@ export interface ListPropertiesFilters {
   page?: number
   per_page?: number
   sort?: string
+  /**
+   * Logements du périmètre de l'appelant. `null` ou absent = aucune
+   * restriction. Alimenté par le middleware `scope()`, jamais par le client.
+   */
+  scope_property_ids?: string[] | null
 }
 
 export interface ListPropertiesOutput {

@@ -116,6 +116,10 @@ export class PropertyRepository {
         max_surface: filters.max_surface,
         min_bedrooms: filters.min_bedrooms,
         available_from: filters.available_from,
+        // Le périmètre doit descendre jusqu'à la requête : omis ici, la liste
+        // porterait sur tout le parc du propriétaire sans la moindre erreur de
+        // compilation, les filtres étant recopiés champ par champ.
+        scope_property_ids: filters.scope_property_ids,
       },
       { limit: perPage, offset: (page - 1) * perPage }
     )

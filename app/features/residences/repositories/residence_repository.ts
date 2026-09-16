@@ -68,6 +68,19 @@ export class ResidenceRepository {
     return Residence.deleteOne(id, owner_id)
   }
 
+  /**
+   * Toutes les résidences du propriétaire, bornées.
+   *
+   * Sert le regroupement rendu à un gérant, qui se construit sur le périmètre
+   * entier : une page partielle de résidences en masquerait certaines dont le
+   * gérant sert pourtant des logements. Un propriétaire compte ses résidences
+   * en dizaines.
+   */
+  async listAll(owner_id: string): Promise<ResidenceDto[]> {
+    const { data } = await Residence.paginate({ owner_id }, { limit: 1000, offset: 0 })
+    return data.map((d) => ResidenceRepository.toDto(d))
+  }
+
   async paginate(
     owner_id: string,
     input: ListResidencesInput

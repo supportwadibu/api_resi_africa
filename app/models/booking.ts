@@ -567,6 +567,47 @@ const Booking = {
   },
 
   /**
+   * Clients ayant séjourné dans un logement du périmètre.
+   *
+   * Sert à cloisonner le carnet : les clients sont rattachés à un `owner_id` et
+   * non à un logement, si bien que seule la réservation dit quel gérant a
+   * affaire à quel client.
+   *
+   * Aucun filtre de statut : une réservation annulée a tout de même mis le
+   * gérant en relation avec la personne, et écarter sa fiche lui retirerait un
+   * contact qu'il connaît. C'est une lecture de visibilité, pas un calcul
+   * financier — contrairement à `findForRevenue`, qui écarte les annulations.
+   */
+  async findClientIdsInScope(
+    ownerId: string,
+    scopePropertyIds?: string[] | null
+  ): Promise<Set<string>> {
+    // Sans restriction, le carnet entier est visible : la lecture serait
+    // intégralement inutile.
+    if (!Array.isArray(scopePropertyIds)) return new Set()
+    if (scopePropertyIds.length === 0) return new Set()
+
+    let query = bookings().where(
+      'owner_id',
+      '==',
+      ownerId
+    ) as FirebaseFirestore.Query<BookingDocument>
+
+    // Même bascule qu'ailleurs : délégué à Firestore sous la limite de `in`,
+    // repris en mémoire au-delà.
+    if (scopePropertyIds.length <= FIRESTORE_IN_LIMIT) {
+      query = query.where('property_id', 'in', scopePropertyIds)
+    }
+
+    const snapshot = await query.get()
+    const scope: ActorScope = { ownerId, actorId: ownerId, propertyIds: scopePropertyIds }
+
+    return new Set(
+      filterByScope(toDocs<BookingDocument>(snapshot.docs), scope).map((doc) => doc.client_id)
+    )
+  },
+
+  /**
    * Toutes les réservations d'un client du carnet, la plus récente d'abord.
    *
    * Sert à recalculer les statistiques de la fiche et à afficher son
@@ -575,8 +616,20 @@ const Booking = {
    *
    * Le filtre porte aussi sur `owner_id` : un identifiant de client deviné ne
    * doit pas révéler les séjours enregistrés dans le carnet d'un autre.
+   *
+   * `scopePropertyIds` restreint la lecture au périmètre de l'appelant. Le
+   * filtrage est fait **en mémoire** et non par la requête : celle-ci porte
+   * déjà `owner_id`, `client_id` et un tri, et y ajouter un `in` sur
+   * `property_id` exigerait un index composite de plus pour un gain nul — la
+   * liste est bornée aux séjours d'un seul client. Sans ce filtrage, un gérant
+   * lisant une fiche verrait les séjours faits dans les logements qui ne lui
+   * sont pas confiés.
    */
-  async findByClient(ownerId: string, clientId: string): Promise<BookingRecord[]> {
+  async findByClient(
+    ownerId: string,
+    clientId: string,
+    scopePropertyIds?: string[] | null
+  ): Promise<BookingRecord[]> {
     if (!clientId) return []
 
     const snapshot = await bookings()
@@ -585,7 +638,13 @@ const Booking = {
       .orderBy('created_at', 'desc')
       .get()
 
-    return toDocs<BookingDocument>(snapshot.docs)
+    const docs = toDocs<BookingDocument>(snapshot.docs)
+
+    return filterByScope(docs, {
+      ownerId,
+      actorId: ownerId,
+      propertyIds: scopePropertyIds ?? null,
+    })
   },
 
   /**
