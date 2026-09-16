@@ -55,6 +55,13 @@ export interface ClientDocument {
   stats: ClientStats
   status: ClientStatus
 
+  /**
+   * Acteur ayant réellement saisi l'enregistrement — un gérant, ou `null` pour
+   * le propriétaire. Optionnel : absent sur les documents antérieurs au rôle
+   * gérant. Donnée d'audit, n'entrant dans aucun calcul.
+   */
+  created_by?: string | null
+
   created_at: Date
   updated_at: Date
 }
@@ -118,6 +125,7 @@ const Client = {
     id_document_number?: string | null
     id_document_front_public_id?: string | null
     id_document_back_public_id?: string | null
+    created_by?: string | null
   }): Promise<ClientRecord> {
     const now = new Date()
     const front = input.id_document_front_public_id ?? null
@@ -135,6 +143,7 @@ const Client = {
       documents_status: resolveDocumentsStatus(front, back),
       stats: { total_stays: 0, total_paid: 0, last_stay_at: null },
       status: 'active',
+      created_by: input.created_by ?? null,
       created_at: now,
       updated_at: now,
     }

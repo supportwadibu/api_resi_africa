@@ -101,6 +101,13 @@ export interface BookingDocument {
   completed_at: Date | null
   cancellation_reason: string | null
 
+  /**
+   * Acteur ayant réellement saisi l'enregistrement — un gérant, ou `null` pour
+   * le propriétaire. Optionnel : absent sur les documents antérieurs au rôle
+   * gérant. Donnée d'audit, n'entrant dans aucun calcul.
+   */
+  created_by?: string | null
+
   created_at: Date
   updated_at: Date
 }
@@ -169,6 +176,7 @@ const Booking = {
     promo_code?: string | null
     promo_code_id?: string | null
     message?: string | null
+    created_by?: string | null
   }): Promise<BookingRecord> {
     const firestore = db()
     const propertyRef = firestore.collection(COLLECTIONS.properties).doc(input.property_id)
@@ -199,6 +207,7 @@ const Booking = {
       cancelled_at: null,
       completed_at: null,
       cancellation_reason: null,
+      created_by: input.created_by ?? null,
       created_at: now,
       updated_at: now,
     }
@@ -563,6 +572,7 @@ const Booking = {
     deposit_amount: number
     message: string | null
     client_request_id: string | null
+    created_by?: string | null
     detectConflict: (active: BookingRecord[]) => boolean
   }): Promise<BookingRecord> {
     const now = new Date()
@@ -599,6 +609,7 @@ const Booking = {
       cancelled_at: null,
       completed_at: null,
       cancellation_reason: null,
+      created_by: input.created_by ?? null,
       created_at: now,
       updated_at: now,
     }

@@ -48,6 +48,13 @@ export interface ExpenseDocument {
   spent_at: Date
   note: string | null
 
+  /**
+   * Acteur ayant réellement saisi l'enregistrement — un gérant, ou `null` pour
+   * le propriétaire. Optionnel : absent sur les documents antérieurs au rôle
+   * gérant. Donnée d'audit, n'entrant dans aucun calcul.
+   */
+  created_by?: string | null
+
   created_at: Date
   updated_at: Date
 }
@@ -69,6 +76,7 @@ function withDefaults(input: Partial<ExpenseDocument>): ExpenseDocument {
     amount: input.amount ?? 0,
     spent_at: input.spent_at ?? now,
     note: input.note?.trim() || null,
+    created_by: input.created_by ?? null,
     created_at: input.created_at ?? now,
     updated_at: now,
   }
