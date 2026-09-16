@@ -243,10 +243,13 @@ const Expense = {
       scope_property_ids: scopePropertyIds,
     }
 
-    // Le périmètre est confié à `buildQuery`, qui le délègue à Firestore quand
-    // il tient dans l'opérateur `in` ; les bornes de date restent en mémoire,
-    // pour ne pas exiger d'index composite. `matchesInMemory` réapplique les
-    // deux, et reste la seule barrière sur liste vide ou de plus de 30.
+    // Seul le périmètre est ajouté à la requête : `buildQuery` le délègue à
+    // Firestore tant qu'il tient dans l'opérateur `in`. Les bornes de date en
+    // restent volontairement absentes — le choix d'origine, expliqué sur
+    // `buildQuery` : combinées aux égalités, elles exigeraient un index
+    // composite par combinaison de filtres. Elles étaient et restent évaluées
+    // par `matchesInMemory`, qui réapplique aussi le périmètre et demeure la
+    // seule barrière sur liste vide ou de plus de 30.
     const snapshot = await buildQuery({
       owner_id: ownerId,
       scope_property_ids: scopePropertyIds,

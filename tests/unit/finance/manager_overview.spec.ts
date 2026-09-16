@@ -38,16 +38,27 @@ test.group('buildManagerOverview', () => {
   })
 
   test('les encaissements des logements non affectés sont absents', ({ assert }) => {
+    // Chaque logement porte un montant distinct : le total ne peut alors être
+    // atteint que par la bonne combinaison de six, là où des montants égaux
+    // laisseraient passer n'importe quel sous-ensemble de la même taille.
+    const bookings = Array.from({ length: 10 }, (_, i) => ({
+      property_id: `unit-${i}`,
+      start_date: new Date('2026-10-01T12:00:00Z'),
+      end_date: new Date('2026-10-04T12:00:00Z'),
+      total_amount: (i + 1) * 1000,
+    }))
+
     const overview = buildManagerOverview({
       scope: SCOPE,
-      bookings: BOOKINGS,
+      bookings,
       expenses: EXPENSES,
       from: new Date('2026-10-01T00:00:00Z'),
       to: new Date('2026-10-31T23:59:59Z'),
     })
 
-    // Les 10 logements totaliseraient 300 000 : le relevé ne doit jamais y toucher.
-    assert.notEqual(overview.gross_revenue, 300000)
+    // `unit-0` à `unit-5` : 1000 + … + 6000. Les 10 totaliseraient 55 000, et
+    // aucun autre sous-ensemble de six ne vaut 21 000.
+    assert.equal(overview.gross_revenue, 21000)
   })
 
   test('les dépenses sont cloisonnées de la même façon', ({ assert }) => {
@@ -103,6 +114,37 @@ test.group('buildManagerOverview', () => {
     assert.equal(overview.gross_revenue, 300000)
   })
 
+  test('un séjour à cheval n’impute à la fenêtre que sa part de jours', ({ assert }) => {
+    // 28 octobre → 3 novembre, 60 000 F sur 6 jours : 4 jours en octobre, 2 en
+    // novembre. La fenêtre s'arrête au 31 octobre, donc 40 000 lui reviennent.
+    //
+    // C'est le cas qui sépare les deux implémentations : la somme naïve des
+    // `total_amount` rendrait les 60 000 entiers, et ferait diverger le chiffre
+    // clé du cumul du graphique sur la même page.
+    const overview = buildManagerOverview({
+      scope: SCOPE,
+      bookings: [
+        {
+          property_id: 'unit-0',
+          start_date: new Date('2026-10-28T12:00:00Z'),
+          end_date: new Date('2026-11-03T12:00:00Z'),
+          total_amount: 60000,
+        },
+      ],
+      expenses: [],
+      from: new Date('2026-10-01T00:00:00Z'),
+      to: new Date('2026-10-31T23:59:59Z'),
+    })
+
+    assert.equal(overview.gross_revenue, 40000)
+    assert.notEqual(overview.gross_revenue, 60000)
+
+    // Le graphique et le chiffre clé dérivent des mêmes tranches : deux totaux
+    // contradictoires sur la même page trahiraient un calcul séparé.
+    const charted = overview.revenue_points.reduce((sum, point) => sum + point.value, 0)
+    assert.equal(charted, overview.gross_revenue)
+  })
+
   test('le graphique mensuel ne porte que le périmètre', ({ assert }) => {
     const overview = buildManagerOverview({
       scope: SCOPE,
@@ -112,10 +154,9 @@ test.group('buildManagerOverview', () => {
       to: new Date('2026-10-31T23:59:59Z'),
     })
 
-    // Le graphique et le chiffre clé dérivent des mêmes réservations : deux
-    // totaux contradictoires sur la même page trahiraient un filtrage partiel.
     const charted = overview.revenue_points.reduce((sum, point) => sum + point.value, 0)
     assert.equal(charted, overview.gross_revenue)
+    assert.equal(charted, 180000)
   })
 
   test('une charge commune de résidence est retirée au gérant', ({ assert }) => {
@@ -179,16 +220,19 @@ test.group('computeOccupancyRate', () => {
   })
 
   test('le taux reste plafonné à 1', ({ assert }) => {
-    // Un séjour débordant largement la fenêtre donnerait sinon plus de 100 %.
+    // Deux séjours qui se chevauchent sur le même logement : 10 + 10 jours
+    // occupés pour une capacité de 10 jours-logement, soit un ratio brut de 2.
+    // Un chevauchement ne devrait pas exister, mais l'historique en porte, et
+    // sans plafond le relevé afficherait 200 % d'occupation.
+    const sejour = {
+      property_id: 'unit-0',
+      start_date: new Date('2026-09-01T12:00:00Z'),
+      end_date: new Date('2026-12-01T12:00:00Z'),
+      total_amount: 50000,
+    }
+
     const rate = computeOccupancyRate(
-      [
-        {
-          property_id: 'unit-0',
-          start_date: new Date('2026-09-01T12:00:00Z'),
-          end_date: new Date('2026-12-01T12:00:00Z'),
-          total_amount: 50000,
-        },
-      ],
+      [sejour, { ...sejour }],
       { ownerId: 'o', actorId: 'g', propertyIds: ['unit-0'] },
       new Date('2026-10-01T00:00:00Z'),
       new Date('2026-10-11T00:00:00Z')

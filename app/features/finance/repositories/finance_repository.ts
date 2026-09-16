@@ -202,11 +202,11 @@ export class FinanceRepository {
   /**
    * Total des charges de la fenêtre, selon le rattachement demandé.
    *
-   * Trois cas, dans cet ordre. Restreint à une résidence, il faut sommer ses
-   * charges communes **et** celles de ses unités — deux champs distincts, qui
-   * ne se rencontrent qu'ici. Restreint à un périmètre de logements, `summary`
-   * n'a pas pu être employé : ses filtres sont des égalités et ne savent pas
-   * porter une liste. Sinon, le total agrégé côté serveur suffit.
+   * Quatre cas, dans cet ordre. Les deux premiers portent sur une résidence,
+   * et se séparent selon qu'un périmètre restreint l'appelant — la règle n'y
+   * est pas la même, et les confondre rendait le code muet sur celle qui
+   * s'applique. Vient ensuite le périmètre sans résidence, puis le chemin du
+   * propriétaire, où le total agrégé côté serveur suffit.
    */
   private async sumExpenses(
     filters: FinanceFilters,
@@ -221,9 +221,32 @@ export class FinanceRepository {
         filters.scope_property_ids
       )
 
+      // Périmètre restreint : les charges **communes** de la résidence en sont
+      // exclues. Elles couvrent aussi les logements que l'appelant ne sert pas,
+      // et les lui imputer entièrement gonflerait ses charges d'un montant dont
+      // il ne répond pas.
+      //
+      // `findAllForOwner` les a déjà retirées — une charge commune n'a pas de
+      // `property_id` et ne peut appartenir à aucun périmètre. La branche
+      // `residence_id` de `belongsToResidence` serait donc morte ici : sommer
+      // directement les unités dit la règle au lieu de la laisser dépendre d'un
+      // filtre situé ailleurs.
+      if (filters.scope_property_ids) {
+        return docs.reduce(
+          (sum, expense) =>
+            expense.property_id && unitIds.has(expense.property_id) ? sum + expense.amount : sum,
+          0
+        )
+      }
+
+      // Le propriétaire, lui, porte les deux : ses charges communes **et**
+      // celles de ses unités — deux champs distincts, qui ne se rencontrent
+      // qu'ici.
       return sumResidenceExpenses(docs, filters.residence_id, unitIds)
     }
 
+    // Hors résidence mais sous périmètre, `summary` n'a pas pu être employé :
+    // ses filtres sont des égalités et ne savent pas porter une liste.
     if (typeof summaryTotal === 'number') return summaryTotal
 
     const docs = await Expense.findAllForOwner(filters.owner_id, range, filters.scope_property_ids)

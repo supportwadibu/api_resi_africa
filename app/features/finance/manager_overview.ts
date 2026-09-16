@@ -5,6 +5,10 @@ import { daysWithinWindow } from './revenue_split.ts'
 
 import type { RevenuePointDto } from './dto/finance.dto.ts'
 import type { ActorScope } from '#features/managers/scope'
+// Dépense réduite à ses rattachements et à son montant. Reprise de
+// `residence_scope` plutôt que redéclarée : deux `ScopedExpense` de formes
+// divergentes dans la même feature laisseraient croire à deux notions.
+import type { ScopedExpense } from './residence_scope.ts'
 
 const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24
 
@@ -16,11 +20,7 @@ export interface ScopedBooking {
   total_amount: number
 }
 
-/** Dépense réduite à ce que le relevé d'un gérant en lit. */
-export interface ScopedExpense {
-  property_id?: string | null
-  amount: number
-}
+export type { ScopedExpense }
 
 /**
  * Relevé rendu à un gérant.
