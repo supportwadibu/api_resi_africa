@@ -1,3 +1,4 @@
+import env from '#start/env'
 import puppeteer, { type Browser } from 'puppeteer'
 
 /**
@@ -26,12 +27,32 @@ const RENDER_TIMEOUT_MS = 30_000
 async function getBrowser(): Promise<Browser> {
   if (browser?.connected) return browser
 
-  browser = await puppeteer.launch({
-    headless: true,
-    // Requis en conteneur : sans `--no-sandbox`, Chromium refuse de démarrer
-    // sous un utilisateur non privilégié sans namespaces.
-    args: ['--no-sandbox', '--disable-dev-shm-usage'],
-  })
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      // Requis en conteneur : sans `--no-sandbox`, Chromium refuse de démarrer
+      // sous un utilisateur non privilégié sans namespaces.
+      args: ['--no-sandbox', '--disable-dev-shm-usage'],
+      // Chemin du binaire installé par le gestionnaire de paquets de l'image.
+      //
+      // Explicite plutôt qu'implicite : sans cette variable, Puppeteer cherche
+      // le Chromium qu'il télécharge lui-même dans `~/.cache/puppeteer`, **hors
+      // du projet**. Un hébergeur qui reconstruit l'environnement d'exécution
+      // après le build — Render sans Dockerfile, par exemple — perd ce cache, et
+      // chaque rapport échoue alors au lancement du navigateur.
+      executablePath: env.get('PUPPETEER_EXECUTABLE_PATH'),
+    })
+  } catch (error) {
+    // Le message par défaut (« Could not find Chrome ») ne dit pas où le binaire
+    // était attendu ni comment le fournir, et l'appelant l'enveloppe ensuite
+    // dans un « Réessayez » qui invite à répéter une panne définitive.
+    throw new Error(
+      'Chromium est introuvable : renseignez PUPPETEER_EXECUTABLE_PATH ' +
+        `(valeur actuelle : ${env.get('PUPPETEER_EXECUTABLE_PATH') ?? 'non définie'}) ` +
+        `ou installez le navigateur de Puppeteer. Cause : ${(error as Error).message}`,
+      { cause: error }
+    )
+  }
 
   return browser
 }
