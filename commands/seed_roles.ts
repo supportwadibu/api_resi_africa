@@ -44,7 +44,14 @@ export default class SeedRoles extends BaseCommand {
       {
         name: 'gerant' as const,
         description: 'Gérant : exploite les logements affectés par un propriétaire.',
-        permissions: ['properties:read', 'bookings:manage'],
+        permissions: [
+          'properties:read',
+          'properties:availability',
+          'bookings:manage',
+          'clients:manage',
+          'expenses:manage',
+          'finance:read',
+        ],
       },
     ]
 
