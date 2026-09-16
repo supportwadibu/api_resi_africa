@@ -1,3 +1,4 @@
+import { FIRESTORE_IN_LIMIT, isWithinScope } from '#features/managers/scope'
 import { COLLECTIONS, collection, toDoc, toDocs, toPayload, type WithId } from '#firebase/firestore'
 
 /**
@@ -90,6 +91,11 @@ export interface ExpenseFilters {
   /** Bornes inclusives sur `spent_at`. */
   from?: Date
   to?: Date
+  /**
+   * Logements du périmètre de l'appelant. `null` ou absent = aucune
+   * restriction. Alimenté par le middleware `scope()`.
+   */
+  scope_property_ids?: string[] | null
 }
 
 /**
@@ -108,6 +114,13 @@ function buildQuery(filters: ExpenseFilters): FirebaseFirestore.Query<ExpenseDoc
   if (filters.residence_id) query = query.where('residence_id', '==', filters.residence_id)
   if (filters.category) query = query.where('category', '==', filters.category)
 
+  // Filtrage délégué à Firestore tant que la liste tient dans la limite de
+  // l'opérateur `in` ; au-delà, `matchesInMemory` reprend après lecture.
+  const ids = filters.scope_property_ids
+  if (ids && ids.length > 0 && ids.length <= FIRESTORE_IN_LIMIT) {
+    query = query.where('property_id', 'in', ids)
+  }
+
   return query
 }
 
@@ -116,6 +129,17 @@ function matchesInMemory(doc: ExpenseRecord, filters: ExpenseFilters): boolean {
 
   if (filters.from && spentAt < filters.from.getTime()) return false
   if (filters.to && spentAt > filters.to.getTime()) return false
+
+  // Le périmètre est repris ici dans les deux cas où `buildQuery` n'a pas pu le
+  // confier à Firestore — périmètre vide, ou de plus de 30 logements, où `in`
+  // lève. Sans ce second passage, la requête ne porterait aucune restriction et
+  // un gérant verrait toutes les dépenses du propriétaire. Une charge commune
+  // de résidence, sans `property_id`, n'appartient à aucun périmètre restreint.
+  const ids = filters.scope_property_ids
+  if (Array.isArray(ids)) {
+    const scope = { ownerId: '', actorId: '', propertyIds: ids }
+    if (!isWithinScope(scope, doc.property_id ?? null)) return false
+  }
 
   return true
 }

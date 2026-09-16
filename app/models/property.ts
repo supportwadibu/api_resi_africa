@@ -1,3 +1,6 @@
+import { FieldPath } from 'firebase-admin/firestore'
+
+import { FIRESTORE_IN_LIMIT } from '#features/managers/scope'
 import {
   collection,
   COLLECTIONS,
@@ -299,6 +302,11 @@ export interface PropertyFilters {
   max_surface?: number
   min_bedrooms?: number
   available_from?: Date
+  /**
+   * Logements du périmètre de l'appelant. `null` ou absent = aucune
+   * restriction. Alimenté par le middleware `scope()`.
+   */
+  scope_property_ids?: string[] | null
 }
 
 /**
@@ -323,6 +331,15 @@ function buildQuery(filters: PropertyFilters): FirebaseFirestore.Query<PropertyD
   }
   if (typeof filters.featured === 'boolean') {
     query = query.where('visibility.featured', '==', filters.featured)
+  }
+
+  // Le périmètre désigne des documents, pas la valeur d'un champ : le filtre
+  // porte donc sur `FieldPath.documentId()`. Délégué à Firestore tant que la
+  // liste tient dans la limite de l'opérateur `in` ; au-delà, `matchesInMemory`
+  // reprend après lecture.
+  const ids = filters.scope_property_ids
+  if (ids && ids.length > 0 && ids.length <= FIRESTORE_IN_LIMIT) {
+    query = query.where(FieldPath.documentId(), 'in', ids)
   }
 
   return query
@@ -368,12 +385,33 @@ function matchesInMemory(doc: PropertyRecord, filters: PropertyFilters): boolean
     return false
   }
 
+  // Le périmètre est repris ici dans les deux cas où `buildQuery` n'a pas pu le
+  // confier à Firestore — périmètre vide, ou de plus de 30 logements, où `in`
+  // lève. L'appartenance se juge sur l'identifiant du document : c'est le bien
+  // lui-même qui est confié au gérant.
+  const scopeIds = filters.scope_property_ids
+  if (Array.isArray(scopeIds) && !scopeIds.includes(doc._id)) return false
+
   return true
+}
+
+/**
+ * Le périmètre reste-t-il à appliquer en mémoire ?
+ *
+ * Vrai pour les deux listes que `buildQuery` n'a pas pu confier à Firestore :
+ * la liste vide et celle de plus de 30 entrées, où l'opérateur `in` lève. Sans
+ * ce second passage, la requête ne porterait aucune restriction et un gérant
+ * verrait tout le catalogue du propriétaire.
+ */
+function needsInMemoryScope(filters: PropertyFilters): boolean {
+  const ids = filters.scope_property_ids
+  return Array.isArray(ids) && (ids.length === 0 || ids.length > FIRESTORE_IN_LIMIT)
 }
 
 /** Indique si des critères doivent être évalués en mémoire. */
 function needsInMemoryFilter(filters: PropertyFilters): boolean {
   return (
+    needsInMemoryScope(filters) ||
     Boolean(filters.city) ||
     typeof filters.min_price === 'number' ||
     typeof filters.max_price === 'number' ||

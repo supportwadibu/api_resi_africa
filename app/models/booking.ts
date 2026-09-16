@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
 
 import type { StayType } from '#features/bookings/stay_type'
+import type { ActorScope } from '#features/managers/scope'
+import { FIRESTORE_IN_LIMIT, filterByScope } from '#features/managers/scope'
 import {
   collection,
   COLLECTIONS,
@@ -123,6 +125,11 @@ export interface BookingFilters {
   owner_id?: string
   property_id?: string
   status?: BookingStatus
+  /**
+   * Logements du périmètre de l'appelant. `null` ou absent = aucune
+   * restriction. Alimenté par le middleware `scope()`.
+   */
+  scope_property_ids?: string[] | null
 }
 
 function buildQuery(filters: BookingFilters): FirebaseFirestore.Query<BookingDocument> {
@@ -133,7 +140,34 @@ function buildQuery(filters: BookingFilters): FirebaseFirestore.Query<BookingDoc
   if (filters.property_id) query = query.where('property_id', '==', filters.property_id)
   if (filters.status) query = query.where('status', '==', filters.status)
 
+  // Filtrage délégué à Firestore tant que la liste tient dans la limite de
+  // l'opérateur `in` ; au-delà, `filterByScope` reprend après lecture.
+  const ids = filters.scope_property_ids
+  if (ids && ids.length > 0 && ids.length <= FIRESTORE_IN_LIMIT) {
+    query = query.where('property_id', 'in', ids)
+  }
+
   return query
+}
+
+/**
+ * Le périmètre reste-t-il à appliquer après lecture ?
+ *
+ * Vrai dans les deux cas que `buildQuery` n'a pas pu confier à Firestore : le
+ * périmètre vide et celui de plus de 30 logements, où l'opérateur `in` lève.
+ * Sans ce second passage, une requête ainsi construite ne porterait aucune
+ * restriction et un gérant verrait tout le compte du propriétaire.
+ */
+function needsInMemoryScope(filters: BookingFilters): boolean {
+  const ids = filters.scope_property_ids
+  return Array.isArray(ids) && (ids.length === 0 || ids.length > FIRESTORE_IN_LIMIT)
+}
+
+/** Périmètre sous la forme attendue par `filterByScope`. */
+function scopeOf(filters: BookingFilters): ActorScope {
+  // `ownerId` et `actorId` ne servent pas au filtrage par périmètre ; seul
+  // `propertyIds` est lu ici.
+  return { ownerId: '', actorId: '', propertyIds: filters.scope_property_ids ?? null }
 }
 
 const Booking = {
@@ -360,6 +394,19 @@ const Booking = {
     options: { limit: number; offset: number }
   ): Promise<{ data: BookingRecord[]; total: number }> {
     const base = buildQuery(filters)
+
+    // Un périmètre que Firestore n'a pas su appliquer doit l'être ici, avant la
+    // découpe en pages : `total` compterait sinon des réservations que
+    // l'appelant n'a pas le droit de voir, et la page en montrerait.
+    if (needsInMemoryScope(filters)) {
+      const snapshot = await base.orderBy('created_at', 'desc').get()
+      const matching = filterByScope(toDocs<BookingDocument>(snapshot.docs), scopeOf(filters))
+
+      return {
+        data: matching.slice(options.offset, options.offset + options.limit),
+        total: matching.length,
+      }
+    }
 
     const [snapshot, total] = await Promise.all([
       base.orderBy('created_at', 'desc').offset(options.offset).limit(options.limit).get(),

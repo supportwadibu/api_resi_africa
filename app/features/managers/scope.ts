@@ -45,6 +45,21 @@ export function scopeFilterIds(scope: ActorScope): string[] | null {
   return canUseInFilter(scope) ? scope.propertyIds : null
 }
 
+/**
+ * Retient les documents du périmètre.
+ *
+ * Employé après lecture, dans les deux cas où Firestore ne sait pas filtrer :
+ * un périmètre de plus de 30 logements, et le périmètre vide. Même motif que
+ * `matchesInMemory` dans `app/models/property.ts`.
+ */
+export function filterByScope<T extends { property_id?: string | null }>(
+  docs: readonly T[],
+  scope: ActorScope
+): T[] {
+  if (scope.propertyIds === null) return [...docs]
+  return docs.filter((doc) => isWithinScope(scope, doc.property_id ?? null))
+}
+
 /** Variante levante, pour les accès à une ressource nommément désignée. */
 export function assertWithinScope(scope: ActorScope, propertyId: string | null): void {
   if (isWithinScope(scope, propertyId)) return
