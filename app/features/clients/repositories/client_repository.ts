@@ -1,3 +1,4 @@
+import { SCOPE_READ_LIMIT } from '#features/managers/scope'
 import Client, { type ClientRecord } from '#models/client'
 import { readCreatedBy } from '#utils/created_by'
 
@@ -7,14 +8,6 @@ import type {
   ListClientsInput,
   UpdateClientInput,
 } from '../dto/client.dto.ts'
-
-/**
- * Plafond des lectures qui doivent filtrer en mémoire avant de paginer.
- *
- * Déjà appliqué à la recherche par terme avant le rôle gérant ; repris tel quel
- * plutôt que dupliqué en constante concurrente.
- */
-const SCOPED_READ_LIMIT = 1000
 
 export class ClientRepository {
   static toDto(doc: ClientRecord): ClientDto {
@@ -87,7 +80,7 @@ export class ClientRepository {
 
     const all = await Client.paginate(
       { owner_id: input.owner_id, status: input.status },
-      { limit: SCOPED_READ_LIMIT, offset: 0 }
+      { limit: SCOPE_READ_LIMIT, offset: 0 }
     )
 
     if (!term) return all.data

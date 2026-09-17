@@ -7,9 +7,6 @@ import type { ActorScope } from '#features/managers/scope'
 import PropertyRepository from '../../properties/repositories/property_repository.ts'
 import ResidenceRepository from '../repositories/residence_repository.ts'
 
-/** Plafond de lecture, aligné sur les autres regroupements du dépôt. */
-const READ_LIMIT = 1000
-
 export type ScopedResidenceDto = ScopedResidenceView<ResidenceDto, PropertyDto>
 
 /**
@@ -32,20 +29,22 @@ export class ListScopedResidencesUseCase {
   ) {}
 
   async execute(scope: ActorScope): Promise<ScopedResidenceDto[]> {
+    // Lectures non paginées des deux côtés. `paginate` rabattrait la demande à
+    // 100 sans le signaler : au-delà de 100 logements, le regroupement perdrait
+    // des résidences et rendrait des `units_count` faux — un compteur qui ment
+    // sur le périmètre, ce que cette route existe justement pour éviter.
     const [residences, units] = await Promise.all([
-      this.residences.paginate(scope.ownerId, { page: 1, per_page: READ_LIMIT }),
-      this.properties.paginate({
+      this.residences.listAll(scope.ownerId),
+      this.properties.listAllInScope({
         owner_id: scope.ownerId,
         scope_property_ids: scope.propertyIds,
-        page: 1,
-        per_page: READ_LIMIT,
       }),
     ])
 
     // `units_count` est recomposé par `groupResidencesForScope` : le champ
     // dénormalisé compte les logements de toute la résidence et trahirait
     // l'existence de ceux qui ne sont pas confiés au gérant.
-    return groupResidencesForScope(residences.data, units.data)
+    return groupResidencesForScope(residences, units)
   }
 }
 

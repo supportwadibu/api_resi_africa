@@ -21,6 +21,19 @@ export interface ActorScope {
 /** Plafond de valeurs accepté par l'opérateur `in` de Firestore. */
 export const FIRESTORE_IN_LIMIT = 30
 
+/**
+ * Plafond des lectures non paginées qui doivent porter sur le périmètre entier.
+ *
+ * Une borne subsiste — une lecture sans limite reste un risque —, mais elle est
+ * **partagée par l'appelant et le dépôt** au lieu d'être redéclarée de chaque
+ * côté. Le défaut qu'elle corrige est précisément là : un appelant demandait
+ * 1000, `paginate` rabattait à 100 sans le dire, et le regroupement perdait des
+ * résidences au-delà de 100 logements. Un plafond n'est sûr que si personne ne
+ * le rabat en silence : les méthodes qui l'emploient ne passent donc jamais par
+ * `paginate`.
+ */
+export const SCOPE_READ_LIMIT = 1000
+
 /** Le logement est-il servi par ce périmètre ? */
 export function isWithinScope(scope: ActorScope, propertyId: string | null): boolean {
   if (scope.propertyIds === null) return true

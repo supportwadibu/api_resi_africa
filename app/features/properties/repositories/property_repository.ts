@@ -1,3 +1,4 @@
+import { SCOPE_READ_LIMIT } from '#features/managers/scope'
 import Property, { type PropertyRecord } from '#models/property'
 
 import type {
@@ -89,6 +90,33 @@ export class PropertyRepository {
 
   async stats(owner_id: string): Promise<PropertyStatsDto> {
     return Property.statsByOwner(owner_id)
+  }
+
+  /**
+   * Tous les logements répondant aux filtres, bornés, sans découpe en pages.
+   *
+   * Pendant de `ResidenceRepository.listAll`, et pour le même besoin : le
+   * regroupement rendu à un gérant recompte les unités de chaque résidence, si
+   * bien qu'une page partielle de logements donnerait des `units_count` faux
+   * plutôt qu'une simple liste écourtée.
+   *
+   * Ne délègue pas à `paginate` : celle-ci rabat `per_page` à 100 pour protéger
+   * une réponse paginée, et ce rabattement silencieux est exactement le défaut
+   * qu'on corrige ici. La borne appliquée est `SCOPE_READ_LIMIT`, la même que
+   * celle que l'appelant croit demander.
+   */
+  async listAllInScope(filters: ListPropertiesFilters): Promise<PropertyDto[]> {
+    const { data } = await Property.paginate(
+      {
+        owner_id: filters.owner_id || undefined,
+        residence_id: filters.residence_id || undefined,
+        status: filters.status,
+        scope_property_ids: filters.scope_property_ids,
+      },
+      { limit: SCOPE_READ_LIMIT, offset: 0 }
+    )
+
+    return data.map((d) => PropertyRepository.toDto(d))
   }
 
   async paginate(filters: ListPropertiesFilters): Promise<{
