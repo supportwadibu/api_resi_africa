@@ -1,8 +1,11 @@
+import { isClientInScope } from '#features/clients/client_scope'
+import { assertWithinScope } from '#features/managers/scope'
 import Booking from '#models/booking'
 import Client from '#models/client'
 import Property from '#models/property'
 import { DomainError } from '#utils/domain_error'
 
+import type { ActorScope } from '#features/managers/scope'
 import type { PropertyPricing } from '#models/property'
 
 import { findOverlappingPeriod, toPeriods } from '../availability.ts'
@@ -71,7 +74,22 @@ export class CreateOwnerBookingUseCase {
     // `createOwnerBooking`.
     if (input.client_request_id) {
       const existing = await Booking.findByRequestId(input.owner_id, input.client_request_id)
-      if (existing) return BookingRepository.toDto(existing)
+      if (existing) {
+        // Le périmètre est revérifié sur la réservation **retrouvée**, et non
+        // sur celle demandée : `buildScopedWrite` a validé le `property_id` de
+        // la requête, mais le rejeu rend un autre document. `findByRequestId`
+        // n'est cadré que sur `owner_id` — ce qui suffisait quand le
+        // propriétaire était seul acteur, et laissait un gérant réutilisant un
+        // `client_request_id` déjà employé recevoir le DTO financier d'un
+        // logement qui ne lui est pas confié.
+        //
+        // Le rejeu légitime — même gérant, même logement de son périmètre —
+        // passe cette garde inchangé : c'est la garantie sur laquelle repose la
+        // file de synchronisation hors ligne.
+        if (input.scope) assertWithinScope(input.scope, existing.property_id ?? null)
+
+        return BookingRepository.toDto(existing)
+      }
     }
 
     const property = await Property.findById(input.property_id)
@@ -81,6 +99,17 @@ export class CreateOwnerBookingUseCase {
 
     const client = await Client.findById(input.client_id)
     if (!client || client.owner_id !== input.owner_id) {
+      throw new DomainError('client_not_found', 'Client introuvable.', 404)
+    }
+
+    // Même famille que le dédoublonnage de `CreateClientUseCase` : le cadrage
+    // sur `owner_id` couvre tout le carnet du propriétaire, si bien qu'un
+    // identifiant de fiche deviné ferait entrer un client hors périmètre dans
+    // le `client_snapshot` — nom et téléphone — que la réservation rend ensuite.
+    // La règle de visibilité est celle du carnet, appliquée ici aussi.
+    if (input.scope && !(await isClientVisible(client, input.scope))) {
+      // 404 et non 403 : la fiche relève bien du propriétaire, et un 403
+      // distinguerait un identifiant existant d'un identifiant inventé.
       throw new DomainError('client_not_found', 'Client introuvable.', 404)
     }
 
@@ -144,6 +173,23 @@ export class CreateOwnerBookingUseCase {
 
     return BookingRepository.toDto(created)
   }
+}
+
+/**
+ * La fiche client relève-t-elle du carnet visible par l'appelant ?
+ *
+ * Sans périmètre — le propriétaire — le carnet est intact et aucune lecture des
+ * séjours n'a lieu : le chemin reste celui d'avant le rôle gérant.
+ */
+async function isClientVisible(
+  client: { _id: string; created_by?: string | null },
+  scope: ActorScope
+): Promise<boolean> {
+  if (scope.propertyIds === null) return true
+
+  const stayed = await Booking.findClientIdsInScope(scope.ownerId, scope.propertyIds)
+
+  return isClientInScope({ _id: client._id, created_by: client.created_by ?? null }, stayed, scope)
 }
 
 export default CreateOwnerBookingUseCase

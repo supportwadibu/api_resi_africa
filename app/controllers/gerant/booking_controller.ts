@@ -76,6 +76,11 @@ export default class GerantBookingController {
       is_check_in: payload.is_check_in ?? false,
       client_request_id: payload.client_request_id,
       created_by: write.created_by,
+      // `buildScopedWrite` ne valide que le `property_id` de la requête. Le
+      // rejeu d'idempotence, lui, rend une réservation retrouvée par
+      // `client_request_id` et cadrée sur le seul `owner_id` : le périmètre
+      // doit descendre jusqu'au use case pour qu'il la vérifie à son tour.
+      scope: ctx.scope,
     })
 
     return ctx.response.created({ data: booking })
