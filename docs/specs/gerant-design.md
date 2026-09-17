@@ -303,6 +303,9 @@ Stables, consommés par le mobile.
 | `manager_already_exists` | 409 | Un compte porte déjà cet e-mail ou ce téléphone. |
 | `manager_contact_required` | 422 | Ni e-mail ni téléphone : le gérant n'aurait aucun moyen de se connecter. |
 | `manager_not_found` | 404 | Gérant inconnu, ou rattaché à un autre propriétaire. |
+| `property_required` | 422 | Dépense de gérant sans logement : les charges communes de résidence lui sont fermées. |
+| `invalid_payment_amount` | 422 | Montant d'encaissement nul ou négatif. |
+| `booking_cancelled` | 409 | Réservation annulée : ni prolongation ni encaissement. |
 
 `manager_not_found` est un 404 là où les accès d'un gérant rendent un 403
 `out_of_scope`. La différence est voulue : un gérant sait qu'il travaille sur un
