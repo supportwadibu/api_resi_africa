@@ -74,4 +74,25 @@ export function retainClientsInScope<T extends ScopedClient>(
   )
 }
 
+/**
+ * Une fiche nommément désignée relève-t-elle du carnet visible par l'appelant ?
+ *
+ * Même règle que `retainClientsInScope`, ramenée à une seule fiche : c'est la
+ * forme qu'appellent les chemins de **création**, où une clé fonctionnelle —
+ * téléphone ou identifiant de client — ramène un document préexistant que le
+ * cadrage sur `owner_id` laisse passer à tort. Passer par la règle commune
+ * plutôt que de la réécrire : deux définitions de la visibilité d'un client
+ * divergeraient au premier correctif appliqué d'un seul côté.
+ *
+ * `stayedInScope` est fourni par l'appelant — seul lui sait lire les séjours —,
+ * ce qui garde ce module pur et testable sans Firebase.
+ */
+export function isClientInScope(
+  client: ScopedClient,
+  stayedInScope: ReadonlySet<string>,
+  scope: ActorScope
+): boolean {
+  return retainClientsInScope([client], stayedInScope, scope).length > 0
+}
+
 export default filterClientsForScope

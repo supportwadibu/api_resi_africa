@@ -58,9 +58,16 @@ export default class GerantClientController {
         // sa création au comptoir et la réservation qu'elle sert.
         created_by: ctx.scope.actorId,
       },
-      { front: payload.id_document_front, back: payload.id_document_back }
+      { front: payload.id_document_front, back: payload.id_document_back },
+      // Le périmètre descend jusqu'au use case : le dédoublonnage par téléphone
+      // porte sur tout le carnet du propriétaire, et sans lui la fiche rendue
+      // pourrait être celle d'un client hors périmètre.
+      ctx.scope
     )
 
+    // `data: null` quand la fiche existe hors périmètre : rien n'a été créé, et
+    // le gérant n'apprend rien de la fiche. L'application enchaîne sur la
+    // recherche dans son propre carnet plutôt que de préremplir la saisie.
     return alreadyExisted
       ? ctx.response.ok({ data: client, already_existed: true })
       : ctx.response.created({ data: client, already_existed: false })
