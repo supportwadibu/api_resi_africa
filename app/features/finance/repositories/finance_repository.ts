@@ -10,6 +10,9 @@ import { daysWithinWindow, splitRevenueByMonth } from '../revenue_split.ts'
 import { sumResidenceExpenses } from '../residence_scope.ts'
 
 import type { FinanceFilters, FinanceOverviewDto, RevenuePointDto } from '../dto/finance.dto.ts'
+import type { ActorScope } from '#features/managers/scope'
+import type { BookingRecord } from '#models/booking'
+import type { ExpenseRecord } from '#models/expense'
 import type { RevenueSlice } from '../revenue_split.ts'
 
 const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24
@@ -118,18 +121,26 @@ export class FinanceRepository {
   async overview(filters: FinanceFilters): Promise<FinanceOverviewDto | null> {
     const range = { from: filters.from, to: filters.to }
 
-    const scope = filters.residence_id ? { residence_id: filters.residence_id } : {}
+    const scopeIds = filters.scope_property_ids
+    const scope = {
+      ...(filters.residence_id ? { residence_id: filters.residence_id } : {}),
+      property_ids: scopeIds,
+    }
 
     // Les unités de la résidence sont nécessaires aux charges, pas au revenu :
-    // celui-ci se lit sur le `residence_id` figé de chaque réservation.
+    // celui-ci se lit sur le `residence_id` figé de chaque réservation. Le
+    // périmètre les restreint : une résidence de dix logements dont six sont
+    // confiés ne doit peser au dénominateur que pour ces six.
     const unitIds = filters.residence_id
-      ? new Set(await Property.findIdsByResidence(filters.residence_id))
+      ? new Set(await Property.findIdsByResidence(filters.residence_id, scopeIds))
       : null
 
     const [bookings, expenseSummary, propertyStats, residence] = await Promise.all([
       Booking.findForRevenue(filters.owner_id, range, scope),
-      Expense.summary({ owner_id: filters.owner_id, ...range }),
-      Property.statsByOwner(filters.owner_id),
+      // `summary` ne sait pas filtrer sur un périmètre : hors résidence, le
+      // total des charges est donc recomposé depuis les dépenses cloisonnées.
+      scopeIds ? Promise.resolve(null) : Expense.summary({ owner_id: filters.owner_id, ...range }),
+      Property.statsByOwner(filters.owner_id, scopeIds),
       // `findByIdAndOwner` et non `findById` : sans le contrôle de propriété,
       // un identifiant deviné livrerait le relevé financier d’un autre compte.
       filters.residence_id
@@ -139,17 +150,7 @@ export class FinanceRepository {
 
     const caBrut = aggregateGrossRevenue(bookings, range)
 
-    // Hors périmètre résidence, le total du propriétaire suffit. Restreint à
-    // une résidence, il faut sommer ses charges communes **et** celles de ses
-    // unités — deux champs distincts, qui ne se rencontrent qu’ici.
-    const depenses =
-      filters.residence_id && unitIds
-        ? sumResidenceExpenses(
-            await Expense.findAllForOwner(filters.owner_id, range),
-            filters.residence_id,
-            unitIds
-          )
-        : expenseSummary.total
+    const depenses = await this.sumExpenses(filters, range, unitIds, expenseSummary?.total)
 
     // Seuls les jours tombant dans la fenêtre comptent : un séjour à cheval
     // sur la borne imputait auparavant ses jours entiers à la période, d'où
@@ -196,6 +197,85 @@ export class FinanceRepository {
       },
       revenue_points: aggregateRevenuePoints(bookings, range),
     }
+  }
+
+  /**
+   * Total des charges de la fenêtre, selon le rattachement demandé.
+   *
+   * Quatre cas, dans cet ordre. Les deux premiers portent sur une résidence,
+   * et se séparent selon qu'un périmètre restreint l'appelant — la règle n'y
+   * est pas la même, et les confondre rendait le code muet sur celle qui
+   * s'applique. Vient ensuite le périmètre sans résidence, puis le chemin du
+   * propriétaire, où le total agrégé côté serveur suffit.
+   */
+  private async sumExpenses(
+    filters: FinanceFilters,
+    range: { from?: Date; to?: Date },
+    unitIds: Set<string> | null,
+    summaryTotal?: number
+  ): Promise<number> {
+    if (filters.residence_id && unitIds) {
+      const docs = await Expense.findAllForOwner(
+        filters.owner_id,
+        range,
+        filters.scope_property_ids
+      )
+
+      // Périmètre restreint : les charges **communes** de la résidence en sont
+      // exclues. Elles couvrent aussi les logements que l'appelant ne sert pas,
+      // et les lui imputer entièrement gonflerait ses charges d'un montant dont
+      // il ne répond pas.
+      //
+      // `findAllForOwner` les a déjà retirées — une charge commune n'a pas de
+      // `property_id` et ne peut appartenir à aucun périmètre. La branche
+      // `residence_id` de `belongsToResidence` serait donc morte ici : sommer
+      // directement les unités dit la règle au lieu de la laisser dépendre d'un
+      // filtre situé ailleurs.
+      if (filters.scope_property_ids) {
+        return docs.reduce(
+          (sum, expense) =>
+            expense.property_id && unitIds.has(expense.property_id) ? sum + expense.amount : sum,
+          0
+        )
+      }
+
+      // Le propriétaire, lui, porte les deux : ses charges communes **et**
+      // celles de ses unités — deux champs distincts, qui ne se rencontrent
+      // qu'ici.
+      return sumResidenceExpenses(docs, filters.residence_id, unitIds)
+    }
+
+    // Hors résidence mais sous périmètre, `summary` n'a pas pu être employé :
+    // ses filtres sont des égalités et ne savent pas porter une liste.
+    if (typeof summaryTotal === 'number') return summaryTotal
+
+    const docs = await Expense.findAllForOwner(filters.owner_id, range, filters.scope_property_ids)
+    return docs.reduce((sum, expense) => sum + expense.amount, 0)
+  }
+
+  /**
+   * Lectures cloisonnées alimentant le relevé d'un gérant.
+   *
+   * Rend les documents plutôt qu'un relevé : l'assemblage est fait par
+   * `buildManagerOverview`, qui vit hors du repository pour rester testable sans
+   * Firebase. Le repository ne connaît donc aucun `ManagerOverviewDto`, et le
+   * sens de l'import reste unique.
+   */
+  async managerInputs(filters: {
+    owner_id: string
+    scope: ActorScope
+    from: Date
+    to: Date
+  }): Promise<{ bookings: BookingRecord[]; expenses: ExpenseRecord[] }> {
+    const range = { from: filters.from, to: filters.to }
+    const scopeIds = filters.scope.propertyIds
+
+    const [bookings, expenses] = await Promise.all([
+      Booking.findForRevenue(filters.owner_id, range, { property_ids: scopeIds }),
+      Expense.findAllForOwner(filters.owner_id, range, scopeIds),
+    ])
+
+    return { bookings, expenses }
   }
 
   /**

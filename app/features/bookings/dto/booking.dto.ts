@@ -2,6 +2,7 @@
  * Repris du modèle plutôt que redéclaré : une copie en dur diverge dès qu'un
  * statut est ajouté, ce qui est arrivé avec `in_progress`.
  */
+import type { ActorScope } from '#features/managers/scope'
 import type { BookingStatus } from '#models/booking'
 
 import type { StayType } from '../stay_type.ts'
@@ -80,6 +81,22 @@ export interface CreateOwnerBookingInput {
   /** Immédiat : la réservation naît `in_progress`. */
   is_check_in: boolean
   client_request_id?: string | null
+  /**
+   * Acteur ayant réellement saisi la réservation — un gérant —, `null` ou
+   * absent pour le propriétaire. Posé par le contrôleur depuis `ctx.scope`,
+   * jamais par le client.
+   */
+  created_by?: string | null
+  /**
+   * Périmètre de l'appelant, pour le seul contrôle du rejeu d'idempotence.
+   *
+   * `buildScopedWrite` valide le `property_id` *de la requête*, mais un rejeu
+   * rend une réservation **différente**, retrouvée par `client_request_id` et
+   * cadrée sur le seul `owner_id`. Sans ce périmètre, le use case n'a pas de
+   * quoi vérifier qu'elle relève bien de l'appelant. Absent pour le
+   * propriétaire, dont l'accès n'est pas restreint.
+   */
+  scope?: ActorScope
 }
 
 export interface BookingPropertySummary {
@@ -133,6 +150,11 @@ export interface ListBookingsInput {
   status?: BookingStatus
   page?: number
   per_page?: number
+  /**
+   * Logements du périmètre de l'appelant. `null` ou absent = aucune
+   * restriction. Alimenté par le middleware `scope()`, jamais par le client.
+   */
+  scope_property_ids?: string[] | null
 }
 
 export interface ListBookingsOutput {

@@ -80,3 +80,15 @@ export const availabilityValidator = vine.compile(
     to: vine.date({ formats: ['iso8601'] }).optional(),
   })
 )
+
+/**
+ * POST /gerant/bookings/:id/payments
+ *
+ * Versement reçu au comptoir. Le montant est positif : un encaissement négatif
+ * serait un remboursement, qui relève d'un avoir et non de cette route.
+ */
+export const recordBookingPaymentValidator = vine.compile(
+  vine.object({
+    amount: vine.number().positive(),
+  })
+)

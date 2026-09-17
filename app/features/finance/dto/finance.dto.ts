@@ -35,4 +35,9 @@ export interface FinanceFilters {
    * qu’ici.
    */
   residence_id?: string
+  /**
+   * Logements du périmètre de l'appelant. `null` ou absent = aucune
+   * restriction — le propriétaire. Alimenté par le middleware `scope()`.
+   */
+  scope_property_ids?: string[] | null
 }

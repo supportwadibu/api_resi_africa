@@ -30,7 +30,16 @@ export interface ListClientBookingsOutput {
 export class ListClientBookingsUseCase {
   constructor(private repo: ClientRepository = new ClientRepository()) {}
 
-  async execute(clientId: string, ownerId: string): Promise<ListClientBookingsOutput> {
+  /**
+   * `scopePropertyIds` restreint l'historique au périmètre de l'appelant :
+   * sans lui, un gérant lirait les séjours faits dans des logements qui ne lui
+   * sont pas confiés. Absent ou `null` pour le propriétaire.
+   */
+  async execute(
+    clientId: string,
+    ownerId: string,
+    scopePropertyIds?: string[] | null
+  ): Promise<ListClientBookingsOutput> {
     // L'existence de la fiche est vérifiée dans le carnet du propriétaire :
     // sans ce contrôle, un identifiant deviné renverrait une liste vide plutôt
     // qu'un refus, révélant qu'aucune fiche ne porte cet identifiant.
@@ -39,7 +48,7 @@ export class ListClientBookingsUseCase {
       throw new DomainError('client_not_found', 'Client introuvable.', 404)
     }
 
-    const bookings = await Booking.findByClient(ownerId, clientId)
+    const bookings = await Booking.findByClient(ownerId, clientId, scopePropertyIds)
 
     return {
       data: await withProperties(bookings.map(BookingRepository.toDto)),

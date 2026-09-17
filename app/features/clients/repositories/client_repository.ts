@@ -1,4 +1,6 @@
+import { SCOPE_READ_LIMIT } from '#features/managers/scope'
 import Client, { type ClientRecord } from '#models/client'
+import { readCreatedBy } from '#utils/created_by'
 
 import type {
   ClientDto,
@@ -25,6 +27,9 @@ export class ClientRepository {
         last_stay_at: doc.stats?.last_stay_at ?? null,
       },
       status: doc.status ?? 'active',
+      // Repli explicite : les fiches écrites avant le rôle gérant ne portent
+      // pas ce champ, et son absence signifie « saisie par le propriétaire ».
+      created_by: readCreatedBy(doc),
       created_at: doc.created_at,
       updated_at: doc.updated_at,
     }
@@ -62,6 +67,31 @@ export class ClientRepository {
   }
 
   /**
+   * Carnet entier, borné, pour les lectures qui doivent filtrer avant de
+   * paginer.
+   *
+   * Même plafond que la recherche par terme ci-dessous, et pour la même
+   * raison : Firestore ne sait exprimer ni « le nom contient » ni « le client a
+   * séjourné dans l'un de ces logements », si bien que la restriction ne peut
+   * s'appliquer qu'après lecture. Un carnet se compte en centaines de fiches.
+   */
+  async listAll(input: ListClientsInput): Promise<ClientRecord[]> {
+    const term = input.q?.trim().toLowerCase()
+
+    const all = await Client.paginate(
+      { owner_id: input.owner_id, status: input.status },
+      { limit: SCOPE_READ_LIMIT, offset: 0 }
+    )
+
+    if (!term) return all.data
+
+    return all.data.filter(
+      (doc) =>
+        doc.full_name.toLowerCase().includes(term) || doc.phone.includes(term.replace(/\s/g, ''))
+    )
+  }
+
+  /**
    * Page de clients, filtrée en mémoire sur le terme de recherche.
    *
    * Firestore ne sait pas chercher une sous-chaîne : `where('full_name', '>=')`
@@ -81,15 +111,7 @@ export class ClientRepository {
       )
     }
 
-    const all = await Client.paginate(
-      { owner_id: input.owner_id, status: input.status },
-      { limit: 1000, offset: 0 }
-    )
-
-    const matches = all.data.filter(
-      (doc) =>
-        doc.full_name.toLowerCase().includes(term) || doc.phone.includes(term.replace(/\s/g, ''))
-    )
+    const matches = await this.listAll(input)
 
     return {
       data: matches.slice((page - 1) * perPage, page * perPage),

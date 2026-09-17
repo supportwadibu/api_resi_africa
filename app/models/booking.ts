@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
 
 import type { StayType } from '#features/bookings/stay_type'
+import type { ActorScope } from '#features/managers/scope'
+import { FIRESTORE_IN_LIMIT, filterByScope, isWithinScope } from '#features/managers/scope'
 import {
   collection,
   COLLECTIONS,
@@ -101,6 +103,13 @@ export interface BookingDocument {
   completed_at: Date | null
   cancellation_reason: string | null
 
+  /**
+   * Acteur ayant réellement saisi l'enregistrement — un gérant, ou `null` pour
+   * le propriétaire. Optionnel : absent sur les documents antérieurs au rôle
+   * gérant. Donnée d'audit, n'entrant dans aucun calcul.
+   */
+  created_by?: string | null
+
   created_at: Date
   updated_at: Date
 }
@@ -116,6 +125,11 @@ export interface BookingFilters {
   owner_id?: string
   property_id?: string
   status?: BookingStatus
+  /**
+   * Logements du périmètre de l'appelant. `null` ou absent = aucune
+   * restriction. Alimenté par le middleware `scope()`.
+   */
+  scope_property_ids?: string[] | null
 }
 
 function buildQuery(filters: BookingFilters): FirebaseFirestore.Query<BookingDocument> {
@@ -126,7 +140,122 @@ function buildQuery(filters: BookingFilters): FirebaseFirestore.Query<BookingDoc
   if (filters.property_id) query = query.where('property_id', '==', filters.property_id)
   if (filters.status) query = query.where('status', '==', filters.status)
 
+  // Filtrage délégué à Firestore tant que la liste tient dans la limite de
+  // l'opérateur `in` ; au-delà, `filterByScope` reprend après lecture.
+  const ids = filters.scope_property_ids
+  if (ids && ids.length > 0 && ids.length <= FIRESTORE_IN_LIMIT) {
+    query = query.where('property_id', 'in', ids)
+  }
+
   return query
+}
+
+/**
+ * Le périmètre reste-t-il à appliquer après lecture ?
+ *
+ * Vrai dans les deux cas que `buildQuery` n'a pas pu confier à Firestore : le
+ * périmètre vide et celui de plus de 30 logements, où l'opérateur `in` lève.
+ * Sans ce second passage, une requête ainsi construite ne porterait aucune
+ * restriction et un gérant verrait tout le compte du propriétaire.
+ */
+export function needsInMemoryScope(filters: BookingFilters): boolean {
+  const ids = filters.scope_property_ids
+  return Array.isArray(ids) && (ids.length === 0 || ids.length > FIRESTORE_IN_LIMIT)
+}
+
+/**
+ * La réservation relève-t-elle du périmètre ?
+ *
+ * `null` ou `undefined` signifie « aucune restriction » — le propriétaire —, et
+ * se distingue du tableau vide, qui est un gérant sans affectation et ne doit
+ * rien voir. Une réservation sans `property_id` n'est rattachable à aucun
+ * logement confié : elle est écartée de tout périmètre restreint.
+ */
+export function matchesRevenueScope(
+  doc: { property_id?: string | null },
+  scopePropertyIds?: string[] | null
+): boolean {
+  if (!Array.isArray(scopePropertyIds)) return true
+  return isWithinScope(
+    { ownerId: '', actorId: '', propertyIds: scopePropertyIds },
+    doc.property_id ?? null
+  )
+}
+
+/** Champs d'une réservation comptoir, avant composition du document. */
+export interface OwnerBookingInput {
+  owner_id: string
+  property_id: string
+  residence_id?: string | null
+  client_id: string
+  client_snapshot: { full_name: string; phone: string }
+  status: BookingStatus
+  stay_type: StayType
+  check_in_at: Date
+  check_out_at: Date
+  days_count: number
+  daily_price: number
+  expected_amount: number
+  received_amount: number
+  deposit_amount: number
+  message: string | null
+  client_request_id: string | null
+  /** Acteur ayant saisi, `null` pour le propriétaire. Donnée d'audit. */
+  created_by?: string | null
+}
+
+/**
+ * Compose le document d'une réservation comptoir.
+ *
+ * Extraite de `createOwnerBooking` pour être éprouvée sans Firestore : la
+ * composition énumère ses champs un à un, si bien qu'un `created_by` calculé en
+ * amont s'y perdrait sans la moindre erreur de compilation. Le seul recours
+ * contre cet oubli silencieux est un test, et un test suppose une fonction pure.
+ */
+export function buildOwnerBookingPayload(input: OwnerBookingInput, now: Date): BookingDocument {
+  return {
+    property_id: input.property_id,
+    residence_id: input.residence_id ?? null,
+    owner_id: input.owner_id,
+    client_id: input.client_id,
+    status: input.status,
+    // Les deux couples de dates sont écrits ensemble et tenus identiques :
+    // `start_date` reste la source pour Finance et les écrans existants.
+    start_date: input.check_in_at,
+    end_date: input.check_out_at,
+    check_in_at: input.check_in_at,
+    check_out_at: input.check_out_at,
+    days_count: input.days_count,
+    daily_price: input.daily_price,
+    duration_discount_percent: 0,
+    subtotal_amount: input.expected_amount,
+    // L'écart entre attendu et négocié est une remise consentie.
+    discount_amount: Math.max(0, input.expected_amount - input.received_amount),
+    total_amount: input.received_amount,
+    expected_amount: input.expected_amount,
+    received_amount: input.received_amount,
+    deposit_amount: input.deposit_amount,
+    promo_code: null,
+    message: input.message,
+    source: 'offline',
+    stay_type: input.stay_type,
+    client_snapshot: input.client_snapshot,
+    client_request_id: input.client_request_id,
+    sync_status: 'synced',
+    cancelled_at: null,
+    completed_at: null,
+    cancellation_reason: null,
+    created_by: input.created_by ?? null,
+    created_at: now,
+    updated_at: now,
+  }
+}
+
+/** Périmètre sous la forme attendue par `filterByScope`. */
+function scopeOf(filters: BookingFilters): ActorScope {
+  // `ownerId` et `actorId` ne servent pas au filtrage par périmètre ; seul
+  // `propertyIds` est lu ici.
+  return { ownerId: '', actorId: '', propertyIds: filters.scope_property_ids ?? null }
 }
 
 const Booking = {
@@ -169,6 +298,7 @@ const Booking = {
     promo_code?: string | null
     promo_code_id?: string | null
     message?: string | null
+    created_by?: string | null
   }): Promise<BookingRecord> {
     const firestore = db()
     const propertyRef = firestore.collection(COLLECTIONS.properties).doc(input.property_id)
@@ -199,6 +329,7 @@ const Booking = {
       cancelled_at: null,
       completed_at: null,
       cancellation_reason: null,
+      created_by: input.created_by ?? null,
       created_at: now,
       updated_at: now,
     }
@@ -352,6 +483,19 @@ const Booking = {
   ): Promise<{ data: BookingRecord[]; total: number }> {
     const base = buildQuery(filters)
 
+    // Un périmètre que Firestore n'a pas su appliquer doit l'être ici, avant la
+    // découpe en pages : `total` compterait sinon des réservations que
+    // l'appelant n'a pas le droit de voir, et la page en montrerait.
+    if (needsInMemoryScope(filters)) {
+      const snapshot = await base.orderBy('created_at', 'desc').get()
+      const matching = filterByScope(toDocs<BookingDocument>(snapshot.docs), scopeOf(filters))
+
+      return {
+        data: matching.slice(options.offset, options.offset + options.limit),
+        total: matching.length,
+      }
+    }
+
     const [snapshot, total] = await Promise.all([
       base.orderBy('created_at', 'desc').offset(options.offset).limit(options.limit).get(),
       countQuery(base),
@@ -369,16 +513,41 @@ const Booking = {
    *
    * Le chevauchement est évalué en mémoire : Firestore n'accepte qu'un champ en
    * inégalité par requête, et il en faudrait deux (`start_date`, `end_date`).
+   *
+   * `scope.property_ids` restreint la lecture au périmètre de l'appelant. Absent
+   * ou `null`, la lecture reste celle du propriétaire — aucun appelant existant
+   * ne change de comportement. C'est la source du chiffre d'affaires et du taux
+   * d'occupation : sans ce paramètre, un relevé de gérant porterait les
+   * encaissements de logements qui ne lui sont pas confiés.
    */
   async findForRevenue(
     ownerId: string,
     range: { from?: Date; to?: Date } = {},
-    scope: { residence_id?: string } = {}
+    scope: { residence_id?: string; property_ids?: string[] | null } = {}
   ): Promise<BookingRecord[]> {
-    const snapshot = await bookings().where('owner_id', '==', ownerId).get()
+    let query = bookings().where(
+      'owner_id',
+      '==',
+      ownerId
+    ) as FirebaseFirestore.Query<BookingDocument>
+
+    // Filtrage délégué à Firestore tant que la liste tient dans la limite de
+    // l'opérateur `in` ; au-delà — et sur liste vide, où `in` lève aussi —
+    // `matchesRevenueScope` reprend après lecture.
+    const ids = scope.property_ids
+    if (ids && ids.length > 0 && ids.length <= FIRESTORE_IN_LIMIT) {
+      query = query.where('property_id', 'in', ids)
+    }
+
+    const snapshot = await query.get()
 
     return toDocs<BookingDocument>(snapshot.docs).filter((doc) => {
       if (doc.status === 'cancelled') return false
+
+      // Second passage du périmètre : il ne retire rien quand Firestore a déjà
+      // filtré, et il est la seule barrière dans les deux cas qu'il ne sait pas
+      // exprimer.
+      if (!matchesRevenueScope(doc, scope.property_ids)) return false
 
       // Le rattachement est lu sur la réservation et non sur l’unité : il y a
       // été figé à la création, et une unité déplacée depuis ne doit pas
@@ -398,6 +567,47 @@ const Booking = {
   },
 
   /**
+   * Clients ayant séjourné dans un logement du périmètre.
+   *
+   * Sert à cloisonner le carnet : les clients sont rattachés à un `owner_id` et
+   * non à un logement, si bien que seule la réservation dit quel gérant a
+   * affaire à quel client.
+   *
+   * Aucun filtre de statut : une réservation annulée a tout de même mis le
+   * gérant en relation avec la personne, et écarter sa fiche lui retirerait un
+   * contact qu'il connaît. C'est une lecture de visibilité, pas un calcul
+   * financier — contrairement à `findForRevenue`, qui écarte les annulations.
+   */
+  async findClientIdsInScope(
+    ownerId: string,
+    scopePropertyIds?: string[] | null
+  ): Promise<Set<string>> {
+    // Sans restriction, le carnet entier est visible : la lecture serait
+    // intégralement inutile.
+    if (!Array.isArray(scopePropertyIds)) return new Set()
+    if (scopePropertyIds.length === 0) return new Set()
+
+    let query = bookings().where(
+      'owner_id',
+      '==',
+      ownerId
+    ) as FirebaseFirestore.Query<BookingDocument>
+
+    // Même bascule qu'ailleurs : délégué à Firestore sous la limite de `in`,
+    // repris en mémoire au-delà.
+    if (scopePropertyIds.length <= FIRESTORE_IN_LIMIT) {
+      query = query.where('property_id', 'in', scopePropertyIds)
+    }
+
+    const snapshot = await query.get()
+    const scope: ActorScope = { ownerId, actorId: ownerId, propertyIds: scopePropertyIds }
+
+    return new Set(
+      filterByScope(toDocs<BookingDocument>(snapshot.docs), scope).map((doc) => doc.client_id)
+    )
+  },
+
+  /**
    * Toutes les réservations d'un client du carnet, la plus récente d'abord.
    *
    * Sert à recalculer les statistiques de la fiche et à afficher son
@@ -406,8 +616,20 @@ const Booking = {
    *
    * Le filtre porte aussi sur `owner_id` : un identifiant de client deviné ne
    * doit pas révéler les séjours enregistrés dans le carnet d'un autre.
+   *
+   * `scopePropertyIds` restreint la lecture au périmètre de l'appelant. Le
+   * filtrage est fait **en mémoire** et non par la requête : celle-ci porte
+   * déjà `owner_id`, `client_id` et un tri, et y ajouter un `in` sur
+   * `property_id` exigerait un index composite de plus pour un gain nul — la
+   * liste est bornée aux séjours d'un seul client. Sans ce filtrage, un gérant
+   * lisant une fiche verrait les séjours faits dans les logements qui ne lui
+   * sont pas confiés.
    */
-  async findByClient(ownerId: string, clientId: string): Promise<BookingRecord[]> {
+  async findByClient(
+    ownerId: string,
+    clientId: string,
+    scopePropertyIds?: string[] | null
+  ): Promise<BookingRecord[]> {
     if (!clientId) return []
 
     const snapshot = await bookings()
@@ -416,7 +638,13 @@ const Booking = {
       .orderBy('created_at', 'desc')
       .get()
 
-    return toDocs<BookingDocument>(snapshot.docs)
+    const docs = toDocs<BookingDocument>(snapshot.docs)
+
+    return filterByScope(docs, {
+      ownerId,
+      actorId: ownerId,
+      propertyIds: scopePropertyIds ?? null,
+    })
   },
 
   /**
@@ -546,62 +774,14 @@ const Booking = {
    *
    * @throws `booking_period_conflict` si `detectConflict` retourne `true`
    */
-  async createOwnerBooking(input: {
-    owner_id: string
-    property_id: string
-    residence_id?: string | null
-    client_id: string
-    client_snapshot: { full_name: string; phone: string }
-    status: BookingStatus
-    stay_type: StayType
-    check_in_at: Date
-    check_out_at: Date
-    days_count: number
-    daily_price: number
-    expected_amount: number
-    received_amount: number
-    deposit_amount: number
-    message: string | null
-    client_request_id: string | null
-    detectConflict: (active: BookingRecord[]) => boolean
-  }): Promise<BookingRecord> {
+  async createOwnerBooking(
+    input: OwnerBookingInput & {
+      detectConflict: (active: BookingRecord[]) => boolean
+    }
+  ): Promise<BookingRecord> {
     const now = new Date()
 
-    const payload: BookingDocument = {
-      property_id: input.property_id,
-      residence_id: input.residence_id ?? null,
-      owner_id: input.owner_id,
-      client_id: input.client_id,
-      status: input.status,
-      // Les deux couples de dates sont écrits ensemble et tenus identiques :
-      // `start_date` reste la source pour Finance et les écrans existants.
-      start_date: input.check_in_at,
-      end_date: input.check_out_at,
-      check_in_at: input.check_in_at,
-      check_out_at: input.check_out_at,
-      days_count: input.days_count,
-      daily_price: input.daily_price,
-      duration_discount_percent: 0,
-      subtotal_amount: input.expected_amount,
-      // L'écart entre attendu et négocié est une remise consentie.
-      discount_amount: Math.max(0, input.expected_amount - input.received_amount),
-      total_amount: input.received_amount,
-      expected_amount: input.expected_amount,
-      received_amount: input.received_amount,
-      deposit_amount: input.deposit_amount,
-      promo_code: null,
-      message: input.message,
-      source: 'offline',
-      stay_type: input.stay_type,
-      client_snapshot: input.client_snapshot,
-      client_request_id: input.client_request_id,
-      sync_status: 'synced',
-      cancelled_at: null,
-      completed_at: null,
-      cancellation_reason: null,
-      created_at: now,
-      updated_at: now,
-    }
+    const payload = buildOwnerBookingPayload(input, now)
 
     const docRef = input.client_request_id
       ? bookings().doc(Booking.ownerRequestDocId(input.owner_id, input.client_request_id))

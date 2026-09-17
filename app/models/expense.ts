@@ -1,3 +1,4 @@
+import { FIRESTORE_IN_LIMIT, isWithinScope } from '#features/managers/scope'
 import { COLLECTIONS, collection, toDoc, toDocs, toPayload, type WithId } from '#firebase/firestore'
 
 /**
@@ -48,6 +49,13 @@ export interface ExpenseDocument {
   spent_at: Date
   note: string | null
 
+  /**
+   * Acteur ayant réellement saisi l'enregistrement — un gérant, ou `null` pour
+   * le propriétaire. Optionnel : absent sur les documents antérieurs au rôle
+   * gérant. Donnée d'audit, n'entrant dans aucun calcul.
+   */
+  created_by?: string | null
+
   created_at: Date
   updated_at: Date
 }
@@ -58,7 +66,15 @@ function expenses() {
   return collection<ExpenseDocument>(COLLECTIONS.expenses)
 }
 
-function withDefaults(input: Partial<ExpenseDocument>): ExpenseDocument {
+/**
+ * Compose le document d'une dépense.
+ *
+ * Exportée pour être éprouvée sans Firestore : la composition énumère ses
+ * champs un à un, si bien qu'un `created_by` calculé en amont s'y perdrait sans
+ * la moindre erreur de compilation. Le seul recours contre cet oubli silencieux
+ * est un test, et un test suppose une fonction atteignable.
+ */
+export function withDefaults(input: Partial<ExpenseDocument>): ExpenseDocument {
   const now = new Date()
 
   return {
@@ -69,6 +85,7 @@ function withDefaults(input: Partial<ExpenseDocument>): ExpenseDocument {
     amount: input.amount ?? 0,
     spent_at: input.spent_at ?? now,
     note: input.note?.trim() || null,
+    created_by: input.created_by ?? null,
     created_at: input.created_at ?? now,
     updated_at: now,
   }
@@ -82,6 +99,11 @@ export interface ExpenseFilters {
   /** Bornes inclusives sur `spent_at`. */
   from?: Date
   to?: Date
+  /**
+   * Logements du périmètre de l'appelant. `null` ou absent = aucune
+   * restriction. Alimenté par le middleware `scope()`.
+   */
+  scope_property_ids?: string[] | null
 }
 
 /**
@@ -100,14 +122,32 @@ function buildQuery(filters: ExpenseFilters): FirebaseFirestore.Query<ExpenseDoc
   if (filters.residence_id) query = query.where('residence_id', '==', filters.residence_id)
   if (filters.category) query = query.where('category', '==', filters.category)
 
+  // Filtrage délégué à Firestore tant que la liste tient dans la limite de
+  // l'opérateur `in` ; au-delà, `matchesInMemory` reprend après lecture.
+  const ids = filters.scope_property_ids
+  if (ids && ids.length > 0 && ids.length <= FIRESTORE_IN_LIMIT) {
+    query = query.where('property_id', 'in', ids)
+  }
+
   return query
 }
 
-function matchesInMemory(doc: ExpenseRecord, filters: ExpenseFilters): boolean {
+export function matchesInMemory(doc: ExpenseRecord, filters: ExpenseFilters): boolean {
   const spentAt = doc.spent_at?.getTime() ?? 0
 
   if (filters.from && spentAt < filters.from.getTime()) return false
   if (filters.to && spentAt > filters.to.getTime()) return false
+
+  // Le périmètre est repris ici dans les deux cas où `buildQuery` n'a pas pu le
+  // confier à Firestore — périmètre vide, ou de plus de 30 logements, où `in`
+  // lève. Sans ce second passage, la requête ne porterait aucune restriction et
+  // un gérant verrait toutes les dépenses du propriétaire. Une charge commune
+  // de résidence, sans `property_id`, n'appartient à aucun périmètre restreint.
+  const ids = filters.scope_property_ids
+  if (Array.isArray(ids)) {
+    const scope = { ownerId: '', actorId: '', propertyIds: ids }
+    if (!isWithinScope(scope, doc.property_id ?? null)) return false
+  }
 
   return true
 }
@@ -195,13 +235,33 @@ const Expense = {
    * charges communes et celles de ses unités — que `summary` ne sait pas
    * combiner : ses filtres sont des égalités, et un `where` sur `residence_id`
    * exclurait les charges d'unité.
+   *
+   * `scopePropertyIds` restreint la lecture au périmètre de l'appelant. Absent
+   * ou `null`, le relevé reste celui du propriétaire — aucun appelant existant
+   * ne change de comportement.
    */
   async findAllForOwner(
     ownerId: string,
-    range: { from?: Date; to?: Date } = {}
+    range: { from?: Date; to?: Date } = {},
+    scopePropertyIds?: string[] | null
   ): Promise<ExpenseRecord[]> {
-    const filters: ExpenseFilters = { owner_id: ownerId, ...range }
-    const snapshot = await buildQuery({ owner_id: ownerId }).get()
+    const filters: ExpenseFilters = {
+      owner_id: ownerId,
+      ...range,
+      scope_property_ids: scopePropertyIds,
+    }
+
+    // Seul le périmètre est ajouté à la requête : `buildQuery` le délègue à
+    // Firestore tant qu'il tient dans l'opérateur `in`. Les bornes de date en
+    // restent volontairement absentes — le choix d'origine, expliqué sur
+    // `buildQuery` : combinées aux égalités, elles exigeraient un index
+    // composite par combinaison de filtres. Elles étaient et restent évaluées
+    // par `matchesInMemory`, qui réapplique aussi le périmètre et demeure la
+    // seule barrière sur liste vide ou de plus de 30.
+    const snapshot = await buildQuery({
+      owner_id: ownerId,
+      scope_property_ids: scopePropertyIds,
+    }).get()
 
     return toDocs<ExpenseDocument>(snapshot.docs).filter((doc) => matchesInMemory(doc, filters))
   },

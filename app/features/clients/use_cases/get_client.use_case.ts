@@ -16,14 +16,23 @@ import { computeClientStats } from './compute_client_stats.use_case.ts'
 export class GetClientUseCase {
   constructor(private repo: ClientRepository = new ClientRepository()) {}
 
-  async execute(id: string, ownerId: string): Promise<ClientDto> {
+  /**
+   * `scopePropertyIds` restreint les séjours pris en compte au périmètre de
+   * l'appelant. Absent ou `null` — le propriétaire —, le comportement est
+   * strictement celui d'avant le rôle gérant.
+   */
+  async execute(
+    id: string,
+    ownerId: string,
+    scopePropertyIds?: string[] | null
+  ): Promise<ClientDto> {
     const doc = await this.repo.findById(id, ownerId)
     if (!doc) {
       throw new DomainError('client_not_found', 'Client introuvable.', 404)
     }
 
     const dto = ClientRepository.toDto(doc)
-    const stats = await this.refreshStats(doc._id, ownerId, dto.stats)
+    const stats = await this.refreshStats(doc._id, ownerId, dto.stats, scopePropertyIds)
 
     return {
       ...dto,
@@ -51,10 +60,17 @@ export class GetClientUseCase {
   private async refreshStats(
     clientId: string,
     ownerId: string,
-    cached: ClientStatsDto
+    cached: ClientStatsDto,
+    scopePropertyIds?: string[] | null
   ): Promise<ClientStatsDto> {
-    const bookings = await Booking.findByClient(ownerId, clientId)
+    const bookings = await Booking.findByClient(ownerId, clientId, scopePropertyIds)
     const fresh = computeClientStats(bookings)
+
+    // Une lecture cloisonnée ne réécrit jamais le cache : les chiffres portent
+    // alors sur les seuls logements du gérant, et les persister écraserait les
+    // totaux du propriétaire par une vue partielle — le carnet se mettrait à
+    // rétrécir au gré de qui le consulte.
+    if (Array.isArray(scopePropertyIds)) return fresh
 
     if (!hasDrifted(cached, fresh)) return fresh
 

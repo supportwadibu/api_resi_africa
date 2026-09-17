@@ -1,3 +1,4 @@
+import { SCOPE_READ_LIMIT } from '#features/managers/scope'
 import Residence, { type ResidenceRecord } from '#models/residence'
 
 import type {
@@ -66,6 +67,24 @@ export class ResidenceRepository {
 
   async delete(id: string, owner_id: string): Promise<boolean> {
     return Residence.deleteOne(id, owner_id)
+  }
+
+  /**
+   * Toutes les résidences du propriétaire, bornées.
+   *
+   * Sert le regroupement rendu à un gérant, qui se construit sur le périmètre
+   * entier : une page partielle de résidences en masquerait certaines dont le
+   * gérant sert pourtant des logements. Un propriétaire compte ses résidences
+   * en dizaines.
+   *
+   * Distincte de `paginate` et non un cas particulier de celle-ci : `paginate`
+   * sert une page à l'utilisateur et rabat donc `per_page` à 100, ce qui
+   * tronquerait silencieusement un regroupement. Ici la borne est celle du
+   * dépôt, `SCOPE_READ_LIMIT`, et elle n'est rabattue par personne.
+   */
+  async listAll(owner_id: string): Promise<ResidenceDto[]> {
+    const { data } = await Residence.paginate({ owner_id }, { limit: SCOPE_READ_LIMIT, offset: 0 })
+    return data.map((d) => ResidenceRepository.toDto(d))
   }
 
   async paginate(

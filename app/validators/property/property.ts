@@ -192,3 +192,22 @@ export const listPublicPropertiesValidator = vine.compile(
     sort: vine.string().trim().optional(),
   })
 )
+
+/**
+ * PATCH /gerant/properties/:id/availability
+ *
+ * Le gérant tient la disponibilité de ses logements, et rien d'autre : ni
+ * tarif, ni description, ni mise en ligne. Un schéma dédié plutôt que
+ * `updatePropertyValidator` restreint : celui-ci accepte `pricing`, et le
+ * rouvrir au gérant lui donnerait la main sur la grille tarifaire du
+ * propriétaire.
+ *
+ * `reserved` et `rented` en sont absents pour la même raison que côté
+ * propriétaire : l'occupation se déduit des réservations.
+ */
+export const updateAvailabilityValidator = vine.compile(
+  vine.object({
+    status: vine.enum(OWNER_SETTABLE_STATUSES),
+    available_from: vine.date().optional(),
+  })
+)

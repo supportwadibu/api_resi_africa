@@ -1,6 +1,6 @@
 import { COLLECTIONS, collection, toDoc, toPayload, type WithId } from '#firebase/firestore'
 
-export const ROLE_NAMES = ['admin', 'proprio', 'client'] as const
+export const ROLE_NAMES = ['admin', 'proprio', 'client', 'gerant'] as const
 export type RoleName = (typeof ROLE_NAMES)[number]
 
 export interface RoleDocument {
@@ -19,9 +19,9 @@ function roles() {
 /**
  * Rôles applicatifs.
  *
- * Collection quasi statique — trois documents, jamais modifiés en exploitation.
- * L'identifiant de document est le nom du rôle (`admin`, `proprio`, `client`) :
- * la lecture par nom devient un accès direct, sans requête ni index, et
+ * Collection quasi statique — quatre documents, jamais modifiés en exploitation.
+ * L'identifiant de document est le nom du rôle (`admin`, `proprio`, `client`,
+ * `gerant`) : la lecture par nom devient un accès direct, sans requête ni index, et
  * l'unicité découle de la clé elle-même — Firestore ne sachant pas exprimer
  * d'index unique.
  */
