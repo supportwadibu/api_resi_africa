@@ -275,6 +275,34 @@ client dès lors qu'il a séjourné dans le périmètre **ou** que son `created_
 est le gérant qui interroge. Sans cette seconde branche, une fiche
 disparaîtrait entre sa création et la réservation qu'elle sert.
 
+**La création est soumise à la même règle.** `POST /gerant/clients` dédoublonne
+par téléphone : quand la fiche existe déjà, elle est renvoyée telle quelle.
+Cadré sur le seul `owner_id`, ce dédoublonnage livrait la fiche complète —
+pièce d'identité comprise — de n'importe quel client du propriétaire, sur
+simple envoi d'un numéro. C'est la porte que ferme par ailleurs la
+non-exposition de `POST /proprio/clients/lookup` au gérant.
+
+Quand la fiche trouvée est hors périmètre, la réponse est donc un **accusé nu** :
+
+```json
+{ "data": { "client": null, "already_existed": true } }
+```
+
+Un accusé plutôt qu'un 403 : le gérant doit pouvoir constater qu'il n'y a rien
+à créer, sans rien apprendre de la fiche — pas même son existence. Un 403 serait
+lui-même l'oracle que la règle cherche à fermer, puisqu'il ne se distinguerait
+qu'en présence d'une fiche.
+
+**Le mobile doit traiter `client: null` sur cette route**, où il recevait
+jusqu'ici un objet. `POST /proprio/clients` est inchangé.
+
+Le rejeu d'idempotence obéit à la même logique. `POST /gerant/bookings` retrouve
+une réservation par `client_request_id` : la garde d'écriture valide le
+`property_id` *de la requête*, mais le rejeu rend un document **différent**. Le
+périmètre est donc revérifié sur la réservation retrouvée. Un gérant qui rejoue
+sa propre saisie, sur un logement de son périmètre, reçoit le même DTO sans
+créer de doublon — c'est la garantie sur laquelle repose la file hors ligne.
+
 ### Routes propriétaire ajoutées
 
 ```
