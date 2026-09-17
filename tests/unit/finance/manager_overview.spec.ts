@@ -241,6 +241,81 @@ test.group('computeOccupancyRate', () => {
     assert.equal(rate, 1)
   })
 
+  test('la fenêtre par défaut du relevé se compte comme chez le propriétaire', ({ assert }) => {
+    // La fenêtre que pose `GerantFinanceController.resolveRange` : du 1er à
+    // 00:00 au dernier jour à 23:59:59.999, soit 30,9999 jours en octobre.
+    //
+    // C'est le cas qui sépare `floor` de `ceil`. `floor` donnait 30 jours de
+    // capacité là où le numérateur, issu de `daysWithinWindow`, compte les
+    // jours entamés : le taux du gérant sortait surévalué d'environ 3,3 % par
+    // rapport à celui que le propriétaire lit sur la même période, et les deux
+    // chiffres ne se recoupaient pas.
+    const from = new Date(2026, 9, 1)
+    const to = new Date(2026, 10, 0, 23, 59, 59, 999)
+
+    // Le comptage du propriétaire, repris tel quel de
+    // `FinanceRepository.occupancyRate` : c'est le chiffre de référence.
+    const ownerWindowDays = Math.max(
+      1,
+      Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24))
+    )
+    assert.equal(ownerWindowDays, 31)
+
+    // Un séjour couvrant la fenêtre entière sur l'unique logement du périmètre
+    // sature la capacité. Le taux ne vaut 1 que si les deux côtés comptent 31
+    // jours ; avec un dénominateur à 30, le rapport dépasserait 1 et le plafond
+    // masquerait l'écart — d'où le séjour partiel qui suit.
+    const occupied = {
+      property_id: 'unit-0',
+      start_date: from,
+      end_date: to,
+      total_amount: 310000,
+    }
+
+    const scopeOfOne = { ownerId: 'o', actorId: 'g', propertyIds: ['unit-0'] }
+
+    // Séjour de 10 jours entamés sur une fenêtre de 31 : 10/31 et non 10/30.
+    const partial = {
+      property_id: 'unit-0',
+      start_date: from,
+      end_date: new Date(2026, 9, 11),
+      total_amount: 100000,
+    }
+
+    const rate = computeOccupancyRate([partial], scopeOfOne, from, to)
+
+    assert.equal(rate, 10 / ownerWindowDays)
+    assert.notEqual(rate, 10 / 30)
+
+    // Et la saturation reste atteignable, sans dépendre du plafonnement.
+    assert.equal(computeOccupancyRate([occupied], scopeOfOne, from, to), 1)
+  })
+
+  test('une fenêtre d’un seul jour rend le taux réel et non zéro', ({ assert }) => {
+    // Le dénominateur valait zéro sur une journée — `floor(0,99…)` — et le taux
+    // rendait silencieusement 0 alors que le logement était occupé toute la
+    // journée. Un gérant lisait « 0 % » sur la journée qu'il venait de remplir.
+    const from = new Date('2026-10-05T00:00:00Z')
+    const to = new Date('2026-10-05T23:59:59.999Z')
+
+    const rate = computeOccupancyRate(
+      [
+        {
+          property_id: 'unit-0',
+          start_date: from,
+          end_date: to,
+          total_amount: 30000,
+        },
+      ],
+      { ownerId: 'o', actorId: 'g', propertyIds: ['unit-0'] },
+      from,
+      to
+    )
+
+    assert.equal(rate, 1)
+    assert.notEqual(rate, 0)
+  })
+
   test('sans périmètre borné, la capacité vient des logements réservés', ({ assert }) => {
     // Le propriétaire (`propertyIds: null`) n'a pas de liste : le dénominateur
     // se déduit des logements apparaissant dans la période, faute de mieux.

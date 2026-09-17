@@ -63,7 +63,13 @@ export function computeOccupancyRate(
       ? new Set(bookings.map((b) => b.property_id ?? '')).size
       : scope.propertyIds.length
 
-  const windowDays = Math.floor((to.getTime() - from.getTime()) / MILLISECONDS_PER_DAY)
+  // `ceil` avec un plancher à 1, comme partout ailleurs — `countDays`,
+  // `countStayDays`, `FinanceRepository.occupancyRate`. Le numérateur vient de
+  // `daysWithinWindow`, qui arrondit au jour entamé : un dénominateur en
+  // `floor` rendait au gérant un taux surévalué que le relevé du propriétaire
+  // ne recoupait pas sur la même période. Le plancher couvre la fenêtre d'un
+  // seul jour, dont la capacité tombait à zéro et le taux à zéro avec elle.
+  const windowDays = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / MILLISECONDS_PER_DAY))
   const capacity = propertiesCount * windowDays
   if (capacity <= 0) return 0
 
