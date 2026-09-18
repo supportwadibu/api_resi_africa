@@ -4,13 +4,19 @@ import GerantBookingController from '#controllers/gerant/booking_controller'
 import GerantClientController from '#controllers/gerant/client_controller'
 import GerantExpenseController from '#controllers/gerant/expense_controller'
 import {
+  CheckOutBookingUseCase,
   ExtendOwnerBookingUseCase,
   FindOwnerBookingUseCase,
 } from '#features/bookings/use_cases/index'
-import { GetScopedClientUseCase, UpdateClientUseCase } from '#features/clients/use_cases/index'
+import {
+  GetScopedClientUseCase,
+  ListClientBookingsUseCase,
+  UpdateClientUseCase,
+} from '#features/clients/use_cases/index'
 import {
   DeleteExpenseUseCase,
   FindExpenseUseCase,
+  GetExpenseSummaryUseCase,
   UpdateExpenseUseCase,
 } from '#features/expenses/use_cases/index'
 
@@ -163,6 +169,141 @@ test.group('ordre garde / écriture sur le périmètre', (group) => {
     // Une suppression est irréversible : la garde déplacée après elle ne
     // laisserait aucun recours.
     assert.deepEqual(calls, ['garde'])
+  })
+})
+
+/**
+ * Les routes ouvertes après coup transmettent bien le périmètre au use case.
+ *
+ * Distinct du groupe ci-dessus, qui vérifie l'**ordre** des appels : ce qui est
+ * en jeu ici est leur **contenu**. Les use cases acceptent tous un périmètre
+ * facultatif — absent ou `null` vaut « aucune restriction », pour que le chemin
+ * du propriétaire reste inchangé. C'est commode et c'est le piège : un
+ * contrôleur qui oublie de le passer, ou qui passe `null`, compile, s'exécute,
+ * rend une réponse plausible — et sert au gérant tout le parc du propriétaire.
+ * Seule une assertion sur l'argument réellement transmis attrape cette bévue.
+ */
+test.group('le périmètre descend jusqu’au use case', (group) => {
+  let received: unknown[] = []
+  const restore: Array<() => void> = []
+
+  group.each.setup(() => {
+    received = []
+  })
+
+  group.each.teardown(() => {
+    while (restore.length) restore.pop()!()
+  })
+
+  /** Remplace `execute` et retient les arguments reçus. */
+  function capture(target: { prototype: { execute: unknown } }, result: unknown = {}) {
+    const original = target.prototype.execute
+
+    target.prototype.execute = async (...args: unknown[]) => {
+      received = args
+      return result
+    }
+
+    restore.push(() => {
+      target.prototype.execute = original
+    })
+  }
+
+  test('GET /expenses/summary : le résumé porte sur le périmètre', async ({ assert }) => {
+    capture(GetExpenseSummaryUseCase, { total: 0, count: 0, by_category: [] })
+
+    await new GerantExpenseController().summary(ctx())
+
+    const [ownerId, filters] = received as [string, { scope_property_ids?: string[] | null }]
+
+    assert.equal(ownerId, 'owner-1')
+    // Le total et la liste sont demandés ensemble par l'écran Dépenses : un
+    // résumé non cloisonné afficherait, au-dessus de deux lignes, la somme
+    // dépensée sur tout le parc.
+    assert.deepEqual(filters.scope_property_ids, ['in-scope'])
+  })
+
+  test('GET /clients/:id/bookings : l’historique porte sur le périmètre', async ({ assert }) => {
+    capture(GetScopedClientUseCase, { id: 'cl-1' })
+    capture(ListClientBookingsUseCase, { data: [], stats: {} })
+
+    await new GerantClientController().bookings(ctx())
+
+    const [clientId, ownerId, scopePropertyIds] = received as [string, string, string[] | null]
+
+    assert.equal(clientId, 'res-1')
+    assert.equal(ownerId, 'owner-1')
+    // `null` ici rendrait l'historique complet du client — séjours faits dans
+    // les logements non confiés compris —, et les cumuls avec.
+    assert.deepEqual(scopePropertyIds, ['in-scope'])
+  })
+
+  test('un gérant sans affectation transmet une liste vide, jamais `null`', async ({ assert }) => {
+    capture(GetExpenseSummaryUseCase, { total: 0, count: 0, by_category: [] })
+
+    const empty = ctx()
+    empty.scope = { ownerId: 'owner-1', actorId: 'gerant-1', propertyIds: [] }
+
+    await new GerantExpenseController().summary(empty)
+
+    const [, filters] = received as [string, { scope_property_ids?: string[] | null }]
+
+    // L'invariant central : `[]` n'est pas `null`. Les confondre donnerait tout
+    // le compte du propriétaire à un gérant fraîchement créé.
+    assert.deepEqual(filters.scope_property_ids, [])
+    assert.isNotNull(filters.scope_property_ids)
+  })
+
+  test('POST /bookings/:id/check-out : la garde précède la clôture', async ({ assert }) => {
+    const order: string[] = []
+
+    const originalFind = FindOwnerBookingUseCase.prototype.execute
+    FindOwnerBookingUseCase.prototype.execute = async () => {
+      order.push('garde')
+      return { id: 'bk-1', property_id: 'in-scope' } as never
+    }
+
+    const originalCheckOut = CheckOutBookingUseCase.prototype.execute
+    CheckOutBookingUseCase.prototype.execute = async () => {
+      order.push('écriture')
+      return {} as never
+    }
+
+    restore.push(() => {
+      FindOwnerBookingUseCase.prototype.execute = originalFind
+      CheckOutBookingUseCase.prototype.execute = originalCheckOut
+    })
+
+    await new GerantBookingController().checkOut(ctx())
+
+    assert.deepEqual(order, ['garde', 'écriture'])
+  })
+
+  test('POST /bookings/:id/check-out : hors périmètre, rien n’est clôturé', async ({ assert }) => {
+    const order: string[] = []
+
+    const originalFind = FindOwnerBookingUseCase.prototype.execute
+    FindOwnerBookingUseCase.prototype.execute = async () => {
+      order.push('garde')
+      return { id: 'bk-1', property_id: 'hors-périmètre' } as never
+    }
+
+    const originalCheckOut = CheckOutBookingUseCase.prototype.execute
+    CheckOutBookingUseCase.prototype.execute = async () => {
+      order.push('écriture')
+      return {} as never
+    }
+
+    restore.push(() => {
+      FindOwnerBookingUseCase.prototype.execute = originalFind
+      CheckOutBookingUseCase.prototype.execute = originalCheckOut
+    })
+
+    await assert.rejects(() => new GerantBookingController().checkOut(ctx()))
+
+    // Une clôture pose `completed_at` et `actual_check_out_at` : la garde
+    // déplacée après elle lèverait la même erreur sur un séjour déjà clos.
+    assert.deepEqual(order, ['garde'])
   })
 })
 

@@ -296,6 +296,23 @@ qu'en présence d'une fiche.
 **Le mobile doit traiter `client: null` sur cette route**, où il recevait
 jusqu'ici un objet. `POST /proprio/clients` est inchangé.
 
+**`GET /gerant/clients/:id/bookings` rend les cumuls du périmètre, non de
+l'historique.** Deux périmètres s'y croisent : la fiche doit relever du carnet
+visible par le gérant, et les séjours rendus se limiter à ses logements. Un
+client fidèle peut avoir séjourné ailleurs dans le parc du propriétaire.
+
+Les cumuls — nombre de séjours, total versé, dernier séjour — portent donc sur
+les seuls séjours rendus. Servir le total complet afficherait « 12 séjours,
+480 000 F » au-dessus d'une liste de 6 lignes : un total qui contredit sa
+propre liste, et dont l'écart dirait au gérant ce que la règle cherche
+précisément à lui fermer. C'est le principe posé pour le relevé financier,
+appliqué au carnet — six logements gérés sur dix, six logements comptés.
+
+Le calcul est d'ailleurs déjà bon par construction : `computeClientStats` agrège
+la liste rendue, et non un compteur stocké sur la fiche. Le cache `stats` de la
+fiche n'est jamais réécrit depuis une lecture cloisonnée, sans quoi les totaux
+du propriétaire rétréciraient au gré de qui consulte son carnet.
+
 Le rejeu d'idempotence obéit à la même logique. `POST /gerant/bookings` retrouve
 une réservation par `client_request_id` : la garde d'écriture valide le
 `property_id` *de la requête*, mais le rejeu rend un document **différent**. Le
@@ -421,6 +438,8 @@ périmètre et le cloisonnement des calculs.
 - Un client du propriétaire n'ayant séjourné que hors périmètre est invisible
   au gérant.
 - Un client créé par le gérant lui reste visible avant toute réservation.
+- L'historique d'un client ne montre aucun séjour hors périmètre, et ses cumuls
+  ne les comptent pas.
 
 **Cloisonnement de l'affichage des résidences**
 

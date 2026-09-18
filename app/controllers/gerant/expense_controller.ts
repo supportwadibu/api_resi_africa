@@ -13,6 +13,7 @@ import {
   CreateExpenseUseCase,
   DeleteExpenseUseCase,
   FindExpenseUseCase,
+  GetExpenseSummaryUseCase,
   ListOwnerExpensesUseCase,
   UpdateExpenseUseCase,
 } from '../../features/expenses/use_cases/index.ts'
@@ -39,6 +40,29 @@ export default class GerantExpenseController {
     })
 
     return ctx.response.ok(result)
+  }
+
+  /**
+   * Total et ventilation par catégorie, sur les mêmes filtres que la liste.
+   *
+   * L'écran Dépenses demande la liste et ce résumé ensemble : les deux doivent
+   * donc porter sur le même ensemble, faute de quoi le total afficherait des
+   * milliers de francs dépensés sur des logements absents de la liste juste en
+   * dessous — et trahirait leur existence.
+   */
+  async summary(ctx: HttpContext) {
+    const payload = await ctx.request.validateUsing(listExpensesValidator, {
+      data: ctx.request.qs(),
+    })
+
+    const summary = await new GetExpenseSummaryUseCase().execute(ctx.scope.ownerId, {
+      ...payload,
+      from: payload.from?.toJSDate(),
+      to: payload.to?.toJSDate(),
+      scope_property_ids: ctx.scope.propertyIds,
+    })
+
+    return ctx.response.ok({ data: summary })
   }
 
   async store(ctx: HttpContext) {

@@ -12,6 +12,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 
 import {
   CancelOwnerBookingUseCase,
+  CheckOutBookingUseCase,
   CreateOwnerBookingUseCase,
   ExtendOwnerBookingUseCase,
   FindOwnerBookingUseCase,
@@ -86,7 +87,18 @@ export default class GerantBookingController {
     return ctx.response.created({ data: booking })
   }
 
-  /** Prolongation d'un séjour comptoir. */
+  /**
+   * Prolongation d'un séjour comptoir.
+   *
+   * Servie par deux routes — `PATCH :id` et `PATCH :id/extend` — parce que le
+   * mobile appelle la seconde, qui est celle du chemin propriétaire. La
+   * première est conservée : elle est déjà publiée, et la retirer casserait un
+   * client installé.
+   *
+   * Un `booking_period_conflict` (409) remonte du use case tel quel : c'est un
+   * arbitrage à porter au propriétaire, pas une panne à réessayer — la file
+   * hors ligne du mobile en dépend.
+   */
   async update(ctx: HttpContext) {
     await this.findInScope(ctx)
 
@@ -100,6 +112,20 @@ export default class GerantBookingController {
       }
     )
 
+    return ctx.response.ok({ data: booking })
+  }
+
+  /**
+   * Clôture d'un séjour au comptoir.
+   *
+   * `findInScope` précède l'écriture : le cadrage sur `owner_id` que porte le
+   * use case ne suffit pas, toutes les réservations du propriétaire le passent
+   * — y compris celles des logements qui ne sont pas confiés à ce gérant.
+   */
+  async checkOut(ctx: HttpContext) {
+    await this.findInScope(ctx)
+
+    const booking = await new CheckOutBookingUseCase().execute(ctx.params.id, ctx.scope.ownerId)
     return ctx.response.ok({ data: booking })
   }
 

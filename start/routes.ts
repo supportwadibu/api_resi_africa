@@ -249,6 +249,11 @@ router
             router.get(':id', [GerantBookingController, 'show'])
             router.patch(':id', [GerantBookingController, 'update'])
             router.patch(':id/cancel', [GerantBookingController, 'cancel'])
+            // Mêmes verbes et mêmes chemins que côté propriétaire : le mobile
+            // ne fait que substituer le préfixe, et un `POST` ici lui rendrait
+            // un 404 muet.
+            router.patch(':id/check-out', [GerantBookingController, 'checkOut'])
+            router.patch(':id/extend', [GerantBookingController, 'update'])
             router.post(':id/payments', [GerantBookingController, 'recordPayment'])
           })
           .prefix('bookings')
@@ -259,6 +264,7 @@ router
             router.get('/', [GerantClientController, 'index'])
             router.post('/', [GerantClientController, 'store'])
             router.get(':id', [GerantClientController, 'show'])
+            router.get(':id/bookings', [GerantClientController, 'bookings'])
             router.patch(':id', [GerantClientController, 'update'])
           })
           .prefix('clients')
@@ -267,6 +273,8 @@ router
         router
           .group(() => {
             router.get('/', [GerantExpenseController, 'index'])
+            // Avant `:id`, sinon « summary » serait pris pour un identifiant.
+            router.get('summary', [GerantExpenseController, 'summary'])
             router.post('/', [GerantExpenseController, 'store'])
             router.patch(':id', [GerantExpenseController, 'update'])
             router.delete(':id', [GerantExpenseController, 'destroy'])

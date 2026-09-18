@@ -9,6 +9,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import {
   CreateClientUseCase,
   GetScopedClientUseCase,
+  ListClientBookingsUseCase,
   ListClientsUseCase,
   UpdateClientUseCase,
 } from '../../features/clients/use_cases/index.ts'
@@ -76,6 +77,32 @@ export default class GerantClientController {
   async show(ctx: HttpContext) {
     const client = await new GetScopedClientUseCase().execute(ctx.params.id, ctx.scope)
     return ctx.response.ok({ data: client })
+  }
+
+  /**
+   * Historique des séjours d'un client, cumuls compris.
+   *
+   * Deux périmètres se croisent, et les deux comptent : la fiche doit relever
+   * du carnet visible par le gérant — `GetScopedClientUseCase` —, **et** les
+   * séjours rendus doivent se limiter à ses logements. Un client fidèle peut
+   * avoir séjourné ailleurs dans le parc du propriétaire ; ces séjours-là ne
+   * lui regardent pas.
+   *
+   * Les cumuls suivent la même coupe, parce qu'ils sont recalculés sur la
+   * liste rendue et non lus sur la fiche. « 12 séjours, 480 000 F » en face de
+   * 6 lignes affichées serait un total qui contredit sa propre liste, et le
+   * chiffre manquant dirait au gérant ce qu'il ne doit pas savoir.
+   */
+  async bookings(ctx: HttpContext) {
+    await new GetScopedClientUseCase().execute(ctx.params.id, ctx.scope)
+
+    const result = await new ListClientBookingsUseCase().execute(
+      ctx.params.id,
+      ctx.scope.ownerId,
+      ctx.scope.propertyIds
+    )
+
+    return ctx.response.ok(result)
   }
 
   async update(ctx: HttpContext) {
