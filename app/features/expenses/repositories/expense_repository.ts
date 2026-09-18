@@ -186,6 +186,12 @@ export class ExpenseRepository {
       category: filters.category,
       from: filters.from,
       to: filters.to,
+      // Le périmètre doit descendre jusqu'à la requête, comme pour `paginate` :
+      // omis ici, le total et la ventilation porteraient sur toutes les dépenses
+      // du propriétaire alors que la liste affichée à côté, elle, est cloisonnée
+      // — deux chiffres contradictoires sur le même écran, dont le plus large
+      // révélerait les logements non confiés.
+      scope_property_ids: filters.scope_property_ids,
     })
     const { total, count } = summary
 
