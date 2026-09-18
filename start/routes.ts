@@ -247,13 +247,13 @@ router
             router.get('/', [GerantBookingController, 'index'])
             router.post('/', [GerantBookingController, 'store'])
             router.get(':id', [GerantBookingController, 'show'])
-            router.patch(':id', [GerantBookingController, 'update'])
+            router.patch(':id', [GerantBookingController, 'update']).as('update')
             router.patch(':id/cancel', [GerantBookingController, 'cancel'])
             // Mêmes verbes et mêmes chemins que côté propriétaire : le mobile
             // ne fait que substituer le préfixe, et un `POST` ici lui rendrait
             // un 404 muet.
             router.patch(':id/check-out', [GerantBookingController, 'checkOut'])
-            router.patch(':id/extend', [GerantBookingController, 'update'])
+            router.patch(':id/extend', [GerantBookingController, 'update']).as('extend')
             router.post(':id/payments', [GerantBookingController, 'recordPayment'])
           })
           .prefix('bookings')
