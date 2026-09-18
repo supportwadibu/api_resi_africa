@@ -1,6 +1,7 @@
 import {
   createClientValidator,
   listClientsValidator,
+  lookupClientValidator,
   updateClientValidator,
 } from '#validators/client/client'
 
@@ -11,6 +12,7 @@ import {
   GetScopedClientUseCase,
   ListClientBookingsUseCase,
   ListClientsUseCase,
+  LookupClientUseCase,
   UpdateClientUseCase,
 } from '../../features/clients/use_cases/index.ts'
 
@@ -128,5 +130,30 @@ export default class GerantClientController {
     )
 
     return ctx.response.ok({ data: client })
+  }
+
+  /**
+   * Recherche par numéro pendant la saisie au comptoir.
+   *
+   * Appelée en continu pendant que le gérant tape le téléphone, pour proposer
+   * la fiche existante et éviter un doublon. Sans cette route, l'appel échouait
+   * en 404 et le carnet se remplissait de doublons du même client.
+   *
+   * Le périmètre descend jusqu'au use case, et c'est tout l'enjeu : la
+   * recherche est cadrée sur `owner_id` seul, si bien qu'un numéro quelconque
+   * livrerait la fiche complète d'un client hors périmètre. Ouvrir la route
+   * sans transmettre `ctx.scope` compilerait et rendrait précisément la porte
+   * que la non-exposition de cette route fermait jusqu'ici.
+   */
+  async lookup(ctx: HttpContext) {
+    const payload = await ctx.request.validateUsing(lookupClientValidator)
+
+    const result = await new LookupClientUseCase().execute(
+      ctx.scope.ownerId,
+      payload.phone,
+      ctx.scope
+    )
+
+    return ctx.response.ok(result)
   }
 }

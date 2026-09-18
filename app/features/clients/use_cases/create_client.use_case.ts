@@ -31,8 +31,9 @@ export class CreateClientUseCase {
       // Le cadrage sur `owner_id` ne suffit pas au gérant : il couvre *tout* le
       // carnet du propriétaire, si bien qu'un numéro quelconque livrait la
       // fiche complète d'un client hors périmètre — pièce d'identité et
-      // statistiques comprises. C'est la porte que `POST /proprio/clients/
-      // lookup`, délibérément non exposé au gérant, ferme par ailleurs.
+      // statistiques comprises. Même porte que celle refermée sur
+      // `LookupClientUseCase` : deux chemins mènent d'un numéro à une fiche, et
+      // n'en garder qu'un fermé ne fermerait rien.
       if (!(await this.isVisibleTo(existing, scope))) {
         // Accusé nu plutôt que 403 : le gérant doit pouvoir constater qu'il n'y
         // a rien à créer, sans rien apprendre de la fiche — pas même par

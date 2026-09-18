@@ -239,6 +239,7 @@ POST   /gerant/bookings/:id/payments      encaissement
 
 GET    /gerant/clients                    carnet clients du propriétaire
 POST   /gerant/clients                    création
+POST   /gerant/clients/lookup             recherche par téléphone (cloisonnée)
 GET    /gerant/clients/:id                détail
 PATCH  /gerant/clients/:id                modification
 
@@ -279,8 +280,9 @@ disparaîtrait entre sa création et la réservation qu'elle sert.
 par téléphone : quand la fiche existe déjà, elle est renvoyée telle quelle.
 Cadré sur le seul `owner_id`, ce dédoublonnage livrait la fiche complète —
 pièce d'identité comprise — de n'importe quel client du propriétaire, sur
-simple envoi d'un numéro. C'est la porte que ferme par ailleurs la
-non-exposition de `POST /proprio/clients/lookup` au gérant.
+simple envoi d'un numéro. C'est la même porte que ferme la recherche par
+téléphone, décrite plus bas : deux chemins mènent d'un numéro à une fiche, et
+laisser l'un ouvert suffirait à rendre l'autre inutile.
 
 Quand la fiche trouvée est hors périmètre, la réponse est donc un **accusé nu** :
 
@@ -295,6 +297,44 @@ qu'en présence d'une fiche.
 
 **Le mobile doit traiter `client: null` sur cette route**, où il recevait
 jusqu'ici un objet. `POST /proprio/clients` est inchangé.
+
+**`POST /gerant/clients/lookup` est ouverte, sous la même règle.** Elle ne
+l'était pas, et le mobile l'appelait quand même : `clientLookup(role)` bascule
+sur le rôle stocké, si bien que le gérant postait sur une route inexistante et
+recevait un 404. L'appel part en débounce pendant la saisie du téléphone au
+comptoir, et son échec est silencieux — le carnet du gérant se remplissait donc
+de doublons du même client, précisément ce que la recherche existe pour éviter.
+
+Fermer la route n'était pas tenable, et l'ouvrir telle quelle l'était encore
+moins : la recherche est cadrée sur le seul `owner_id`, si bien qu'un numéro
+quelconque livrait la fiche complète — pièce d'identité et cumuls compris — de
+n'importe quel client du propriétaire. C'est exactement « sonder le carnet du
+propriétaire avec un numéro ». Le périmètre descend donc jusqu'au use case, sur
+la règle de visibilité commune : séjour dans le périmètre, **ou** fiche créée
+par le gérant qui interroge.
+
+Hors périmètre, la réponse est celle d'un **numéro inconnu** :
+
+```json
+{ "exists": false, "client": null }
+```
+
+Et non `exists: true` avec la fiche omise, comme le fait l'accusé nu de
+`POST /gerant/clients`. La différence tient à ce qu'il reste à décider. La
+création doit accuser qu'il n'y a rien à créer, faute de quoi l'application
+retenterait ; une recherche n'a aucune action en suspens et peut se taire tout à
+fait. Or `exists: true` serait ici l'oracle même que la règle ferme, puisque
+seule une fiche existante le distinguerait. Les deux réponses sont donc
+indistinguables octet pour octet, ce que verrouille un test.
+
+Conséquence voulue : un gérant qui saisit le numéro d'un client hors périmètre
+crée une **seconde fiche**, portant son `created_by`. Deux fiches pour une même
+personne dans le carnet du propriétaire est le prix du cloisonnement — le seul
+moyen de l'éviter serait de révéler la première.
+
+Côté mobile, rien à changer : `ClientLookup.fromJson` lit `exists` et un
+`client` déjà nullable, et `exists: false` remet proprement l'état de saisie à
+zéro.
 
 **`GET /gerant/clients/:id/bookings` rend les cumuls du périmètre, non de
 l'historique.** Deux périmètres s'y croisent : la fiche doit relever du carnet
@@ -438,6 +478,12 @@ périmètre et le cloisonnement des calculs.
 - Un client du propriétaire n'ayant séjourné que hors périmètre est invisible
   au gérant.
 - Un client créé par le gérant lui reste visible avant toute réservation.
+- La recherche par téléphone rend, hors périmètre, une réponse **identique** à
+  celle d'un numéro inconnu — comparée sur la sérialisation entière, sans quoi
+  un champ oublié passerait.
+- Le contrôleur de recherche transmet bien `ctx.scope` : le périmètre est
+  facultatif sur le use case, si bien qu'un contrôleur qui l'omet compile et
+  sonde tout le carnet. Seule une assertion sur l'argument reçu l'attrape.
 - L'historique d'un client ne montre aucun séjour hors périmètre, et ses cumuls
   ne les comptent pas.
 

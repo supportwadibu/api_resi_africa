@@ -262,6 +262,8 @@ router
         router
           .group(() => {
             router.get('/', [GerantClientController, 'index'])
+            // Avant `:id`, sinon « lookup » serait pris pour un identifiant.
+            router.post('lookup', [GerantClientController, 'lookup'])
             router.post('/', [GerantClientController, 'store'])
             router.get(':id', [GerantClientController, 'show'])
             router.get(':id/bookings', [GerantClientController, 'bookings'])
