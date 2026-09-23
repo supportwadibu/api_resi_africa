@@ -231,6 +231,7 @@ PATCH  /gerant/properties/:id/availability disponibilité uniquement
 GET    /gerant/residences                 résidences contenant ses logements (lecture)
 
 GET    /gerant/bookings                   liste
+GET    /gerant/bookings/stats             compteurs du mois, cloisonnés
 POST   /gerant/bookings                   création comptoir (idempotente)
 GET    /gerant/bookings/:id               détail
 PATCH  /gerant/bookings/:id               modification
@@ -263,6 +264,26 @@ expose que ces logements-là. Une résidence de 10 logements dont 6 affectés s'
 présente avec 6 unités. Le champ dénormalisé `units_count` n'est donc **pas**
 renvoyé tel quel au gérant : il compte les 10 et trahirait l'existence des 4
 autres.
+
+**`GET /gerant/bookings/stats` cloisonne son dénominateur, pas seulement son
+numérateur.** Les compteurs de l'onglet Réservations — taux d'occupation,
+séjours à venir, séjours en cours, revenu du mois rapporté au précédent — sont
+du **brut**, que le gérant a le droit de lire sur ses logements :
+`BookingStatsDto` ne porte aucun net.
+
+Le calcul croise deux lectures distinctes — les réservations d'un côté, le parc
+de l'autre — et le périmètre doit descendre dans **les deux**. Le taux
+d'occupation est le point délicat : son numérateur vient des séjours, son
+dénominateur des jours-bien du parc. Cloisonner la seule première lecture
+rapporterait les nuits des six logements confiés aux jours-bien des dix du
+propriétaire — un taux écrasé d'environ 40 %, faux, et affiché comme un fait.
+C'est le principe posé pour le relevé financier : six logements gérés sur dix,
+six logements comptés, au numérateur comme au dénominateur.
+
+Aucun index Firestore n'est requis : les deux requêtes reprennent les formes que
+`GET /gerant/bookings` et `GET /gerant/properties` exercent déjà, et
+`Property.statsByOwner` bascule sur ses agrégats en mémoire dans les deux cas
+que `in` refuse — périmètre vide, ou de plus de 30 logements.
 
 **`GET /gerant/clients` ne rend pas tout le carnet.** Les clients sont
 cloisonnés par `owner_id`, pas par logement : servir le carnet entier
@@ -472,6 +493,10 @@ périmètre et le cloisonnement des calculs.
 
 - Le relevé du gérant ne contient aucun champ de revenu net.
 - Une dépense saisie par un gérant apparaît dans le relevé du propriétaire.
+- Le taux d'occupation des compteurs du gérant a pour dénominateur ses seuls
+  logements. À numérateur égal, six logements confiés sur dix rendent un taux
+  exactement 10/6 fois celui du parc entier — un rapport, et non une simple
+  inégalité, faute de quoi un dénominateur à peine réduit passerait.
 
 **Cloisonnement du carnet clients**
 

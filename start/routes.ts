@@ -245,6 +245,8 @@ router
         router
           .group(() => {
             router.get('/', [GerantBookingController, 'index'])
+            // Avant `:id`, sinon « stats » serait pris pour un identifiant.
+            router.get('stats', [GerantBookingController, 'stats'])
             router.post('/', [GerantBookingController, 'store'])
             router.get(':id', [GerantBookingController, 'show'])
             router.patch(':id', [GerantBookingController, 'update']).as('update')

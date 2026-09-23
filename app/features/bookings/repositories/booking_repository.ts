@@ -249,8 +249,19 @@ export class BookingRepository {
    * Une seule lecture couvre les deux mois — `findForRevenue` filtre en
    * mémoire, si bien que demander chaque mois séparément doublerait les
    * lectures Firestore pour le même jeu de documents.
+   *
+   * `scope_property_ids` restreint les **deux** sources du calcul, et c'est
+   * indissociable : le numérateur du taux d'occupation vient des réservations,
+   * son dénominateur du parc. Ne cloisonner que le premier rapporterait les
+   * nuits des six logements confiés aux dix jours-bien du propriétaire — un
+   * taux structurellement écrasé, affiché comme un fait. Absent ou `null`, la
+   * lecture reste celle du propriétaire, strictement inchangée.
    */
-  async stats(owner_id: string, now: Date = new Date()): Promise<BookingStatsDto> {
+  async stats(
+    owner_id: string,
+    now: Date = new Date(),
+    scope_property_ids: string[] | null = null
+  ): Promise<BookingStatsDto> {
     const current = monthWindow(now)
     const previous = monthWindow(now, -1)
 
@@ -258,8 +269,12 @@ export class BookingRepository {
     // de l'écran tiennent dans cette fenêtre, le mois précédent ne servant
     // qu'à la comparaison de revenu.
     const [bookings, propertyStats] = await Promise.all([
-      Booking.findForRevenue(owner_id, { from: previous.from, to: current.to }),
-      Property.statsByOwner(owner_id),
+      Booking.findForRevenue(
+        owner_id,
+        { from: previous.from, to: current.to },
+        { property_ids: scope_property_ids }
+      ),
+      Property.statsByOwner(owner_id, scope_property_ids),
     ])
 
     const currentRevenue = revenueForMonth(bookings, current)
