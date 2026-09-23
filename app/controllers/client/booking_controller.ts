@@ -10,7 +10,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import {
   CancelBookingUseCase,
   CreateBookingUseCase,
-  ListClientBookingsUseCase,
+  ListMyBookingsUseCase,
 } from '../../features/bookings/use_cases/index.ts'
 import UpdateBookingUseCase from '../../features/bookings/use_cases/update_booking.use_case.ts'
 
@@ -22,7 +22,7 @@ export default class ClientBookingController {
     const payload = await ctx.request.validateUsing(listBookingsValidator, {
       data: ctx.request.qs(),
     })
-    const result = await new ListClientBookingsUseCase().execute(userId, payload)
+    const result = await new ListMyBookingsUseCase().execute(userId, payload)
     return ctx.response.ok(result)
   }
 
