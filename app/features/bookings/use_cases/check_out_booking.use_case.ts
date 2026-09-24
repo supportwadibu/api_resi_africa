@@ -1,7 +1,9 @@
 import Booking from '#models/booking'
+import type { BookingRecord } from '#models/booking'
 import { DomainError } from '#utils/domain_error'
 
-import type { BookingDto, BookingStatus } from '../dto/booking.dto.ts'
+import type { BookingDto, BookingStatus, CheckOutBookingInput } from '../dto/booking.dto.ts'
+import { buildEarlyCheckOutPatch, quoteEarlyCheckOut } from '../early_check_out.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 
 /**
@@ -17,7 +19,8 @@ import BookingRepository from '../repositories/booking_repository.ts'
  *
  * La sortie réelle est donc consignée à part, dans `actual_check_out_at` :
  * l'information n'est pas perdue, mais elle ne pilote aucun calcul. Un départ
- * anticipé se règle par un avoir, pas par une réécriture de la période.
+ * anticipé ne passe pas par ici mais par `buildEarlyCheckOutPatch`, qui réécrit
+ * la période **et** le montant d'un même geste.
  */
 export function buildCheckOutPatch(now: Date): {
   status: BookingStatus
@@ -44,10 +47,51 @@ export function isStayStarted(
 }
 
 /**
- * Clôture un séjour.
+ * Lit une réservation et vérifie qu'elle peut être clôturée.
+ *
+ * Partagé par la clôture et sa simulation : un aperçu accepté sur un séjour
+ * que la clôture refuserait ferait valider au propriétaire un montant sans
+ * suite.
  *
  * Un séjour pas encore commencé ne se clôture pas, il s'annule : le clôturer
  * compterait comme encaissé un séjour qui n'a jamais eu lieu.
+ */
+export async function findClosableBooking(
+  id: string,
+  ownerId: string,
+  now: Date
+): Promise<BookingRecord> {
+  const booking = await Booking.findById(id)
+  if (!booking || booking.owner_id !== ownerId) {
+    throw new DomainError('booking_not_found', 'Réservation introuvable.', 404)
+  }
+
+  if (booking.status === 'completed') {
+    throw new DomainError('booking_already_completed', 'Séjour déjà clôturé.', 409)
+  }
+
+  if (booking.status === 'cancelled') {
+    throw new DomainError('booking_cancelled', 'Réservation annulée.', 409)
+  }
+
+  if (!isStayStarted(booking, now)) {
+    throw new DomainError(
+      'stay_not_started',
+      'Le séjour n’a pas encore commencé. Annulez la réservation plutôt que de la clôturer.',
+      422
+    )
+  }
+
+  return booking
+}
+
+/**
+ * Clôture un séjour, mené à terme ou écourté.
+ *
+ * Mené à terme — cas par défaut, et seul connu des versions du mobile déjà
+ * installées —, seul le statut change. Écourté (`full_stay: false`), la
+ * période et le montant sont ramenés à l'usage réel et l'écart est consigné
+ * comme remboursé.
  *
  * Les statistiques du carnet ne sont plus cumulées ici : elles se recalculent
  * depuis les réservations à la lecture de la fiche. Les incrémenter à la
@@ -55,31 +99,27 @@ export function isStayStarted(
  * et laissait dériver le compteur sur toute correction ultérieure.
  */
 export class CheckOutBookingUseCase {
-  async execute(id: string, ownerId: string): Promise<BookingDto> {
-    const booking = await Booking.findById(id)
-    if (!booking || booking.owner_id !== ownerId) {
-      throw new DomainError('booking_not_found', 'Réservation introuvable.', 404)
-    }
-
-    if (booking.status === 'completed') {
-      throw new DomainError('booking_already_completed', 'Séjour déjà clôturé.', 409)
-    }
-
-    if (booking.status === 'cancelled') {
-      throw new DomainError('booking_cancelled', 'Réservation annulée.', 409)
-    }
-
+  async execute(
+    id: string,
+    ownerId: string,
+    input: CheckOutBookingInput = {}
+  ): Promise<BookingDto> {
     const now = new Date()
+    const booking = await findClosableBooking(id, ownerId, now)
 
-    if (!isStayStarted(booking, now)) {
-      throw new DomainError(
-        'stay_not_started',
-        'Le séjour n’a pas encore commencé. Annulez la réservation plutôt que de la clôturer.',
-        422
+    let patch: Record<string, unknown> = buildCheckOutPatch(now)
+
+    if (input.full_stay === false) {
+      const quote = quoteEarlyCheckOut(booking, input.actual_check_out_at ?? now, now)
+      patch = buildEarlyCheckOutPatch(
+        booking,
+        quote,
+        input.final_amount ?? quote.proposed_amount,
+        now
       )
     }
 
-    const updated = await Booking.findOneAndUpdate(id, buildCheckOutPatch(now), {
+    const updated = await Booking.findOneAndUpdate(id, patch, {
       owner_id: ownerId,
     })
 

@@ -59,6 +59,12 @@ export class BookingRepository {
       // Sans repli : une réservation non clôturée n'a pas de sortie constatée,
       // et la remplacer par la sortie prévue laisserait croire au départ.
       actual_check_out_at: doc.actual_check_out_at,
+      // Sans repli : seul un séjour écourté porte une période d'origine.
+      planned_check_out_at: doc.planned_check_out_at,
+      planned_days_count: doc.planned_days_count,
+      planned_total_amount: doc.planned_total_amount,
+      // Absent de l'historique et des séjours menés à terme : rien n'a été rendu.
+      refunded_amount: doc.refunded_amount ?? 0,
       expected_amount: doc.expected_amount ?? doc.total_amount,
       received_amount: doc.received_amount ?? doc.total_amount,
       deposit_amount: doc.deposit_amount ?? 0,

@@ -128,6 +128,7 @@ router
             // Avant `:id`, sinon « stats » serait pris pour un identifiant.
             router.get('stats', [ProprioBookingController, 'stats'])
             router.post('/', [ProprioBookingController, 'store'])
+            router.get(':id/check-out/preview', [ProprioBookingController, 'checkOutPreview'])
             router.patch(':id/check-out', [ProprioBookingController, 'checkOut'])
             router.patch(':id/extend', [ProprioBookingController, 'extend'])
           })
@@ -254,6 +255,7 @@ router
             // Mêmes verbes et mêmes chemins que côté propriétaire : le mobile
             // ne fait que substituer le préfixe, et un `POST` ici lui rendrait
             // un 404 muet.
+            router.get(':id/check-out/preview', [GerantBookingController, 'checkOutPreview'])
             router.patch(':id/check-out', [GerantBookingController, 'checkOut'])
             router.patch(':id/extend', [GerantBookingController, 'update']).as('extend')
             router.post(':id/payments', [GerantBookingController, 'recordPayment'])

@@ -52,6 +52,12 @@ export interface BookingDto {
   check_out_at?: Date
   /** Sortie réellement constatée, distincte de la période facturée. */
   actual_check_out_at?: Date
+  /** Sortie, durée et montant vendus, présents seulement après un départ anticipé. */
+  planned_check_out_at?: Date
+  planned_days_count?: number
+  planned_total_amount?: number
+  /** Somme rendue au client sur un départ anticipé. */
+  refunded_amount: number
   expected_amount?: number
   received_amount?: number
   deposit_amount?: number
@@ -166,6 +172,23 @@ export interface ListBookingsOutput {
     lastPage: number
   }
 }
+
+/**
+ * Clôture d'un séjour.
+ *
+ * Tous les champs sont optionnels : une clôture sans corps — celle des versions
+ * du mobile déjà installées — vaut séjour mené à terme.
+ */
+export interface CheckOutBookingInput {
+  /** `false` = départ anticipé : période et montant sont ramenés à l'usage. */
+  full_stay?: boolean
+  /** Sortie réelle d'un départ anticipé. À défaut, l'instant de la clôture. */
+  actual_check_out_at?: Date
+  /** Montant retenu. À défaut, le prorata proposé. */
+  final_amount?: number
+}
+
+export type { EarlyCheckOutQuote as EarlyCheckOutQuoteDto } from '../early_check_out.ts'
 
 export interface CancelBookingInput {
   reason?: string

@@ -71,6 +71,24 @@ export const extendOwnerBookingValidator = vine.compile(
   })
 )
 
+/**
+ * Clôture d'un séjour. Corps entièrement optionnel : les versions du mobile
+ * déjà installées clôturent sans corps, ce qui vaut séjour mené à terme.
+ */
+export const checkOutBookingValidator = vine.compile(
+  vine.object({
+    full_stay: vine.boolean().optional(),
+    actual_check_out_at: vine.date({ formats: ['iso8601'] }).optional(),
+    final_amount: vine.number().min(0).optional(),
+  })
+)
+
+export const checkOutPreviewValidator = vine.compile(
+  vine.object({
+    at: vine.date({ formats: ['iso8601'] }).optional(),
+  })
+)
+
 export const availabilityValidator = vine.compile(
   vine.object({
     property_id: vine.string().trim().minLength(1),

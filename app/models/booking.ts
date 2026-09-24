@@ -90,6 +90,25 @@ export interface BookingDocument {
    */
   actual_check_out_at?: Date
 
+  /**
+   * Période et montant vendus, figés par un départ anticipé.
+   *
+   * Absents tant que le séjour n'a pas été écourté — et sur tout l'historique.
+   * Le départ anticipé réécrit `end_date` et `total_amount` ; ces copies
+   * gardent la trace de ce qui avait été convenu. Purement informatifs : ni
+   * Finance ni le contrôle de chevauchement ne les lisent.
+   */
+  planned_check_out_at?: Date
+  planned_days_count?: number
+  planned_total_amount?: number
+  /**
+   * Somme rendue au client sur un départ anticipé. Absente = rien rendu.
+   *
+   * Déjà déduite de `total_amount` : Finance ne la retranche pas une seconde
+   * fois, elle l'affiche à titre d'information.
+   */
+  refunded_amount?: number
+
   /** Montant calculé depuis la grille du bien, avant négociation. */
   expected_amount?: number
   /** Montant réellement convenu, saisi par le propriétaire. */
