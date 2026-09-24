@@ -1,4 +1,6 @@
 import {
+  checkOutBookingValidator,
+  checkOutPreviewValidator,
   createOwnerBookingValidator,
   extendOwnerBookingValidator,
   listBookingsValidator,
@@ -12,6 +14,7 @@ import {
   ExtendOwnerBookingUseCase,
   GetBookingStatsUseCase,
   ListOwnerBookingsUseCase,
+  PreviewCheckOutUseCase,
 } from '../../features/bookings/use_cases/index.ts'
 
 export default class ProprioBookingController {
@@ -81,7 +84,28 @@ export default class ProprioBookingController {
     const userId = ctx.authUser?.id
     if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
 
-    const booking = await new CheckOutBookingUseCase().execute(ctx.params.id, userId)
+    const payload = await ctx.request.validateUsing(checkOutBookingValidator)
+    const booking = await new CheckOutBookingUseCase().execute(ctx.params.id, userId, {
+      full_stay: payload.full_stay,
+      actual_check_out_at: payload.actual_check_out_at?.toJSDate(),
+      final_amount: payload.final_amount,
+    })
     return ctx.response.ok({ data: booking })
+  }
+
+  /** Chiffrage d'un départ anticipé, affiché avant validation. */
+  async checkOutPreview(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const payload = await ctx.request.validateUsing(checkOutPreviewValidator, {
+      data: ctx.request.qs(),
+    })
+    const quote = await new PreviewCheckOutUseCase().execute(
+      ctx.params.id,
+      userId,
+      payload.at?.toJSDate()
+    )
+    return ctx.response.ok({ data: quote })
   }
 }

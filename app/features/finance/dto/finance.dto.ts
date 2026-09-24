@@ -5,6 +5,11 @@ export interface FinanceSummaryDto {
   depenses: number
   /** Bénéfice net, qui peut être négatif si les charges dépassent les revenus. */
   benefice_net: number
+  /**
+   * Sommes rendues sur départs anticipés, déjà déduites de `ca_brut`.
+   * Affichées pour rapprocher la caisse, jamais retranchées une seconde fois.
+   */
+  remboursements: number
   /** Part des jours occupés sur la période, de 0 à 1. */
   taux_occupation: number
   reservations: number

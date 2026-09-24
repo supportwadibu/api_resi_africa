@@ -110,6 +110,30 @@ export function aggregateGrossRevenue(
   return revenueSlicesInWindow(bookings, range).reduce((sum, slice) => sum + slice.amount, 0)
 }
 
+/**
+ * Sommes rendues aux clients sur la fenêtre, rattachées au jour du départ.
+ *
+ * Le jour du départ et non la période du séjour : c'est à ce moment que
+ * l'argent sort, et un remboursement réparti sur les jours du séjour
+ * n'aurait pas de sens pour qui rapproche sa caisse.
+ *
+ * Informatif : `total_amount` est déjà diminué du remboursement, le retrancher
+ * du chiffre d'affaires le compterait deux fois.
+ */
+export function aggregateRefunds(
+  bookings: { refunded_amount?: number; actual_check_out_at?: Date }[],
+  range: { from?: Date; to?: Date }
+): number {
+  return bookings.reduce((sum, booking) => {
+    const refunded = booking.refunded_amount ?? 0
+    const at = booking.actual_check_out_at
+    if (!refunded || !at) return sum
+    if (range.from && at < range.from) return sum
+    if (range.to && at >= range.to) return sum
+    return sum + refunded
+  }, 0)
+}
+
 export class FinanceRepository {
   /**
    * Rapproche revenus et charges sur une période.
@@ -182,6 +206,7 @@ export class FinanceRepository {
         // Peut être négatif : un mois de travaux sans réservation est une perte,
         // et la masquer à zéro tromperait le propriétaire.
         benefice_net: caBrut - depenses,
+        remboursements: aggregateRefunds(bookings, range),
         // `published + rented` : un bien réservé passe en « rented » et sort
         // des publiés, alors qu'il fait toujours partie du parc exploité.
         taux_occupation: this.occupancyRate(

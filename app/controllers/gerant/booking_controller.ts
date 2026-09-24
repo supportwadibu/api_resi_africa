@@ -1,4 +1,6 @@
 import {
+  checkOutBookingValidator,
+  checkOutPreviewValidator,
   createOwnerBookingValidator,
   cancelBookingValidator,
   extendOwnerBookingValidator,
@@ -18,6 +20,7 @@ import {
   FindOwnerBookingUseCase,
   GetBookingStatsUseCase,
   ListOwnerBookingsUseCase,
+  PreviewCheckOutUseCase,
   RecordBookingPaymentUseCase,
 } from '../../features/bookings/use_cases/index.ts'
 
@@ -148,8 +151,28 @@ export default class GerantBookingController {
   async checkOut(ctx: HttpContext) {
     await this.findInScope(ctx)
 
-    const booking = await new CheckOutBookingUseCase().execute(ctx.params.id, ctx.scope.ownerId)
+    const payload = await ctx.request.validateUsing(checkOutBookingValidator)
+    const booking = await new CheckOutBookingUseCase().execute(ctx.params.id, ctx.scope.ownerId, {
+      full_stay: payload.full_stay,
+      actual_check_out_at: payload.actual_check_out_at?.toJSDate(),
+      final_amount: payload.final_amount,
+    })
     return ctx.response.ok({ data: booking })
+  }
+
+  /** Chiffrage d'un départ anticipé, cadré sur le périmètre comme la clôture. */
+  async checkOutPreview(ctx: HttpContext) {
+    await this.findInScope(ctx)
+
+    const payload = await ctx.request.validateUsing(checkOutPreviewValidator, {
+      data: ctx.request.qs(),
+    })
+    const quote = await new PreviewCheckOutUseCase().execute(
+      ctx.params.id,
+      ctx.scope.ownerId,
+      payload.at?.toJSDate()
+    )
+    return ctx.response.ok({ data: quote })
   }
 
   async cancel(ctx: HttpContext) {
