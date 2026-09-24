@@ -110,3 +110,20 @@ export const recordBookingPaymentValidator = vine.compile(
     amount: vine.number().positive(),
   })
 )
+
+/**
+ * GET /admin/bookings
+ *
+ * Tous propriétaires confondus. Chaque combinaison de filtres retenue est
+ * couverte par un index de `firestore.indexes.json`.
+ */
+export const listPlatformBookingsValidator = vine.compile(
+  vine.object({
+    owner_id: vine.string().trim().minLength(1).optional(),
+    property_id: vine.string().trim().minLength(1).optional(),
+    client_id: vine.string().trim().minLength(1).optional(),
+    status: vine.enum(BOOKING_STATUSES).optional(),
+    page: vine.number().positive().withoutDecimals().optional(),
+    per_page: vine.number().positive().withoutDecimals().max(100).optional(),
+  })
+)

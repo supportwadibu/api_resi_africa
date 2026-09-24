@@ -6,6 +6,14 @@ const AuthController = () => import('#controllers/auth/auth_controller')
 const CronController = () => import('#controllers/cron_controller')
 const AdminPlansController = () => import('#controllers/admin/plans_controller')
 const AdminFeedbackController = () => import('#controllers/admin/feedback_controller')
+const AdminStatsController = () => import('#controllers/admin/stats_controller')
+const AdminUsersController = () => import('#controllers/admin/users_controller')
+const AdminOwnersController = () => import('#controllers/admin/owners_controller')
+const AdminPropertiesController = () => import('#controllers/admin/properties_controller')
+const AdminResidencesController = () => import('#controllers/admin/residences_controller')
+const AdminBookingsController = () => import('#controllers/admin/bookings_controller')
+const AdminSubscriptionsController = () => import('#controllers/admin/subscriptions_controller')
+const AdminPromoCodesController = () => import('#controllers/admin/promo_codes_controller')
 const ProprioProfileController = () => import('#controllers/proprio/profile_controller')
 const ProprioPropertyController = () => import('#controllers/proprio/property_controller')
 const ProprioPropertyImageController = () =>
@@ -78,6 +86,80 @@ router
           })
           .prefix('feedbacks')
           .as('feedbacks')
+
+        router
+          .group(() => {
+            router.get('/', [AdminStatsController, 'overview'])
+            router.get('revenue', [AdminStatsController, 'revenue'])
+          })
+          .prefix('stats')
+          .as('stats')
+
+        router
+          .group(() => {
+            router.get('/', [AdminUsersController, 'index'])
+            router.get(':id', [AdminUsersController, 'show'])
+            router.patch(':id', [AdminUsersController, 'update'])
+          })
+          .prefix('users')
+          .as('users')
+
+        router
+          .group(() => {
+            router.get('/', [AdminOwnersController, 'index'])
+            // Avant `:id`, sinon « pending » serait pris pour un identifiant.
+            router.get('pending', [AdminOwnersController, 'pending'])
+            router.get(':id', [AdminOwnersController, 'show'])
+            router.get(':id/profile', [AdminOwnersController, 'profile'])
+            router.get(':id/portfolio', [AdminOwnersController, 'portfolio'])
+            router.post(':id/validate', [AdminOwnersController, 'validate'])
+            router.post(':id/reject', [AdminOwnersController, 'reject'])
+          })
+          .prefix('owners')
+          .as('owners')
+
+        router
+          .group(() => {
+            router.get('/', [AdminPropertiesController, 'index'])
+            router.get(':id', [AdminPropertiesController, 'show'])
+            router.get(':id/clients', [AdminPropertiesController, 'clients'])
+          })
+          .prefix('properties')
+          .as('properties')
+
+        router
+          .group(() => {
+            router.get('/', [AdminResidencesController, 'index'])
+            router.get(':id', [AdminResidencesController, 'show'])
+          })
+          .prefix('residences')
+          .as('residences')
+
+        router
+          .group(() => {
+            router.get('/', [AdminBookingsController, 'index'])
+            router.get(':id', [AdminBookingsController, 'show'])
+          })
+          .prefix('bookings')
+          .as('bookings')
+
+        router
+          .group(() => {
+            router.get('/', [AdminSubscriptionsController, 'index'])
+            router.patch(':id/cancel', [AdminSubscriptionsController, 'cancel'])
+          })
+          .prefix('subscriptions')
+          .as('subscriptions')
+
+        router
+          .group(() => {
+            router.get('/', [AdminPromoCodesController, 'index'])
+            router.post('/', [AdminPromoCodesController, 'store'])
+            router.patch(':id', [AdminPromoCodesController, 'update'])
+            router.delete(':id', [AdminPromoCodesController, 'destroy'])
+          })
+          .prefix('promo-codes')
+          .as('promo_codes')
       })
       .prefix('admin')
       .as('admin')

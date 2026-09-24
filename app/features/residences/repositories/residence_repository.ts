@@ -1,5 +1,6 @@
 import { SCOPE_READ_LIMIT } from '#features/managers/scope'
-import Residence, { type ResidenceRecord } from '#models/residence'
+import { COLLECTIONS, getByIds } from '#firebase/firestore'
+import Residence, { type ResidenceDocument, type ResidenceRecord } from '#models/residence'
 
 import type {
   CreateResidenceInput,
@@ -29,6 +30,46 @@ export class ResidenceRepository {
   async findById(id: string, owner_id: string): Promise<ResidenceDto | null> {
     const doc = await Residence.findByIdAndOwner(id, owner_id)
     return doc ? ResidenceRepository.toDto(doc) : null
+  }
+
+  /**
+   * Lecture sans contrôle de propriétaire, réservée au back-office.
+   *
+   * Nommée à part plutôt qu'un `owner_id` optionnel sur `findById` : un
+   * paramètre oublié dans l'espace propriétaire ouvrirait alors la résidence
+   * d'autrui sans la moindre erreur de compilation.
+   */
+  async findAnyById(id: string): Promise<ResidenceDto | null> {
+    const doc = await Residence.findById(id)
+    return doc ? ResidenceRepository.toDto(doc) : null
+  }
+
+  /** Résidences citées par une liste, lues en lot et indexées par identifiant. */
+  async findManyByIds(
+    ids: readonly (string | null | undefined)[]
+  ): Promise<Map<string, ResidenceDto>> {
+    const docs = await getByIds<ResidenceDocument>(COLLECTIONS.residences, ids)
+
+    const out = new Map<string, ResidenceDto>()
+    for (const [id, doc] of docs) out.set(id, ResidenceRepository.toDto(doc))
+    return out
+  }
+
+  /** Page de résidences de la plateforme, éventuellement d'un seul propriétaire. */
+  async paginatePlatform(input: {
+    owner_id?: string
+    page?: number
+    per_page?: number
+  }): Promise<{ data: ResidenceDto[]; total: number }> {
+    const page = Math.max(1, input.page ?? 1)
+    const perPage = Math.min(100, Math.max(1, input.per_page ?? 20))
+
+    const { data, total } = await Residence.paginate(
+      { owner_id: input.owner_id || undefined },
+      { limit: perPage, offset: (page - 1) * perPage }
+    )
+
+    return { data: data.map((d) => ResidenceRepository.toDto(d)), total }
   }
 
   async create(input: CreateResidenceInput): Promise<ResidenceDto> {

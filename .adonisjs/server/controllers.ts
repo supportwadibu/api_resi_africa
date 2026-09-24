@@ -6,9 +6,16 @@
 export const controllers = {
   AccessTokens: () => import('#controllers/access_tokens_controller'),
   admin: {
+    Bookings: () => import('#controllers/admin/bookings_controller'),
     Feedback: () => import('#controllers/admin/feedback_controller'),
     Owners: () => import('#controllers/admin/owners_controller'),
     Plans: () => import('#controllers/admin/plans_controller'),
+    PromoCodes: () => import('#controllers/admin/promo_codes_controller'),
+    Properties: () => import('#controllers/admin/properties_controller'),
+    Residences: () => import('#controllers/admin/residences_controller'),
+    Stats: () => import('#controllers/admin/stats_controller'),
+    Subscriptions: () => import('#controllers/admin/subscriptions_controller'),
+    Users: () => import('#controllers/admin/users_controller'),
   },
   auth: {
     Auth: () => import('#controllers/auth/auth_controller'),

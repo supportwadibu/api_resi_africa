@@ -1,4 +1,5 @@
 /* eslint-disable prettier/prettier */
+import { GetOwnerPortfolioUseCase } from '#features/properties/use_cases/index'
 import {
   listOwnersValidator,
   rejectOwnerValidator,
@@ -8,6 +9,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 
 import {
   FindOwnerUseCase,
+  GetOwnerProfileUseCase,
   ListOwnersUseCase,
   ListPendingOwnersUseCase,
   RejectOwnerUseCase,
@@ -40,6 +42,23 @@ export default class AdminOwnersController {
   async show(ctx: HttpContext) {
     const owner = await new FindOwnerUseCase().execute(ctx.params.id)
     return ctx.response.ok({ data: owner })
+  }
+
+  /**
+   * GET /admin/owners/:id/profile
+   *
+   * Dossier de validation, pièces d'identité en URLs signées : c'est ce que
+   * l'administrateur examine avant de valider ou de rejeter le compte.
+   */
+  async profile(ctx: HttpContext) {
+    const profile = await new GetOwnerProfileUseCase().execute(ctx.params.id)
+    return ctx.response.ok({ data: profile })
+  }
+
+  /** GET /admin/owners/:id/portfolio */
+  async portfolio(ctx: HttpContext) {
+    const portfolio = await new GetOwnerPortfolioUseCase().execute(ctx.params.id)
+    return ctx.response.ok({ data: portfolio })
   }
 
   /** POST /admin/owners/:id/validate */

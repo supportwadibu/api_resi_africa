@@ -11,3 +11,5 @@ export { default as GetBookingStatsUseCase } from './get_booking_stats.use_case.
 export { default as CancelOwnerBookingUseCase } from './cancel_owner_booking.use_case.ts'
 export { default as FindOwnerBookingUseCase } from './find_owner_booking.use_case.ts'
 export { default as RecordBookingPaymentUseCase } from './record_booking_payment.use_case.ts'
+export { default as FindPlatformBookingUseCase } from './find_platform_booking.use_case.ts'
+export { default as ListPlatformBookingsUseCase } from './list_platform_bookings.use_case.ts'

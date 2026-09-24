@@ -428,6 +428,35 @@ const User = {
     return snapshot.data().count
   },
 
+  /**
+   * Liste paginée tous rôles confondus, pour le back-office.
+   *
+   * Égalités seules, triées par date de création : chaque combinaison de
+   * filtres est couverte par un index de `firestore.indexes.json`.
+   */
+  async paginate(
+    filters: { role_id?: string; is_active?: boolean },
+    options: { limit: number; offset: number }
+  ): Promise<{ data: UserRecord[]; total: number }> {
+    let query = users() as FirebaseFirestore.Query<UserDocument>
+
+    if (filters.role_id) query = query.where('role_id', '==', filters.role_id)
+    if (typeof filters.is_active === 'boolean') {
+      query = query.where('is_active', '==', filters.is_active)
+    }
+
+    const [snapshot, count] = await Promise.all([
+      query
+        .orderBy('metadata.created_at', 'desc')
+        .offset(options.offset)
+        .limit(options.limit)
+        .get(),
+      query.count().get(),
+    ])
+
+    return { data: toDocs<UserDocument>(snapshot.docs), total: count.data().count }
+  },
+
   /** Lecture ciblée : le document existe et porte bien le rôle attendu. */
   async findByIdAndRole(id: string, roleId: string): Promise<UserEntity | null> {
     const user = await User.findById(id)

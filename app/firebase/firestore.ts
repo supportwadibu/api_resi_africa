@@ -209,6 +209,49 @@ export function toMergePayload<T extends object>(data: T): Record<string, unknow
 }
 
 /**
+ * Taille des lots de `getAll`.
+ *
+ * Le SDK n'impose pas de plafond, mais une requête unique portant des milliers
+ * de références finit par dépasser la taille maximale d'un appel RPC.
+ */
+const GET_ALL_CHUNK = 100
+
+/**
+ * Lit plusieurs documents par identifiant, indexés par `_id`.
+ *
+ * Firestore n'ayant pas de jointure, une liste qui affiche le nom du
+ * propriétaire ou de la résidence à côté de chaque ligne doit relire ces
+ * documents : `getAll` le fait en un aller-retour par lot, là où un
+ * `findById` par ligne en coûterait un par document.
+ *
+ * Les identifiants vides et les doublons sont écartés ; un document absent
+ * n'apparaît simplement pas dans la table rendue.
+ */
+export async function getByIds<T>(
+  name: CollectionName,
+  ids: readonly (string | null | undefined)[]
+): Promise<Map<string, WithId<T>>> {
+  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))]
+  const out = new Map<string, WithId<T>>()
+  if (unique.length === 0) return out
+
+  // Référence non typée : `getAll` n'accepte que des `DocumentReference`
+  // génériques, le typage est rétabli par `toDocs<T>`.
+  const col = db().collection(name)
+
+  for (let i = 0; i < unique.length; i += GET_ALL_CHUNK) {
+    const refs = unique.slice(i, i + GET_ALL_CHUNK).map((id) => col.doc(id))
+    const snapshots = await db().getAll(...refs)
+
+    for (const doc of toDocs<T>(snapshots)) {
+      out.set(doc._id, doc)
+    }
+  }
+
+  return out
+}
+
+/**
  * Incrément atomique d'un champ numérique — équivalent de `$inc`.
  *
  * Le compteur est ajusté côté serveur : deux incréments concurrents

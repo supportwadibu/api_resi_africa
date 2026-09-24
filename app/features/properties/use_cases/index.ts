@@ -9,3 +9,6 @@ export { ListPublicPropertiesUseCase } from './list_public_properties.use_case.t
 export { PublishPropertyUseCase } from './publish_property.use_case.ts'
 export { UnpublishPropertyUseCase } from './unpublish_property.use_case.ts'
 export { UpdatePropertyUseCase } from './update_property.use_case.ts'
+export { FindPlatformPropertyUseCase } from './find_platform_property.use_case.ts'
+export { GetOwnerPortfolioUseCase } from './get_owner_portfolio.use_case.ts'
+export { ListPlatformPropertiesUseCase } from './list_platform_properties.use_case.ts'

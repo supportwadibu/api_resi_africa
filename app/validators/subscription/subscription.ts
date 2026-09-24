@@ -13,7 +13,9 @@ export const subscribeToPlanValidator = vine.compile(
 export const listSubscriptionsValidator = vine.compile(
   vine.object({
     status: vine.enum(SUBSCRIPTION_STATUSES).optional(),
-    user_id: vine.string().trim().minLength(24).maxLength(24).optional(),
+    // Identifiant Firestore (20 caractères), et non plus un ObjectId Mongo de 24 :
+    // la borne héritée de la migration rejetait tout identifiant réel.
+    user_id: vine.string().trim().minLength(1).maxLength(128).optional(),
     is_trial: vine.boolean().optional(),
     page: vine.number().positive().withoutDecimals().optional(),
     per_page: vine.number().positive().withoutDecimals().max(100).optional(),

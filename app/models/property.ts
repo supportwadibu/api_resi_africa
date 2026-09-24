@@ -645,6 +645,26 @@ const Property = {
   },
 
   /**
+   * Logements rattachés à l'une des résidences données.
+   *
+   * Découpé par lots de `FIRESTORE_IN_LIMIT` : une page de résidences du
+   * back-office en compte jusqu'à cent, bien au-delà de ce que `in` accepte.
+   */
+  async findByResidenceIds(residenceIds: readonly string[]): Promise<PropertyRecord[]> {
+    const ids = [...new Set(residenceIds.filter(Boolean))]
+    const out: PropertyRecord[] = []
+
+    for (let i = 0; i < ids.length; i += FIRESTORE_IN_LIMIT) {
+      const snapshot = await properties()
+        .where('residence_id', 'in', ids.slice(i, i + FIRESTORE_IN_LIMIT))
+        .get()
+      out.push(...toDocs<PropertyDocument>(snapshot.docs))
+    }
+
+    return out
+  },
+
+  /**
    * Nombre d'unités rattachées à une résidence.
    *
    * Compté sur `properties` plutôt que lu sur `units_count` : le compteur est

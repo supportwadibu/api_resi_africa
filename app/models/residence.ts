@@ -131,7 +131,11 @@ function withDefaults(
 }
 
 export interface ResidenceFilters {
-  owner_id: string
+  /**
+   * Résidences d'un propriétaire. Absent : toutes celles de la plateforme,
+   * pour le back-office — l'espace propriétaire le pose toujours.
+   */
+  owner_id?: string
 }
 
 const Residence = {
@@ -213,7 +217,9 @@ const Residence = {
     filters: ResidenceFilters,
     options: { limit: number; offset: number }
   ): Promise<{ data: ResidenceRecord[]; total: number }> {
-    const base = residences().where('owner_id', '==', filters.owner_id)
+    const base = filters.owner_id
+      ? residences().where('owner_id', '==', filters.owner_id)
+      : (residences() as FirebaseFirestore.Query<ResidenceDocument>)
 
     const [snapshot, total] = await Promise.all([
       base.orderBy('created_at', 'desc').offset(options.offset).limit(options.limit).get(),

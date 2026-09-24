@@ -211,3 +211,21 @@ export const updateAvailabilityValidator = vine.compile(
     available_from: vine.date().optional(),
   })
 )
+
+/**
+ * GET /admin/properties
+ *
+ * Tous propriétaires confondus. Les filtres se limitent aux égalités couvertes
+ * par un index : une recherche par ville ou par prix rapatrierait le catalogue
+ * entier de la plateforme.
+ */
+export const listPlatformPropertiesValidator = vine.compile(
+  vine.object({
+    owner_id: vine.string().trim().minLength(1).optional(),
+    residence_id: vine.string().trim().minLength(1).optional(),
+    status: vine.enum(PROPERTY_STATUSES).optional(),
+    property_type: vine.enum(PROPERTY_TYPES).optional(),
+    page: vine.number().positive().withoutDecimals().optional(),
+    per_page: vine.number().positive().withoutDecimals().max(100).optional(),
+  })
+)
