@@ -1,5 +1,6 @@
 import { SCOPE_READ_LIMIT } from '#features/managers/scope'
-import Property, { type PropertyRecord } from '#models/property'
+import { COLLECTIONS, getByIds } from '#firebase/firestore'
+import Property, { type PropertyDocument, type PropertyRecord } from '#models/property'
 
 import type {
   CreatePropertyInput,
@@ -90,6 +91,23 @@ export class PropertyRepository {
 
   async stats(owner_id: string): Promise<PropertyStatsDto> {
     return Property.statsByOwner(owner_id)
+  }
+
+  /** Logements cités par une liste, lus en lot et indexés par identifiant. */
+  async findManyByIds(
+    ids: readonly (string | null | undefined)[]
+  ): Promise<Map<string, PropertyDto>> {
+    const docs = await getByIds<PropertyDocument>(COLLECTIONS.properties, ids)
+
+    const out = new Map<string, PropertyDto>()
+    for (const [id, doc] of docs) out.set(id, PropertyRepository.toDto(doc))
+    return out
+  }
+
+  /** Unités des résidences données, toutes pages confondues. */
+  async listByResidenceIds(residenceIds: readonly string[]): Promise<PropertyDto[]> {
+    const docs = await Property.findByResidenceIds(residenceIds)
+    return docs.map((doc) => PropertyRepository.toDto(doc))
   }
 
   /**

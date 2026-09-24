@@ -586,6 +586,20 @@ const Booking = {
   },
 
   /**
+   * Réservations non annulées de toute la plateforme, pouvant toucher la
+   * période commençant à `from`.
+   *
+   * Pendant de `findForRevenue` pour le back-office, sans `owner_id`. Seule la
+   * borne de sortie est confiée à Firestore — une requête n'admet qu'un champ
+   * en inégalité —, sur `end_date` et non `check_out_at`, que les réservations
+   * en ligne ne portent pas. La borne d'entrée reste à l'appelant.
+   */
+  async findEndingAfter(from: Date): Promise<BookingRecord[]> {
+    const snapshot = await bookings().where('end_date', '>=', from).get()
+    return toDocs<BookingDocument>(snapshot.docs).filter((doc) => doc.status !== 'cancelled')
+  },
+
+  /**
    * Clients ayant séjourné dans un logement du périmètre.
    *
    * Sert à cloisonner le carnet : les clients sont rattachés à un `owner_id` et

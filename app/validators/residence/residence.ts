@@ -89,3 +89,12 @@ export const attachResidenceValidator = vine.compile(
     copy_address: vine.boolean().optional(),
   })
 )
+
+/** GET /admin/residences */
+export const listPlatformResidencesValidator = vine.compile(
+  vine.object({
+    owner_id: vine.string().trim().minLength(1).optional(),
+    page: vine.number().positive().withoutDecimals().optional(),
+    per_page: vine.number().positive().withoutDecimals().max(100).optional(),
+  })
+)

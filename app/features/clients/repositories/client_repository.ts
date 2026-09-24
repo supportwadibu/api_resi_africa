@@ -1,5 +1,6 @@
 import { SCOPE_READ_LIMIT } from '#features/managers/scope'
-import Client, { type ClientRecord } from '#models/client'
+import { COLLECTIONS, getByIds } from '#firebase/firestore'
+import Client, { type ClientDocument, type ClientRecord } from '#models/client'
 import { readCreatedBy } from '#utils/created_by'
 
 import type {
@@ -40,6 +41,18 @@ export class ClientRepository {
     // Un identifiant deviné ne doit pas révéler la fiche d'un autre carnet.
     if (!doc || doc.owner_id !== ownerId) return null
     return doc
+  }
+
+  /**
+   * Fiches citées par une liste, tous carnets confondus.
+   *
+   * Réservée au back-office, qui lit les réservations de toute la plateforme :
+   * aucun contrôle de propriétaire ici, contrairement à `findById`.
+   */
+  async findManyByIdsAcrossOwners(
+    ids: readonly (string | null | undefined)[]
+  ): Promise<Map<string, ClientRecord>> {
+    return getByIds<ClientDocument>(COLLECTIONS.clients, ids)
   }
 
   async findByPhone(ownerId: string, phone: string): Promise<ClientRecord | null> {

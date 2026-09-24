@@ -3,3 +3,5 @@ export { default as DeleteResidenceUseCase } from './delete_residence.use_case.t
 export { default as FindResidenceUseCase } from './find_residence.use_case.ts'
 export { default as ListOwnerResidencesUseCase } from './list_owner_residences.use_case.ts'
 export { default as UpdateResidenceUseCase } from './update_residence.use_case.ts'
+export { default as FindPlatformResidenceUseCase } from './find_platform_residence.use_case.ts'
+export { default as ListPlatformResidencesUseCase } from './list_platform_residences.use_case.ts'

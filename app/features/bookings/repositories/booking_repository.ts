@@ -1,3 +1,4 @@
+import { SCOPE_READ_LIMIT } from '#features/managers/scope'
 import Booking, { type BookingRecord } from '#models/booking'
 import Property from '#models/property'
 
@@ -156,6 +157,18 @@ export class BookingRepository {
   async findById(id: string): Promise<BookingDto | null> {
     const doc = await Booking.findById(id)
     return doc ? BookingRepository.toDto(doc) : null
+  }
+
+  /**
+   * Toutes les réservations d'un logement, la plus récente d'abord, annulées
+   * comprises.
+   *
+   * Bornée à `SCOPE_READ_LIMIT` plutôt que paginée : elle sert à agréger les
+   * clients du logement, et un agrégat calculé sur une page serait faux.
+   */
+  async listByProperty(property_id: string): Promise<BookingDto[]> {
+    const { data } = await Booking.paginate({ property_id }, { limit: SCOPE_READ_LIMIT, offset: 0 })
+    return data.map((doc) => BookingRepository.toDto(doc))
   }
 
   async getPropertyForPricing(property_id: string) {

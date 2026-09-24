@@ -25,6 +25,15 @@ export class PromoCodeAdminRepository {
     }
   }
 
+  async findById(id: string): Promise<PromoCodeDto | null> {
+    const doc = await PromoCode.findById(id)
+    return doc ? PromoCodeAdminRepository.toDto(doc) : null
+  }
+
+  async delete(id: string): Promise<boolean> {
+    return PromoCode.deleteOne(id)
+  }
+
   async create(input: CreatePromoCodeInput): Promise<PromoCodeDto> {
     const doc = await PromoCode.create(input)
     return PromoCodeAdminRepository.toDto(doc)
