@@ -1,5 +1,4 @@
 export { CancelBookingUseCase } from './cancel_booking.use_case.ts'
-export { CompleteBookingUseCase } from './complete_booking.use_case.ts'
 export { CreateBookingUseCase } from './create_booking.use_case.ts'
 export { ListMyBookingsUseCase } from './list_my_bookings.use_case.ts'
 export { ListOwnerBookingsUseCase } from './list_owner_bookings.use_case.ts'

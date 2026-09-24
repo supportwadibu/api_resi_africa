@@ -362,6 +362,9 @@ test.group('check-out et extend : le périmètre est vérifié avant toute écri
   })
 
   function bookingDoc(propertyId: string) {
+    // Dates passées : la clôture refuse un séjour pas encore commencé, et une
+    // entrée future ferait dépendre ces tests de périmètre du jour où ils
+    // tournent.
     return {
       _id: 'bk-1',
       owner_id: 'owner-1',
@@ -371,13 +374,13 @@ test.group('check-out et extend : le périmètre est vérifié avant toute écri
       stay_type: 'full_day',
       total_amount: 40000,
       received_amount: 40000,
-      start_date: new Date('2026-10-01T12:00:00Z'),
-      end_date: new Date('2026-10-03T12:00:00Z'),
-      check_in_at: new Date('2026-10-01T12:00:00Z'),
-      check_out_at: new Date('2026-10-03T12:00:00Z'),
+      start_date: new Date('2026-08-01T12:00:00Z'),
+      end_date: new Date('2026-08-03T12:00:00Z'),
+      check_in_at: new Date('2026-08-01T12:00:00Z'),
+      check_out_at: new Date('2026-08-03T12:00:00Z'),
       days_count: 2,
-      created_at: new Date('2026-10-01T12:00:00Z'),
-      updated_at: new Date('2026-10-01T12:00:00Z'),
+      created_at: new Date('2026-08-01T12:00:00Z'),
+      updated_at: new Date('2026-08-01T12:00:00Z'),
     }
   }
 
