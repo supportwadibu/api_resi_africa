@@ -1,7 +1,6 @@
 export { CancelBookingUseCase } from './cancel_booking.use_case.ts'
-export { CompleteBookingUseCase } from './complete_booking.use_case.ts'
 export { CreateBookingUseCase } from './create_booking.use_case.ts'
-export { ListClientBookingsUseCase } from './list_client_bookings.use_case.ts'
+export { ListMyBookingsUseCase } from './list_my_bookings.use_case.ts'
 export { ListOwnerBookingsUseCase } from './list_owner_bookings.use_case.ts'
 export { default as CreateOwnerBookingUseCase } from './create_owner_booking.use_case.ts'
 export { default as CheckOutBookingUseCase } from './check_out_booking.use_case.ts'

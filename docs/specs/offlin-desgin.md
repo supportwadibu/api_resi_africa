@@ -335,6 +335,7 @@ GET    /properties/availability  périodes occupées (?property_id=, ?from=, ?to
 | `client_phone_exists` | 200 | numéro déjà connu ; la fiche est retournée pour réutilisation |
 | `invalid_stay_dates` | 422 | sortie antérieure ou égale à l'entrée |
 | `minimum_stay_not_reached` | 422 | existant, séjour complet uniquement |
+| `stay_not_started` | 422 | clôture d'un séjour dont l'entrée est à venir : l'annuler plutôt |
 
 `client_phone_exists` répond `200` et non `409` : le but est que
 l'application propose la fiche existante, pas qu'elle affiche une erreur.

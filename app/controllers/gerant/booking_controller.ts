@@ -16,6 +16,7 @@ import {
   CreateOwnerBookingUseCase,
   ExtendOwnerBookingUseCase,
   FindOwnerBookingUseCase,
+  GetBookingStatsUseCase,
   ListOwnerBookingsUseCase,
   RecordBookingPaymentUseCase,
 } from '../../features/bookings/use_cases/index.ts'
@@ -49,6 +50,28 @@ export default class GerantBookingController {
     })
 
     return ctx.response.ok(result)
+  }
+
+  /**
+   * Compteurs de l'onglet Réservations : taux d'occupation, séjours à venir et
+   * en cours, revenu du mois.
+   *
+   * Ce sont des chiffres **bruts**, auxquels le gérant a droit sur ses seuls
+   * logements — `BookingStatsDto` ne porte aucun net, et le net cloisonné
+   * serait de toute façon faux, l'abonnement et les charges communes ne
+   * relevant pas de lui.
+   *
+   * Le périmètre descend jusqu'aux deux sources du calcul. Le dénominateur du
+   * taux d'occupation compte particulièrement : pris sur le parc entier, six
+   * logements confiés sur dix rendraient un taux écrasé de 40 %.
+   */
+  async stats(ctx: HttpContext) {
+    const stats = await new GetBookingStatsUseCase().execute(
+      ctx.scope.ownerId,
+      ctx.scope.propertyIds
+    )
+
+    return ctx.response.ok({ data: stats })
   }
 
   async show(ctx: HttpContext) {

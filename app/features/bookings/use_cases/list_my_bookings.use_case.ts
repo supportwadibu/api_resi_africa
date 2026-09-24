@@ -5,7 +5,16 @@ import type {
 } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 
-export class ListClientBookingsUseCase {
+/**
+ * Réservations du client connecté, pour lui-même.
+ *
+ * Le premier argument est l'identifiant de l'appelant, jamais celui d'une
+ * fiche consultée : il n'y a donc **aucun périmètre** à appliquer ici. Pour
+ * lire l'historique d'un client du carnet — vu par un propriétaire ou par un
+ * gérant, qui lui est cloisonné —, c'est
+ * `#features/clients/use_cases/list_client_bookings.use_case` qu'il faut.
+ */
+export class ListMyBookingsUseCase {
   constructor(private repo: BookingRepository = new BookingRepository()) {}
 
   async execute(
@@ -25,4 +34,4 @@ export class ListClientBookingsUseCase {
   }
 }
 
-export default ListClientBookingsUseCase
+export default ListMyBookingsUseCase

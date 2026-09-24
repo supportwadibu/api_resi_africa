@@ -26,6 +26,14 @@ export interface ListClientBookingsOutput {
  *
  * Non paginé : un client du carnet compte ses séjours en dizaines, et une
  * page partielle rendrait les statistiques incohérentes avec la liste.
+ *
+ * Son voisin de `#features/bookings` s'appelle `ListMyBookingsUseCase` et non
+ * `ListClientBookings…` : ne pas « simplifier » en réunifiant les deux noms.
+ * Celui-ci lit la fiche d'un **tiers** et applique un périmètre, l'autre rend
+ * à l'appelant ses propres réservations et n'en a aucun. Les deux `execute`
+ * prennent un `string` en premier argument, donc un import pris au mauvais
+ * barrel compilerait sans broncher et servirait tout le parc du propriétaire
+ * à un gérant. Des noms distincts rendent cette erreur visible à la lecture.
  */
 export class ListClientBookingsUseCase {
   constructor(private repo: ClientRepository = new ClientRepository()) {}

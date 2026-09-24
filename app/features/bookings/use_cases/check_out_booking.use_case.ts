@@ -28,7 +28,26 @@ export function buildCheckOutPatch(now: Date): {
 }
 
 /**
+ * Le client est-il entré ?
+ *
+ * `check_in_at` est lu en priorité : un passage saisi pour 14 h a une
+ * `start_date` déjà dépassée dès minuit, alors que le client n'est pas là.
+ * Repli sur `start_date` : les réservations antérieures à la saisie comptoir
+ * ne portent pas `check_in_at`.
+ */
+export function isStayStarted(
+  booking: { start_date: Date; check_in_at?: Date },
+  now: Date
+): boolean {
+  const checkIn = booking.check_in_at ?? booking.start_date
+  return checkIn.getTime() <= now.getTime()
+}
+
+/**
  * Clôture un séjour.
+ *
+ * Un séjour pas encore commencé ne se clôture pas, il s'annule : le clôturer
+ * compterait comme encaissé un séjour qui n'a jamais eu lieu.
  *
  * Les statistiques du carnet ne sont plus cumulées ici : elles se recalculent
  * depuis les réservations à la lecture de la fiche. Les incrémenter à la
@@ -50,7 +69,17 @@ export class CheckOutBookingUseCase {
       throw new DomainError('booking_cancelled', 'Réservation annulée.', 409)
     }
 
-    const updated = await Booking.findOneAndUpdate(id, buildCheckOutPatch(new Date()), {
+    const now = new Date()
+
+    if (!isStayStarted(booking, now)) {
+      throw new DomainError(
+        'stay_not_started',
+        'Le séjour n’a pas encore commencé. Annulez la réservation plutôt que de la clôturer.',
+        422
+      )
+    }
+
+    const updated = await Booking.findOneAndUpdate(id, buildCheckOutPatch(now), {
       owner_id: ownerId,
     })
 
