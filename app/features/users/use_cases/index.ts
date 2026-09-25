@@ -1,3 +1,4 @@
+export { CreateUserUseCase } from './create_user.use_case.ts'
 export { EnsureAdminsUseCase } from './ensure_admins.use_case.ts'
 export { GetUserUseCase } from './get_user.use_case.ts'
 export { ListUsersUseCase } from './list_users.use_case.ts'

@@ -12,6 +12,7 @@ les lectures unitaires `{ data }`, les erreurs `{ code, message }`.
 | GET | `stats` | Tableau de bord : comptes, propriétaires, catalogue, réservations, revenu du mois, occupation, abonnements, retours |
 | GET | `stats/revenue?months=12` | Série mensuelle du revenu (1 à 24 mois) |
 | GET | `users?role&is_active&q&page&per_page` | Comptes, tous rôles |
+| POST | `users` | Création, tous rôles : `role`, `full_name`, `email` et/ou `phone`, `password` initial ; `owner_id` pour un `gerant`. Compte vérifié d'office, réponse `201 { data }` |
 | GET | `users/:id` | Fiche : sessions actives, bloc `owner` (proprio), `manager_assignment` (gérant) |
 | PATCH | `users/:id` | `full_name`, `email`, `phone`, `is_active` |
 | GET | `owners?status` · `owners/pending` | Propriétaires par statut de validation |
@@ -74,6 +75,10 @@ Non paginée : un agrégat calculé sur une page serait faux.
 | `user_not_found` | 404 | Compte introuvable |
 | `cannot_deactivate_self` | 409 | Un administrateur désactive son propre compte |
 | `email_already_used` · `phone_already_used` | 409 | Identifiant porté par un autre compte |
+| `user_contact_required` | 422 | Création sans e-mail ni téléphone |
+| `admin_email_required` | 422 | Création d'un admin sans e-mail — il se connecte par e-mail |
+| `owner_not_found` | 422 | Création d'un gérant sans propriétaire valide |
+| `account_already_exists` | 409 | Doublon apparu entre le contrôle et l'écriture |
 | `property_not_found` · `residence_not_found` · `booking_not_found` | 404 | Ressource introuvable |
 | `promo_code_not_found` | 404 | Code introuvable |
 | `promo_code_already_exists` | 409 | Code déjà créé |
