@@ -98,6 +98,7 @@ router
         router
           .group(() => {
             router.get('/', [AdminUsersController, 'index'])
+            router.post('/', [AdminUsersController, 'store'])
             router.get(':id', [AdminUsersController, 'show'])
             router.patch(':id', [AdminUsersController, 'update'])
           })

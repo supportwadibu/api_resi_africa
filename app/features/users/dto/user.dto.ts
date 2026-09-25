@@ -70,6 +70,18 @@ export interface UserDetailDto extends UserDto {
   manager_assignment: UserManagerAssignmentDto | null
 }
 
+/** Création d'un compte par un administrateur (`POST /admin/users`). */
+export interface CreateUserInput {
+  role: RoleName
+  full_name: string
+  email?: string | null
+  phone?: string | null
+  /** Mot de passe initial, en clair ; haché par le use case. */
+  password: string
+  /** Rôle `gerant` : propriétaire pour lequel il agit. */
+  owner_id?: string | null
+}
+
 export interface ListUsersInput {
   role?: RoleName
   is_active?: boolean

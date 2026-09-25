@@ -32,6 +32,24 @@ export const updateUserValidator = vine.compile(
 )
 
 /**
+ * POST /admin/users
+ *
+ * Au moins un identifiant de connexion, e-mail ou téléphone. Les règles
+ * propres à un rôle (e-mail d'un admin, propriétaire d'un gérant) sont
+ * reprises par le use case, dernière garde avant l'écriture.
+ */
+export const createUserValidator = vine.compile(
+  vine.object({
+    role: vine.enum(ROLE_NAMES),
+    full_name: vine.string().trim().minLength(2).maxLength(120),
+    email: email().optional().requiredIfMissing('phone'),
+    phone: phone().optional(),
+    password: password(),
+    owner_id: vine.string().trim().optional().requiredWhen('role', '=', 'gerant'),
+  })
+)
+
+/**
  * Création d'un administrateur depuis la ligne de commande (`admin:create`).
  *
  * L'e-mail est exigé : c'est l'identifiant de connexion au back-office. Mêmes

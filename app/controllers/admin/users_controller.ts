@@ -1,9 +1,10 @@
 import {
+  CreateUserUseCase,
   GetUserUseCase,
   ListUsersUseCase,
   UpdateUserUseCase,
 } from '#features/users/use_cases/index'
-import { listUsersValidator, updateUserValidator } from '#validators/user/user'
+import { createUserValidator, listUsersValidator, updateUserValidator } from '#validators/user/user'
 
 import type { HttpContext } from '@adonisjs/core/http'
 
@@ -15,6 +16,16 @@ export default class AdminUsersController {
     })
     const result = await new ListUsersUseCase().execute(payload)
     return ctx.response.ok(result)
+  }
+
+  /** POST /admin/users */
+  async store(ctx: HttpContext) {
+    const payload = await ctx.request.validateUsing(createUserValidator)
+    const user = await new CreateUserUseCase().execute({
+      ...payload,
+      admin_id: ctx.authUser?.id ?? '',
+    })
+    return ctx.response.created({ data: user })
   }
 
   /** GET /admin/users/:id */
