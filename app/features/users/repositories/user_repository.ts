@@ -2,6 +2,7 @@ import { SCOPE_READ_LIMIT } from '#features/managers/scope'
 import { COLLECTIONS, getByIds } from '#firebase/firestore'
 import AuthSession from '#models/auth_session'
 import ManagerAssignment, { type ManagerAssignmentRecord } from '#models/manager_assignment'
+import Role from '#models/role'
 import User, { type UserDocument, type UserEntity, type UserRecord } from '#models/user'
 
 import type { RoleName } from '#models/role'
@@ -137,6 +138,23 @@ export class UserRepository {
   async countActiveSessions(id: string): Promise<number> {
     const sessions = await AuthSession.findActiveByUser(id)
     return sessions.length
+  }
+
+  /** Identifiant du document de rôle, `null` si `seed:roles` n'a pas été lancé. */
+  async findRoleId(name: RoleName): Promise<string | null> {
+    const role = await Role.findOne({ name })
+    return role?._id ?? null
+  }
+
+  async findByEmail(email: string): Promise<UserRecord | null> {
+    const user = await User.findOne({ email })
+    return user?.raw ?? null
+  }
+
+  /** Lève un `Error` si l'e-mail ou le téléphone est déjà pris (voir `User.create`). */
+  async createAccount(input: Partial<UserDocument>): Promise<UserRecord> {
+    const user = await User.create(input)
+    return user.raw
   }
 
   async findManagerAssignment(id: string): Promise<ManagerAssignmentRecord | null> {

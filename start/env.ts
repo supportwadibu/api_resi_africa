@@ -89,6 +89,15 @@ export default await Env.create(new URL('../', import.meta.url), {
    */
   CRON_SECRET: Env.schema.string.optional(),
 
+  /**
+   * Administrateurs garantis au démarrage du serveur HTTP : tableau JSON de
+   * `{ full_name, email, phone?, password }`. Les comptes absents sont créés,
+   * les autres jamais réécrits — le mot de passe ne sert qu'à la création.
+   * `secret` : la valeur porte des mots de passe en clair et ne doit pas
+   * apparaître si l'environnement est journalisé.
+   */
+  BOOTSTRAP_ADMINS: Env.schema.secret.optional(),
+
   // Wave payments
   WAVE_API_KEY: Env.schema.string.optional(),
   WAVE_BASE_URL: Env.schema.string.optional(),
