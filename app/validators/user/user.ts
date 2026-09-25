@@ -1,5 +1,5 @@
 import { ROLE_NAMES } from '#models/role'
-import { email, phone } from '#validators/auth/auth'
+import { email, password, phone } from '#validators/auth/auth'
 
 import vine from '@vinejs/vine'
 
@@ -28,5 +28,21 @@ export const updateUserValidator = vine.compile(
     email: email().optional(),
     phone: phone().optional(),
     is_active: vine.boolean().optional(),
+  })
+)
+
+/**
+ * Création d'un administrateur depuis la ligne de commande (`admin:create`).
+ *
+ * L'e-mail est exigé : c'est l'identifiant de connexion au back-office. Mêmes
+ * règles qu'à l'inscription (voir `auth.ts`) : la connexion interroge par
+ * égalité stricte, une adresse non abaissée donnerait un compte inutilisable.
+ */
+export const createAdminValidator = vine.compile(
+  vine.object({
+    full_name: vine.string().trim().minLength(2).maxLength(120),
+    email: email(),
+    phone: phone().optional(),
+    password: password(),
   })
 )

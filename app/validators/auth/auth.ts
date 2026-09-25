@@ -15,7 +15,7 @@ export const phone = () =>
     .string()
     .trim()
     .regex(/^\+?[0-9]{7,15}$/)
-const password = () => vine.string().minLength(8).maxLength(64)
+export const password = () => vine.string().minLength(8).maxLength(64)
 
 /**
  * POST /auth/register/init
