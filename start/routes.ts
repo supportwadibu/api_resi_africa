@@ -93,6 +93,7 @@ router
           .group(() => {
             router.get('/', [AdminStatsController, 'overview'])
             router.get('revenue', [AdminStatsController, 'revenue'])
+            router.get('subscriptions', [AdminStatsController, 'subscriptions'])
           })
           .prefix('stats')
           .as('stats')
@@ -150,6 +151,7 @@ router
           .group(() => {
             router.get('/', [AdminSubscriptionsController, 'index'])
             router.patch(':id/cancel', [AdminSubscriptionsController, 'cancel'])
+            router.patch(':id/extend', [AdminSubscriptionsController, 'extend'])
           })
           .prefix('subscriptions')
           .as('subscriptions')

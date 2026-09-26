@@ -117,6 +117,12 @@ const Plan = {
     return toDocs<PlanDocument>(snapshot.docs)
   },
 
+  /** Tous les plans, actifs ou non : un abonnement en cours peut porter un plan retiré. */
+  async findAll(): Promise<PlanRecord[]> {
+    const snapshot = await plans().get()
+    return toDocs<PlanDocument>(snapshot.docs)
+  },
+
   /** Liste paginée, optionnellement filtrée sur l'activation. */
   async paginate(options: {
     isActive?: boolean

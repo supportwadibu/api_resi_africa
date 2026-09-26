@@ -30,13 +30,15 @@ export default class ProprioSubscriptionController {
     // Le repository est appelé directement plutôt que `FindOwnerUseCase`, qui
     // lève un 404 : ici l'absence de fiche propriétaire n'est pas une erreur,
     // elle laisse simplement le statut à `null`.
+    // Résolu d'abord : il ouvre l'essai d'un propriétaire qui n'en a jamais
+    // eu, et l'abonnement relu ensuite doit le montrer. Même décision que le
+    // middleware `plan()` : l'écran ne peut pas annoncer un accès que l'API
+    // refuserait.
+    const planAccess = await new ResolvePlanAccessUseCase().execute(userId)
     const [subscription, owner] = await Promise.all([
       new GetCurrentSubscriptionUseCase().execute(userId),
       new OwnerRepository().findById(userId),
     ])
-    // Même décision que le middleware `plan()` : l'écran ne peut pas annoncer
-    // un accès que l'API refuserait.
-    const planAccess = await new ResolvePlanAccessUseCase().execute(userId)
 
     const daysRemaining = subscription ? this.daysUntil(subscription.end_date) : 0
 

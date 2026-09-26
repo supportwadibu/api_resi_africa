@@ -9,6 +9,7 @@ les lectures unitaires `{ data }`, les erreurs `{ code, message }`.
 
 | Méthode | Chemin | Rôle |
 |---|---|---|
+| GET | `stats/subscriptions?months_back&months_ahead` | Revenu de RESI : paiements d'abonnement encaissés par mois, revenu mensuel récurrent par forfait, renouvellements attendus, potentiel des essais |
 | GET | `stats` | Tableau de bord : comptes, propriétaires, catalogue, réservations, revenu du mois, occupation, abonnements, retours |
 | GET | `stats/revenue?months=12` | Série mensuelle du revenu (1 à 24 mois) |
 | GET | `users?role&is_active&q&page&per_page` | Comptes, tous rôles |
@@ -30,6 +31,7 @@ les lectures unitaires `{ data }`, les erreurs `{ code, message }`.
 | GET | `bookings/:id` | Réservation |
 | GET | `subscriptions?status&user_id&is_trial` | Abonnements |
 | PATCH | `subscriptions/:id/cancel` | Annule, `reason` facultative |
+| PATCH | `subscriptions/:id/extend` | Prolonge un abonnement en cours de `days` jours (1 à 365), `reason` facultative ; tracé dans `subscription_events` |
 | GET · POST | `promo-codes` | Codes promo (liste complète, non paginée) · création |
 | PATCH · DELETE | `promo-codes/:id` | Modification (le code est immuable) · suppression d'un code jamais utilisé |
 

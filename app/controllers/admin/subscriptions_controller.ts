@@ -1,9 +1,11 @@
 import {
   CancelSubscriptionUseCase,
+  ExtendSubscriptionUseCase,
   ListSubscriptionsUseCase,
 } from '#features/subscriptions/use_cases/index'
 import {
   cancelSubscriptionValidator,
+  extendSubscriptionValidator,
   listSubscriptionsValidator,
 } from '#validators/subscription/subscription'
 
@@ -17,6 +19,18 @@ export default class AdminSubscriptionsController {
     })
     const result = await new ListSubscriptionsUseCase().execute(payload)
     return ctx.response.ok(result)
+  }
+
+  /** PATCH /admin/subscriptions/:id/extend */
+  async extend(ctx: HttpContext) {
+    const payload = await ctx.request.validateUsing(extendSubscriptionValidator)
+    const subscription = await new ExtendSubscriptionUseCase().execute({
+      subscription_id: ctx.params.id,
+      days: payload.days,
+      reason: payload.reason,
+      admin_id: ctx.authUser?.id ?? '',
+    })
+    return ctx.response.ok({ data: subscription })
   }
 
   /** PATCH /admin/subscriptions/:id/cancel */

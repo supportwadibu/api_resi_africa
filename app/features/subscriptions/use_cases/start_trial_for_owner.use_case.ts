@@ -1,9 +1,6 @@
 /* eslint-disable prettier/prettier */
 import { DomainError } from '#utils/domain_error'
-import {
-  SubscriptionStatusEnum,
-  TRIAL_DURATION_DAYS,
-} from '#utils/enums/subscription_status'
+import { TRIAL_DURATION_DAYS } from '#utils/enums/subscription_status'
 
 import type {
   StartTrialInput,
@@ -32,21 +29,21 @@ export class StartTrialForOwnerUseCase {
       )
     }
 
-    const days = input.duration_days ?? TRIAL_DURATION_DAYS
-    const now = new Date()
-    const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
-
-    return this.repo.create({
-      user_id: input.user_id,
-      plan_id: null,
-      is_trial: true,
-      status: SubscriptionStatusEnum.TRIAL,
-      amount: 0,
-      start_date: now,
-      end_date: end,
-      trial_ends_at: end,
-      auto_renew: false,
-    })
+    // Même écriture que l'essai garanti au premier accès
+    // (`ResolvePlanAccessUseCase`) : une clé par utilisateur, si bien qu'une
+    // inscription et un premier appel concurrents n'ouvrent qu'un essai.
+    const trial = await this.repo.startTrialOnce(
+      input.user_id,
+      input.duration_days ?? TRIAL_DURATION_DAYS
+    )
+    if (!trial) {
+      throw new DomainError(
+        'subscription_already_active',
+        'Cet utilisateur a déjà bénéficié de son essai gratuit.',
+        409
+      )
+    }
+    return trial
   }
 }
 
