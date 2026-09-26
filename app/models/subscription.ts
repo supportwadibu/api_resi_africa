@@ -54,6 +54,57 @@ function subscriptions() {
  * permet le contrôle applicatif avant toute création.
  */
 const Subscription = {
+  /**
+   * Ouvre l'essai gratuit d'un utilisateur, une seule fois.
+   *
+   * L'identifiant du document est dérivé de l'utilisateur (`trial_<id>`) et
+   * écrit par `create`, qui échoue si le document existe : deux ouvertures
+   * concurrentes — l'inscription et le premier appel de l'application, par
+   * exemple — ne produisent qu'un essai. Firestore n'ayant pas d'index unique,
+   * c'est la clé qui porte l'unicité, comme pour `roles`.
+   *
+   * `null` si l'essai existait déjà.
+   */
+  async startTrialOnce(userId: string, days: number): Promise<SubscriptionRecord | null> {
+    const now = new Date()
+    const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
+    const payload: SubscriptionDocument = {
+      user_id: userId,
+      plan_id: null,
+      is_trial: true,
+      status: 'trial',
+      amount: 0,
+      plan_tier: null,
+      start_date: now,
+      end_date: end,
+      trial_ends_at: end,
+      payment_reference: null,
+      auto_renew: false,
+      cancelled_at: null,
+      cancel_reason: null,
+      created_at: now,
+      updated_at: now,
+    }
+
+    const id = `trial_${userId}`
+    try {
+      await subscriptions()
+        .doc(id)
+        .create(toPayload(payload) as unknown as SubscriptionDocument)
+    } catch (error) {
+      // 6 = ALREADY_EXISTS : l'essai a déjà été ouvert.
+      if ((error as { code?: number }).code === 6) return null
+      throw error
+    }
+    return { ...payload, _id: id }
+  },
+
+  /** L'utilisateur a-t-il déjà eu un abonnement, quel qu'il soit ? */
+  async existsForUser(userId: string): Promise<boolean> {
+    const snapshot = await subscriptions().where('user_id', '==', userId).limit(1).get()
+    return !snapshot.empty
+  },
+
   async findById(id: string): Promise<SubscriptionRecord | null> {
     if (!id) return null
     return toDoc<SubscriptionDocument>(await subscriptions().doc(id).get())
@@ -134,6 +185,12 @@ const Subscription = {
       .where('status', 'in', ACTIVE_SUBSCRIPTION_STATUSES)
       .get()
 
+    return toDocs<SubscriptionDocument>(snapshot.docs)
+  },
+
+  /** Abonnements d'un statut donné, toute la plateforme confondue. */
+  async findByStatus(status: SubscriptionStatus): Promise<SubscriptionRecord[]> {
+    const snapshot = await subscriptions().where('status', '==', status).get()
     return toDocs<SubscriptionDocument>(snapshot.docs)
   },
 

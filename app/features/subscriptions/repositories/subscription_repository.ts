@@ -1,6 +1,7 @@
 /* eslint-disable prettier/prettier */
 import { readPlanTier, type PlanTier } from '#features/plans/plan_tier'
 import Subscription, { type SubscriptionRecord } from '#models/subscription'
+import SubscriptionEvent from '#models/subscription_event'
 import { type SubscriptionStatus } from '#utils/enums/subscription_status'
 
 import type {
@@ -96,6 +97,30 @@ export class SubscriptionRepository {
 
     const doc = await Subscription.findByIdAndUpdate(id, update)
     return doc ? SubscriptionRepository.toDto(doc) : null
+  }
+
+  /** Ouvre l'essai une seule fois ; `null` s'il existait déjà. */
+  async startTrialOnce(userId: string, days: number): Promise<SubscriptionDto | null> {
+    const doc = await Subscription.startTrialOnce(userId, days)
+    return doc ? SubscriptionRepository.toDto(doc) : null
+  }
+
+  async existsForUser(userId: string): Promise<boolean> {
+    return Subscription.existsForUser(userId)
+  }
+
+  /** Repousse l'échéance ; voir `planExtension`. */
+  async extend(
+    id: string,
+    patch: { end_date: Date; trial_ends_at?: Date }
+  ): Promise<SubscriptionDto | null> {
+    const doc = await Subscription.findByIdAndUpdate(id, patch)
+    return doc ? SubscriptionRepository.toDto(doc) : null
+  }
+
+  /** Trace un événement du cycle de vie dans `subscription_events`. */
+  async recordEvent(input: Parameters<typeof SubscriptionEvent.create>[0]): Promise<void> {
+    await SubscriptionEvent.create(input)
   }
 
   /**

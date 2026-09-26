@@ -13,6 +13,8 @@ const SUBSCRIPTION_EVENT_TYPES = [
   'trial_started',
   'trial_ended',
   'plan_changed',
+  /** Échéance repoussée par un administrateur, sans paiement. */
+  'extended',
   'auto_renew_enabled',
   'auto_renew_disabled',
 ] as const

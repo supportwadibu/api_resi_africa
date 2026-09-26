@@ -2,6 +2,8 @@ import { SUBSCRIPTION_STATUSES } from '#utils/enums/subscription_status'
 
 import vine from '@vinejs/vine'
 
+import { MAX_EXTENSION_DAYS } from '#features/subscriptions/subscription_extension'
+
 export const subscribeToPlanValidator = vine.compile(
   vine.object({
     plan_id: vine.string().trim().minLength(24).maxLength(24),
@@ -31,6 +33,16 @@ export const listSubscriptionsValidator = vine.compile(
     is_trial: vine.boolean().optional(),
     page: vine.number().positive().withoutDecimals().optional(),
     per_page: vine.number().positive().withoutDecimals().max(100).optional(),
+  })
+)
+
+/**
+ * PATCH /admin/subscriptions/:id/extend
+ */
+export const extendSubscriptionValidator = vine.compile(
+  vine.object({
+    days: vine.number().withoutDecimals().min(1).max(MAX_EXTENSION_DAYS),
+    reason: vine.string().trim().minLength(3).maxLength(500).optional(),
   })
 )
 

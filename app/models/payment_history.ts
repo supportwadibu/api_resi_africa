@@ -161,6 +161,18 @@ const PaymentHistory = {
     return snapshot.empty ? null : toDoc<PaymentHistoryDocument>(snapshot.docs[0])
   },
 
+  /**
+   * Paiements encaissés depuis une date.
+   *
+   * Filtre sur `paid_at` seul : il n'est posé qu'à la confirmation d'un
+   * paiement, si bien qu'un seul champ en inégalité suffit — sans index
+   * composite. Le statut est revérifié en mémoire pour un paiement remboursé.
+   */
+  async findPaidSince(from: Date): Promise<PaymentHistoryRecord[]> {
+    const snapshot = await paymentHistories().where('paid_at', '>=', from).get()
+    return toDocs<PaymentHistoryDocument>(snapshot.docs).filter((p) => p.status === 'success')
+  },
+
   /** Paiements d'un propriétaire encore en attente chez Wave. */
   async findPendingByUser(userId: string): Promise<PaymentHistoryRecord[]> {
     const snapshot = await paymentHistories()

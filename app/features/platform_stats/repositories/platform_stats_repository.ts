@@ -5,9 +5,14 @@ import { PROPERTY_STATUSES } from '#models/property'
 import { ROLE_NAMES } from '#models/role'
 import { OWNER_VALIDATION_STATUSES } from '#utils/enums/owner_validation_status'
 import { SUBSCRIPTION_STATUSES } from '#utils/enums/subscription_status'
+import PaymentHistory from '#models/payment_history'
+import Plan from '#models/plan'
+import Subscription from '#models/subscription'
+import { readPlanTier } from '#features/plans/plan_tier'
 
 import type { StatsBooking } from '#features/bookings/booking_stats'
 import type { PlatformStatsDto } from '../dto/platform_stats.dto.ts'
+import type { EarnedPayment, PaidSubscription, TrialSubscription } from '../subscription_revenue.ts'
 
 type Counters = Omit<PlatformStatsDto, 'generated_at' | 'revenue' | 'occupancy_rate'>
 
@@ -20,6 +25,47 @@ type Counters = Omit<PlatformStatsDto, 'generated_at' | 'revenue' | 'occupancy_r
  * index composite.
  */
 export class PlatformStatsRepository {
+  /**
+   * Données du revenu d'abonnement : paiements encaissés depuis `from`,
+   * abonnements payants et essais en cours, prix des forfaits proposés.
+   *
+   * La durée d'une période vient du plan de l'abonnement, retiré compris ;
+   * 30 jours à défaut — un abonnement dont le plan a été supprimé reste
+   * mensuel, le seul cas vendu jusqu'ici.
+   */
+  async subscriptionRevenueInputs(from: Date): Promise<{
+    payments: EarnedPayment[]
+    paidSubscriptions: PaidSubscription[]
+    trials: TrialSubscription[]
+    planPrices: number[]
+  }> {
+    const [payments, active, trials, plans] = await Promise.all([
+      PaymentHistory.findPaidSince(from),
+      Subscription.findByStatus('active'),
+      Subscription.findByStatus('trial'),
+      Plan.findAll(),
+    ])
+
+    const durations = new Map(plans.map((plan) => [plan._id, plan.duration_days]))
+
+    return {
+      payments: payments.flatMap((p) =>
+        p.paid_at ? [{ amount: Number(p.amount), paid_at: p.paid_at }] : []
+      ),
+      // Un essai porté en `active` par l'historique ne rapporte rien.
+      paidSubscriptions: active
+        .filter((s) => !s.is_trial)
+        .map((s) => ({
+          amount: Number(s.amount),
+          end_date: s.end_date,
+          plan_tier: readPlanTier(s.plan_tier),
+          duration_days: (s.plan_id ? durations.get(s.plan_id) : undefined) ?? 30,
+        })),
+      trials: trials.map((s) => ({ end_date: s.end_date })),
+      planPrices: plans.filter((plan) => plan.is_active).map((plan) => plan.price),
+    }
+  }
+
   private count(name: CollectionName, filters: Array<[string, unknown]> = []): Promise<number> {
     let query = collection(name) as FirebaseFirestore.Query
     for (const [field, value] of filters) query = query.where(field, '==', value)
