@@ -25,6 +25,8 @@ const ProprioExpenseController = () => import('#controllers/proprio/expense_cont
 const ProprioFinanceController = () => import('#controllers/proprio/finance_controller')
 const ProprioReportController = () => import('#controllers/proprio/report_controller')
 const ProprioSubscriptionController = () => import('#controllers/proprio/subscription_controller')
+const ProprioSubscriptionPaymentController = () =>
+  import('#controllers/proprio/subscription_payment_controller')
 const ProprioFeedbackController = () => import('#controllers/proprio/feedback_controller')
 const ProprioManagerController = () => import('#controllers/proprio/manager_controller')
 const GerantPropertyController = () => import('#controllers/gerant/property_controller')
@@ -166,36 +168,34 @@ router
       .as('admin')
       .use([middleware.auth(), middleware.role(['admin'])])
 
+    /**
+     * Espace du propriétaire, en trois niveaux d'accès.
+     *
+     * L'accès se décide par groupe et non route par route : une route ajoutée
+     * à un groupe hérite de sa règle, sans condition à ne pas oublier. Une
+     * fonction nouvelle se range par défaut dans le groupe `full` — le forfait
+     * 5 000 F couvre les fonctions à venir.
+     *
+     * Les groupes `full` qui partagent un préfixe avec un groupe `plan()`
+     * (`properties/stats`, `bookings/stats`, le carnet `clients`) sont déclarés
+     * **avant** lui : leurs routes littérales doivent précéder `:id`, sinon
+     * « stats » serait pris pour un identifiant.
+     */
     router
       .group(() => {
+        // Ouvertes sans abonnement actif : ce qu'il faut pour souscrire, déposer
+        // son dossier et joindre le support.
+        router.get('subscription', [ProprioSubscriptionController, 'show']).as('subscription')
         router
-          .group(() => {
-            router.get('/', [ProprioPropertyController, 'index'])
-            router.get('stats', [ProprioPropertyController, 'stats'])
-            // Avant `:id`, sinon « availability » serait pris pour un identifiant.
-            router.get('availability', [ProprioPropertyController, 'availability'])
-            router.post('/', [ProprioPropertyController, 'store'])
-            router.post('images', [ProprioPropertyImageController, 'store'])
-            router.get(':id', [ProprioPropertyController, 'show'])
-            router.patch(':id', [ProprioPropertyController, 'update'])
-            router.delete(':id', [ProprioPropertyController, 'destroy'])
-            router.patch(':id/residence', [ProprioPropertyController, 'attachResidence'])
-            router.patch(':id/publish', [ProprioPropertyController, 'publish'])
-            router.patch(':id/unpublish', [ProprioPropertyController, 'unpublish'])
-          })
-          .prefix('properties')
-          .as('properties')
-
+          .post('subscription/checkout', [ProprioSubscriptionPaymentController, 'checkout'])
+          .as('subscription_checkout')
         router
-          .group(() => {
-            router.get('/', [ProprioResidenceController, 'index'])
-            router.post('/', [ProprioResidenceController, 'store'])
-            router.get(':id', [ProprioResidenceController, 'show'])
-            router.patch(':id', [ProprioResidenceController, 'update'])
-            router.delete(':id', [ProprioResidenceController, 'destroy'])
-          })
-          .prefix('residences')
-          .as('residences')
+          .post('subscription/checkout/:reference/confirm', [
+            ProprioSubscriptionPaymentController,
+            'confirm',
+          ])
+          .as('subscription_confirm')
+        router.get('plans', [ProprioSubscriptionPaymentController, 'plans']).as('plans')
 
         router
           .group(() => {
@@ -207,82 +207,128 @@ router
 
         router
           .group(() => {
-            router.get('/', [ProprioBookingController, 'index'])
-            // Avant `:id`, sinon « stats » serait pris pour un identifiant.
-            router.get('stats', [ProprioBookingController, 'stats'])
-            router.post('/', [ProprioBookingController, 'store'])
-            router.get(':id/check-out/preview', [ProprioBookingController, 'checkOutPreview'])
-            router.patch(':id/check-out', [ProprioBookingController, 'checkOut'])
-            router.patch(':id/extend', [ProprioBookingController, 'extend'])
-          })
-          .prefix('bookings')
-          .as('bookings')
-
-        router
-          .group(() => {
-            router.get('/', [ProprioClientController, 'index'])
-            // Avant `:id`, sinon « lookup » serait pris pour un identifiant.
-            router.post('lookup', [ProprioClientController, 'lookup'])
-            router.post('/', [ProprioClientController, 'store'])
-            router.get(':id', [ProprioClientController, 'show'])
-            router.get(':id/bookings', [ProprioClientController, 'bookings'])
-            router.patch(':id', [ProprioClientController, 'update'])
-          })
-          .prefix('clients')
-          .as('clients')
-
-        router
-          .group(() => {
-            router.get('/', [ProprioExpenseController, 'index'])
-            // Avant `:id`, sinon « summary » serait pris pour un identifiant.
-            router.get('summary', [ProprioExpenseController, 'summary'])
-            router.post('/', [ProprioExpenseController, 'store'])
-            router.get(':id', [ProprioExpenseController, 'show'])
-            router.patch(':id', [ProprioExpenseController, 'update'])
-            router.delete(':id', [ProprioExpenseController, 'destroy'])
-          })
-          .prefix('expenses')
-          .as('expenses')
-
-        router
-          .group(() => {
-            router.get('overview', [ProprioFinanceController, 'overview'])
-          })
-          .prefix('finance')
-          .as('finance')
-
-        router
-          .group(() => {
-            router.post('/', [ProprioReportController, 'store'])
-          })
-          .prefix('reports')
-          .as('reports')
-
-        router
-          .group(() => {
             router.get('/', [ProprioFeedbackController, 'index'])
             router.post('/', [ProprioFeedbackController, 'store'])
           })
           .prefix('feedbacks')
           .as('feedbacks')
 
+        // Forfait 5 000 F : statistiques, PDF, carnet et fiches clients,
+        // dépenses, gérants.
         router
           .group(() => {
-            router.get('/', [ProprioManagerController, 'index'])
-            router.post('/', [ProprioManagerController, 'store'])
-            router.get(':id', [ProprioManagerController, 'show'])
-            router.patch(':id', [ProprioManagerController, 'update'])
-            // `PUT` : le propriétaire envoie le périmètre complet, si bien
-            // qu'un ajout et un retrait faits ensemble deviennent une seule
-            // écriture et que l'état obtenu ne dépend pas de l'ordre des
-            // requêtes.
-            router.put(':id/properties', [ProprioManagerController, 'replaceProperties'])
-            router.patch(':id/status', [ProprioManagerController, 'setStatus'])
-          })
-          .prefix('managers')
-          .as('managers')
+            router.get('properties/stats', [ProprioPropertyController, 'stats'])
+            router.get('bookings/stats', [ProprioBookingController, 'stats'])
 
-        router.get('subscription', [ProprioSubscriptionController, 'show']).as('subscription')
+            router
+              .group(() => {
+                router.get('/', [ProprioClientController, 'index'])
+                router.get(':id', [ProprioClientController, 'show'])
+                router.get(':id/bookings', [ProprioClientController, 'bookings'])
+                router.patch(':id', [ProprioClientController, 'update'])
+              })
+              .prefix('clients')
+              .as('client_book')
+
+            router
+              .group(() => {
+                router.get('/', [ProprioExpenseController, 'index'])
+                // Avant `:id`, sinon « summary » serait pris pour un identifiant.
+                router.get('summary', [ProprioExpenseController, 'summary'])
+                router.post('/', [ProprioExpenseController, 'store'])
+                router.get(':id', [ProprioExpenseController, 'show'])
+                router.patch(':id', [ProprioExpenseController, 'update'])
+                router.delete(':id', [ProprioExpenseController, 'destroy'])
+              })
+              .prefix('expenses')
+              .as('expenses')
+
+            router
+              .group(() => {
+                router.get('overview', [ProprioFinanceController, 'overview'])
+              })
+              .prefix('finance')
+              .as('finance')
+
+            router
+              .group(() => {
+                router.post('/', [ProprioReportController, 'store'])
+              })
+              .prefix('reports')
+              .as('reports')
+
+            router
+              .group(() => {
+                router.get('/', [ProprioManagerController, 'index'])
+                router.post('/', [ProprioManagerController, 'store'])
+                router.get(':id', [ProprioManagerController, 'show'])
+                router.patch(':id', [ProprioManagerController, 'update'])
+                // `PUT` : le propriétaire envoie le périmètre complet, si bien
+                // qu'un ajout et un retrait faits ensemble deviennent une seule
+                // écriture et que l'état obtenu ne dépend pas de l'ordre des
+                // requêtes.
+                router.put(':id/properties', [ProprioManagerController, 'replaceProperties'])
+                router.patch(':id/status', [ProprioManagerController, 'setStatus'])
+              })
+              .prefix('managers')
+              .as('managers')
+          })
+          .as('full')
+          .use(middleware.plan({ tier: 'full' }))
+
+        // Forfait 3 000 F et au-delà : l'enregistrement.
+        router
+          .group(() => {
+            router
+              .group(() => {
+                router.get('/', [ProprioPropertyController, 'index'])
+                // Avant `:id`, sinon « availability » serait pris pour un identifiant.
+                router.get('availability', [ProprioPropertyController, 'availability'])
+                router.post('/', [ProprioPropertyController, 'store'])
+                router.post('images', [ProprioPropertyImageController, 'store'])
+                router.get(':id', [ProprioPropertyController, 'show'])
+                router.patch(':id', [ProprioPropertyController, 'update'])
+                router.delete(':id', [ProprioPropertyController, 'destroy'])
+                router.patch(':id/residence', [ProprioPropertyController, 'attachResidence'])
+                router.patch(':id/publish', [ProprioPropertyController, 'publish'])
+                router.patch(':id/unpublish', [ProprioPropertyController, 'unpublish'])
+              })
+              .prefix('properties')
+              .as('properties')
+
+            router
+              .group(() => {
+                router.get('/', [ProprioResidenceController, 'index'])
+                router.post('/', [ProprioResidenceController, 'store'])
+                router.get(':id', [ProprioResidenceController, 'show'])
+                router.patch(':id', [ProprioResidenceController, 'update'])
+                router.delete(':id', [ProprioResidenceController, 'destroy'])
+              })
+              .prefix('residences')
+              .as('residences')
+
+            router
+              .group(() => {
+                router.get('/', [ProprioBookingController, 'index'])
+                router.post('/', [ProprioBookingController, 'store'])
+                router.get(':id/check-out/preview', [ProprioBookingController, 'checkOutPreview'])
+                router.patch(':id/check-out', [ProprioBookingController, 'checkOut'])
+                router.patch(':id/extend', [ProprioBookingController, 'extend'])
+              })
+              .prefix('bookings')
+              .as('bookings')
+
+            // Le client se crée pendant la réservation : recherche et création
+            // seulement. Le carnet et les fiches relèvent du forfait complet.
+            router
+              .group(() => {
+                router.post('lookup', [ProprioClientController, 'lookup'])
+                router.post('/', [ProprioClientController, 'store'])
+              })
+              .prefix('clients')
+              .as('clients')
+          })
+          .use(middleware.plan())
       })
       .prefix('proprio')
       .as('proprio')
@@ -389,7 +435,14 @@ router
       })
       .prefix('gerant')
       .as('gerant')
-      .use([middleware.auth(), middleware.role(['gerant']), middleware.scope()])
+      // L'espace gérant entier relève du forfait 5 000 F, apprécié sur
+      // l'abonnement du propriétaire : `plan()` suit donc `scope()`.
+      .use([
+        middleware.auth(),
+        middleware.role(['gerant']),
+        middleware.scope(),
+        middleware.plan({ tier: 'full' }),
+      ])
 
     router
       .group(() => {
@@ -421,6 +474,18 @@ router
       .as('client')
 
     router.post('payments/wave/webhook', [ClientBookingPaymentController, 'waveWebhook'])
+    router
+      .post('payments/wave/subscriptions/webhook', [
+        ProprioSubscriptionPaymentController,
+        'waveWebhook',
+      ])
+      .as('subscription_wave_webhook')
+    router
+      .get('payments/wave/subscriptions/:reference/return', [
+        ProprioSubscriptionPaymentController,
+        'waveReturn',
+      ])
+      .as('subscription_wave_return')
 
     router
       .group(() => {

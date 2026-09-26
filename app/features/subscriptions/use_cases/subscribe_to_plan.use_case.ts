@@ -67,6 +67,8 @@ export class SubscribeToPlanUseCase {
       is_trial: false,
       status: SubscriptionStatusEnum.ACTIVE,
       amount: plan.price,
+      // Figé : la souscription garde le palier payé, quoi qu'il advienne du plan.
+      plan_tier: plan.tier,
       start_date: now,
       end_date: end,
       trial_ends_at: null,

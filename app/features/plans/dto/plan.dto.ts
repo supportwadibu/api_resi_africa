@@ -1,3 +1,5 @@
+import type { PlanTier } from '#features/plans/plan_tier'
+
 /**
  * DTO d'entrée/sortie pour les usecases Plan.
  * Le format de retour est volontairement primitivisé (number au lieu de Decimal128)
@@ -12,6 +14,7 @@ export interface PlanDto {
   duration_days: number
   max_residences: number
   features: string[]
+  tier: PlanTier
   is_active: boolean
   created_at: Date
   updated_at: Date
@@ -24,6 +27,7 @@ export interface CreatePlanInput {
   duration_days: number
   max_residences: number
   features?: string[]
+  tier: PlanTier
   is_active?: boolean
 }
 
@@ -34,6 +38,7 @@ export interface UpdatePlanInput {
   duration_days?: number
   max_residences?: number
   features?: string[]
+  tier?: PlanTier
   is_active?: boolean
 }
 

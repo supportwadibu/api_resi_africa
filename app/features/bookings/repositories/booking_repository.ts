@@ -70,6 +70,10 @@ export class BookingRepository {
       received_amount: doc.received_amount ?? doc.total_amount,
       deposit_amount: doc.deposit_amount ?? 0,
       sync_status: doc.sync_status ?? 'synced',
+      // Absents de l'historique et des réservations sans apporteur.
+      referrer: doc.referrer ?? null,
+      referrer_commission_rate: doc.referrer_commission_rate ?? 0,
+      referrer_commission_amount: doc.referrer_commission_amount ?? 0,
       client: doc.client_snapshot
         ? {
             id: doc.client_id,

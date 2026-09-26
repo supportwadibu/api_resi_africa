@@ -1,3 +1,4 @@
+import { elapsedWindow } from '#features/bookings/booking_stats'
 import { filterByScope } from '#features/managers/scope'
 
 import { aggregateGrossRevenue, aggregateRevenuePoints } from './repositories/finance_repository.ts'
@@ -97,6 +98,8 @@ export function buildManagerOverview(input: {
   expenses: readonly ScopedExpense[]
   from: Date
   to: Date
+  /** Instant de référence du taux d'occupation ; injectable pour les tests. */
+  now?: Date
 }): ManagerOverviewDto {
   const bookings = filterByScope(input.bookings, input.scope)
   const expenses = filterByScope(input.expenses, input.scope)
@@ -110,7 +113,12 @@ export function buildManagerOverview(input: {
     // et le chiffre clé reste ainsi égal au cumul du graphique.
     gross_revenue: aggregateGrossRevenue(bookings, range),
     expenses_total: expenses.reduce((sum, expense) => sum + expense.amount, 0),
-    occupancy_rate: computeOccupancyRate(bookings, input.scope, input.from, input.to),
+    // Jours écoulés seulement, comme le relevé du propriétaire : voir
+    // `elapsedWindow`.
+    occupancy_rate: (() => {
+      const elapsed = elapsedWindow(range, input.now ?? new Date())
+      return computeOccupancyRate(bookings, input.scope, elapsed.from, elapsed.to)
+    })(),
     revenue_points: aggregateRevenuePoints(bookings, range),
   }
 }

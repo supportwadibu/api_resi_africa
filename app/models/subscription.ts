@@ -10,6 +10,7 @@ import {
 import { ACTIVE_SUBSCRIPTION_STATUSES } from '#utils/enums/subscription_status'
 
 import type { SubscriptionStatus } from '#utils/enums/subscription_status'
+import type { PlanTier } from '#features/plans/plan_tier'
 
 export interface SubscriptionDocument {
   user_id: string
@@ -17,6 +18,13 @@ export interface SubscriptionDocument {
   is_trial: boolean
   status: SubscriptionStatus
   amount: number
+  /**
+   * Palier copié du plan à la souscription, jamais recalculé : repasser un
+   * plan de `full` à `basic` ne doit pas retirer des fonctions à qui a payé
+   * l'accès complet. Absent sur l'historique et sur les essais — lu via
+   * `resolvePlanAccess`.
+   */
+  plan_tier?: PlanTier | null
 
   start_date: Date
   end_date: Date
@@ -57,6 +65,7 @@ const Subscription = {
     is_trial?: boolean
     status?: SubscriptionStatus
     amount?: number
+    plan_tier?: PlanTier | null
     start_date?: Date
     end_date: Date
     trial_ends_at?: Date | null
@@ -70,6 +79,7 @@ const Subscription = {
       is_trial: input.is_trial ?? false,
       status: input.status ?? 'pending',
       amount: input.amount ?? 0,
+      plan_tier: input.plan_tier ?? null,
       start_date: input.start_date ?? now,
       end_date: input.end_date,
       trial_ends_at: input.trial_ends_at ?? null,
@@ -109,6 +119,22 @@ const Subscription = {
       .get()
 
     return snapshot.empty ? null : toDoc<SubscriptionDocument>(snapshot.docs[0])
+  },
+
+  /**
+   * Tous les abonnements « vivants » d'un utilisateur.
+   *
+   * L'unicité n'étant qu'applicative, l'historique peut en porter plusieurs —
+   * un `pending` jamais payé à côté d'un abonnement actif. `findActiveByUser`
+   * n'en rend qu'un, pris au hasard : insuffisant pour décider d'un accès.
+   */
+  async findLiveByUser(userId: string): Promise<SubscriptionRecord[]> {
+    const snapshot = await subscriptions()
+      .where('user_id', '==', userId)
+      .where('status', 'in', ACTIVE_SUBSCRIPTION_STATUSES)
+      .get()
+
+    return toDocs<SubscriptionDocument>(snapshot.docs)
   },
 
   async findByUser(userId: string): Promise<SubscriptionRecord[]> {

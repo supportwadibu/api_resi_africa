@@ -2,6 +2,7 @@ import Booking from '#models/booking'
 import Expense from '#models/expense'
 import Property from '#models/property'
 
+import { elapsedWindow } from '#features/bookings/booking_stats'
 import { stayTypeOccupancyDays } from '#features/bookings/stay_type'
 
 import Residence from '#models/residence'
@@ -111,6 +112,32 @@ export function aggregateGrossRevenue(
 }
 
 /**
+ * Commissions d'apporteurs imputables à la fenêtre.
+ *
+ * Réparties au prorata des jours, exactement comme le chiffre d'affaires dont
+ * elles sont une part : un séjour à cheval sur deux mois n'impute à chacun que
+ * la commission de ses jours, et `benefice_net` retranche des montants pris
+ * sur la même assiette que `ca_brut`.
+ *
+ * Les réservations antérieures aux apporteurs n'en portent pas : zéro.
+ */
+export function aggregateCommissions(
+  bookings: { start_date: Date; end_date: Date; referrer_commission_amount?: number }[],
+  range: { from?: Date; to?: Date }
+): number {
+  return aggregateGrossRevenue(
+    bookings
+      .filter((b) => (b.referrer_commission_amount ?? 0) > 0)
+      .map((b) => ({
+        start_date: b.start_date,
+        end_date: b.end_date,
+        total_amount: b.referrer_commission_amount ?? 0,
+      })),
+    range
+  )
+}
+
+/**
  * Sommes rendues aux clients sur la fenêtre, rattachées au jour du départ.
  *
  * Le jour du départ et non la période du séjour : c'est à ce moment que
@@ -175,6 +202,7 @@ export class FinanceRepository {
     const caBrut = aggregateGrossRevenue(bookings, range)
 
     const depenses = await this.sumExpenses(filters, range, unitIds, expenseSummary?.total)
+    const commissions = aggregateCommissions(bookings, range)
 
     // Seuls les jours tombant dans la fenêtre comptent : un séjour à cheval
     // sur la borne imputait auparavant ses jours entiers à la période, d'où
@@ -193,6 +221,25 @@ export class FinanceRepository {
       0
     )
 
+    // Le taux se mesure sur les jours écoulés (`elapsedWindow`) : sur le mois
+    // en cours, le 10, on divise par dix jours et non par trente, et les
+    // réservations déjà prises pour la fin du mois n'y entrent pas encore.
+    // `totalDays` garde la fenêtre entière : la durée moyenne de séjour porte
+    // sur toutes les réservations de la période.
+    const occupancyRange =
+      range.from && range.to ? elapsedWindow({ from: range.from, to: range.to }, new Date()) : null
+    const occupiedDaysToDate = occupancyRange
+      ? bookings.reduce(
+          (sum, b) =>
+            sum +
+            stayTypeOccupancyDays(
+              b.stay_type ?? 'full_day',
+              daysWithinWindow(b.start_date, b.end_date, occupancyRange.from, occupancyRange.to)
+            ),
+          0
+        )
+      : 0
+
     // Une résidence demandée mais introuvable rendrait un relevé vide
     // indistinguable d’une résidence sans activité : le use case tranche.
     if (filters.residence_id && !residence) {
@@ -205,17 +252,18 @@ export class FinanceRepository {
         depenses,
         // Peut être négatif : un mois de travaux sans réservation est une perte,
         // et la masquer à zéro tromperait le propriétaire.
-        benefice_net: caBrut - depenses,
+        benefice_net: caBrut - depenses - commissions,
+        commissions,
         remboursements: aggregateRefunds(bookings, range),
         // `published + rented` : un bien réservé passe en « rented » et sort
         // des publiés, alors qu'il fait toujours partie du parc exploité.
         taux_occupation: this.occupancyRate(
-          totalDays,
+          occupiedDaysToDate,
           // Restreint à une résidence, la capacité est celle de ses unités.
           // Garder le parc entier au dénominateur écraserait le taux d’une
           // résidence de trois studios chez un propriétaire qui en a trente.
           unitIds ? unitIds.size : propertyStats.published + propertyStats.rented,
-          range
+          occupancyRange ?? {}
         ),
         reservations: bookings.length,
         moyen_sejour: bookings.length ? totalDays / bookings.length : 0,

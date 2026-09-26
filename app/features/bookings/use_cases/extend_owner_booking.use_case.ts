@@ -6,6 +6,7 @@ import { findExtensionConflict, toPeriods } from '../availability.ts'
 import type { BookingDto } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 import { computeOwnerBookingAmounts } from './create_owner_booking.use_case.ts'
+import { withReferrerCommission } from '../referrer.ts'
 
 /**
  * Champs écrits par la prolongation d'un séjour comptoir.
@@ -113,7 +114,10 @@ export class ExtendOwnerBookingUseCase {
     try {
       updated = await Booking.extendBooking(
         id,
-        buildExtensionPatch(input.check_out_at, days, expected, received),
+        withReferrerCommission(
+          booking,
+          buildExtensionPatch(input.check_out_at, days, expected, received)
+        ),
         { owner_id: ownerId },
         (active) =>
           findExtensionConflict(id, currentCheckOut, input.check_out_at, toPeriods(active)) !== null

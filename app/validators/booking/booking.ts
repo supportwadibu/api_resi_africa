@@ -54,6 +54,13 @@ export const createOwnerBookingValidator = vine.compile(
     is_check_in: vine.boolean().optional(),
     /** UUID généré par l'appareil ; porte l'idempotence de la synchronisation. */
     client_request_id: vine.string().trim().maxLength(64).optional(),
+    /** Apporteur d'affaire, saisi librement : il n'a pas de compte. */
+    referrer: vine
+      .object({
+        name: vine.string().trim().minLength(2).maxLength(120),
+        phone: vine.string().trim().maxLength(30).optional(),
+      })
+      .optional(),
   })
 )
 

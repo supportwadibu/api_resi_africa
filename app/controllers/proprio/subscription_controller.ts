@@ -1,7 +1,10 @@
 import type { HttpContext } from '@adonisjs/core/http'
 
 import OwnerRepository from '../../features/owners/repositories/owner_repository.ts'
-import { GetCurrentSubscriptionUseCase } from '../../features/subscriptions/use_cases/index.ts'
+import {
+  GetCurrentSubscriptionUseCase,
+  ResolvePlanAccessUseCase,
+} from '../../features/subscriptions/use_cases/index.ts'
 
 /** Millisecondes dans une journée. */
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -31,6 +34,9 @@ export default class ProprioSubscriptionController {
       new GetCurrentSubscriptionUseCase().execute(userId),
       new OwnerRepository().findById(userId),
     ])
+    // Même décision que le middleware `plan()` : l'écran ne peut pas annoncer
+    // un accès que l'API refuserait.
+    const planAccess = await new ResolvePlanAccessUseCase().execute(userId)
 
     const daysRemaining = subscription ? this.daysUntil(subscription.end_date) : 0
 
@@ -41,7 +47,12 @@ export default class ProprioSubscriptionController {
         is_trial: subscription?.is_trial ?? false,
         days_remaining: daysRemaining,
         /** Le propriétaire peut-il exploiter ses annonces ? */
-        can_operate: subscription !== null && owner?.owner_status !== 'suspended',
+        can_operate: planAccess !== null && owner?.owner_status !== 'suspended',
+        /**
+         * Palier ouvert : `full` (5 000 F), `basic` (3 000 F), ou `null` pour
+         * un compte inactif, qui doit souscrire un forfait.
+         */
+        plan_access: planAccess,
         /** Dossier déposé, en attente de décision d'un administrateur. */
         awaiting_validation: owner?.owner_status === 'pending',
         /**

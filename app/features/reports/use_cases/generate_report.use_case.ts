@@ -2,7 +2,11 @@ import { DomainError } from '#utils/domain_error'
 import logger from '@adonisjs/core/services/logger'
 
 import BookingPaymentRepository from '#features/booking_payments/repositories/booking_payment_repository'
-import { occupancyForWindow, type MonthWindow } from '#features/bookings/booking_stats'
+import {
+  elapsedWindow,
+  occupancyForWindow,
+  type MonthWindow,
+} from '#features/bookings/booking_stats'
 import BookingRepository from '#features/bookings/repositories/booking_repository'
 import { stayTypeOccupancyDays, type StayType } from '#features/bookings/stay_type'
 import ClientRepository from '#features/clients/repositories/client_repository'
@@ -398,20 +402,19 @@ export class GenerateReportUseCase {
           (property) => property.status === 'published' || property.status === 'rented'
         )
 
-    // Fenêtre **brute**, non tronquée à aujourd'hui.
+    // Fenêtre **coupée à aujourd'hui**, au numérateur comme au dénominateur —
+    // exactement comme `FinanceRepository.overview` : le rapport doit
+    // reproduire les chiffres de l'écran, jamais en produire que l'écran ne sait
+    // pas atteindre. Couper la seule capacité afficherait ~100 % là où l'écran
+    // afficherait ~16 % ; couper les deux ne compte que les jours écoulés.
     //
-    // `FinanceRepository.occupancyRate` rapporte les jours occupés à
-    // `range.from`/`range.to` tels que demandés. Tronquer ici aux jours écoulés
-    // ferait afficher ~100 % sur le PDF là où l'écran Finance, édité le même
-    // jour sur la même période, afficherait ~16 % — le rapport doit reproduire
-    // les chiffres de l'écran, jamais en produire que l'écran ne sait pas
-    // atteindre.
-    //
-    // La convention en jours écoulés reste celle de l'onglet Statistiques
-    // (`elapsedWindow`), qui lit un mois en cours : elle ne s'applique pas à un
-    // rapport dont la période est choisie explicitement par le propriétaire.
-    const availableDays = windowDays(window) * exploitedProperties.length
-    const occupiedDays = Math.min(availableDays, occupiedDaysInWindow(bookings, window))
+    // Une période entièrement future n'a aucun jour écoulé : capacité nulle,
+    // taux nul, plutôt que le jour plancher de `windowDays`.
+    const now = new Date()
+    const elapsed = elapsedWindow(window, now)
+    const elapsedDays = elapsed.to > elapsed.from ? windowDays(elapsed) : 0
+    const availableDays = elapsedDays * exploitedProperties.length
+    const occupiedDays = Math.min(availableDays, occupiedDaysInWindow(bookings, elapsed))
     const grossRevenue = aggregateGrossRevenue(bookings, window)
 
     // Le numérateur est le total **non plafonné** : le plafond d'`occupiedDays`
@@ -426,19 +429,19 @@ export class GenerateReportUseCase {
     // gonfleraient le ratio d'un facteur égal au nombre de biens.
     const monthlyOccupancy = splitIntoMonths(window).map((month) => ({
       month: MONTH_LABELS[month.from.getUTCMonth()],
-      ratio: occupancyForWindow(bookings, exploitedProperties.length, month),
+      ratio: occupancyForWindow(bookings, exploitedProperties.length, elapsedWindow(month, now)),
     }))
 
     const propertyRows: PerformancePropertyRow[] = exploitedProperties.map((property) => {
       const propertyBookings = bookings.filter((b) => b.property_id === property.id)
-      const propertyAvailableDays = windowDays(window)
+      const propertyAvailableDays = elapsedDays
 
       return {
         property_title: property.title,
         // Même plafond que ci-dessus, appliqué à la capacité d'un seul bien.
         occupied_days: Math.min(
           propertyAvailableDays,
-          occupiedDaysInWindow(propertyBookings, window)
+          occupiedDaysInWindow(propertyBookings, elapsed)
         ),
         available_days: propertyAvailableDays,
         gross_revenue: aggregateGrossRevenue(propertyBookings, window),

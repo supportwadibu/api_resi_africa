@@ -10,6 +10,9 @@ import { assertRateLimit } from '#auth/helpers/rate_limit'
 import User from '#models/user'
 import OtpService from '#services/otp_service'
 import { AuthError } from '#utils/auth_error'
+import logger from '@adonisjs/core/services/logger'
+
+import { StartTrialForOwnerUseCase } from '../../../features/subscriptions/use_cases/start_trial_for_owner.use_case.ts'
 
 /**
  * Use case : vérifie l'OTP d'inscription, active le compte et délivre les tokens.
@@ -66,7 +69,26 @@ export class RegisterVerifyUseCase {
       device: input.device,
     })
 
+    // Même règle que l'inscription Google : l'essai démarre à l'inscription,
+    // pour que le propriétaire découvre l'application pendant l'examen de son
+    // dossier. Sans lui, un compte neuf serait inactif — et bloqué par le
+    // middleware `plan()` — jusqu'à la validation par un administrateur.
+    if (user.role_id === 'proprio') await this.startTrial(user._id)
+
     return issueTokens(user, input.device)
+  }
+
+  /**
+   * Non bloquant, comme dans `GoogleLoginUseCase` : l'essai est un avantage,
+   * pas une condition d'inscription, et le use case refuse les doublons — un
+   * rejeu est sans effet. `ValidateOwnerUseCase` le rouvre en filet.
+   */
+  private async startTrial(userId: string): Promise<void> {
+    try {
+      await new StartTrialForOwnerUseCase().execute({ user_id: userId })
+    } catch (error) {
+      logger.error({ err: error, user_id: userId }, "Échec du démarrage de l'essai gratuit")
+    }
   }
 }
 

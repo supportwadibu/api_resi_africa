@@ -58,10 +58,20 @@ export function monthWindow(reference: Date, offset = 0): MonthWindow {
  * financier du 1er à aujourd'hui. Deux taux d'occupation divergents dans la
  * même application n'auraient pas de lecture possible.
  *
- * Un mois déjà révolu garde sa borne : la tronquer l'allongerait.
+ * Un mois déjà révolu garde sa borne : la tronquer l'allongerait. Une fenêtre
+ * entièrement future se réduit à un instant — aucun jour écoulé, taux nul —
+ * plutôt qu'à un intervalle inversé.
+ *
+ * La coupe porte sur le numérateur **et** le dénominateur : ne couper que la
+ * capacité compterait les réservations déjà prises pour la fin du mois dans
+ * des jours pas encore arrivés, et pousserait le taux vers 100 %.
+ *
+ * Même règle pour le relevé Finance, le relevé gérant et le rapport
+ * performance : le même taux sur la même période, partout.
  */
 export function elapsedWindow(window: MonthWindow, now: Date): MonthWindow {
-  return { from: window.from, to: now < window.to ? now : window.to }
+  const to = now < window.to ? now : window.to
+  return { from: window.from, to: to < window.from ? window.from : to }
 }
 
 /**

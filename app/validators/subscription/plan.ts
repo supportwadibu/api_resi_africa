@@ -1,10 +1,13 @@
 import vine from '@vinejs/vine'
 
+import { PLAN_TIERS } from '#features/plans/plan_tier'
+
 const name = () => vine.string().trim().minLength(5).maxLength(80)
 const description = () => vine.string().trim().maxLength(1000)
 const price = () => vine.number().positive()
 const durationDays = () => vine.number().positive().withoutDecimals()
 const maxResidences = () => vine.number().positive().withoutDecimals()
+const tier = () => vine.enum(PLAN_TIERS)
 const features = () => vine.array(vine.string().trim().minLength(1).maxLength(80)).maxLength(50)
 
 /**
@@ -18,6 +21,7 @@ export const createPlanValidator = vine.compile(
     duration_days: durationDays(),
     max_residences: maxResidences(),
     features: features().optional(),
+    tier: tier(),
     is_active: vine.boolean().optional(),
   })
 )
@@ -33,6 +37,7 @@ export const updatePlanValidator = vine.compile(
     duration_days: durationDays().optional(),
     max_residences: maxResidences().optional(),
     features: features().optional(),
+    tier: tier().optional(),
     is_active: vine.boolean().optional(),
   })
 )

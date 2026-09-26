@@ -46,5 +46,6 @@ export const middleware = router.named({
   auth: () => import('#middleware/jwt_auth_middleware'),
   role: () => import('#middleware/role_middleware'),
   scope: () => import('#middleware/scope_middleware'),
+  plan: () => import('#middleware/plan_middleware'),
   cron: () => import('#middleware/cron_middleware'),
 })
