@@ -1,4 +1,5 @@
 /* eslint-disable prettier/prettier */
+import { readPlanTier, type PlanTier } from '#features/plans/plan_tier'
 import Subscription, { type SubscriptionRecord } from '#models/subscription'
 import { type SubscriptionStatus } from '#utils/enums/subscription_status'
 
@@ -16,6 +17,7 @@ export class SubscriptionRepository {
       is_trial: doc.is_trial,
       status: doc.status,
       amount: Number(doc.amount),
+      plan_tier: doc.is_trial ? 'full' : readPlanTier(doc.plan_tier),
       start_date: doc.start_date,
       end_date: doc.end_date,
       trial_ends_at: doc.trial_ends_at ?? null,
@@ -34,6 +36,7 @@ export class SubscriptionRepository {
     is_trial: boolean
     status: SubscriptionStatus
     amount: number
+    plan_tier?: PlanTier | null
     start_date: Date
     end_date: Date
     trial_ends_at?: Date | null
@@ -46,6 +49,7 @@ export class SubscriptionRepository {
       is_trial: input.is_trial,
       status: input.status,
       amount: input.amount,
+      plan_tier: input.plan_tier ?? null,
       start_date: input.start_date,
       end_date: input.end_date,
       trial_ends_at: input.trial_ends_at ?? null,
@@ -66,6 +70,11 @@ export class SubscriptionRepository {
   async findCurrentByUser(userId: string): Promise<SubscriptionDto | null> {
     const doc = await Subscription.findActiveByUser(userId)
     return doc ? SubscriptionRepository.toDto(doc) : null
+  }
+
+  /** Abonnements vivants de l'owner, bruts : voir `Subscription.findLiveByUser`. */
+  async findLiveByUser(userId: string) {
+    return Subscription.findLiveByUser(userId)
   }
 
   /**

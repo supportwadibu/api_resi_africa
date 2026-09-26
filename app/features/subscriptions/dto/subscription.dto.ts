@@ -1,4 +1,5 @@
 import type { SubscriptionStatus } from '#utils/enums/subscription_status'
+import type { PlanTier } from '#features/plans/plan_tier'
 
 /**
  * DTO d'entrée/sortie pour les usecases Subscription.
@@ -13,6 +14,8 @@ export interface SubscriptionDto {
   is_trial: boolean
   status: SubscriptionStatus
   amount: number
+  /** Toujours renseigné : `full` pour un essai et pour l'historique sans palier. */
+  plan_tier: PlanTier
   start_date: Date
   end_date: Date
   trial_ends_at: Date | null

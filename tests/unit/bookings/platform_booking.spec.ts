@@ -35,6 +35,9 @@ function booking(id: string, overrides: Partial<BookingDto> = {}): BookingDto {
     updated_at: new Date('2026-07-20'),
     refunded_amount: 0,
     source: 'online',
+    referrer: null,
+    referrer_commission_rate: 0,
+    referrer_commission_amount: 0,
     ...overrides,
   }
 }

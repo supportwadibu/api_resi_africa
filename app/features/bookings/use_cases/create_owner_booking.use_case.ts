@@ -151,6 +151,7 @@ export class CreateOwnerBookingUseCase {
         // gérant — est consigné ici. Énumération champ par champ : l'omettre
         // perdrait l'auteur sans aucune erreur de compilation.
         created_by: input.created_by ?? null,
+        referrer: input.referrer ?? null,
         detectConflict: (active) =>
           findOverlappingPeriod(
             { check_in_at: checkIn, check_out_at: checkOut },

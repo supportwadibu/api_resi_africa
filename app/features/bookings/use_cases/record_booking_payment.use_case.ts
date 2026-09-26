@@ -3,6 +3,7 @@ import { DomainError } from '#utils/domain_error'
 
 import type { BookingDto } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
+import { withReferrerCommission } from '../referrer.ts'
 
 /**
  * Champs écrits par un encaissement au comptoir.
@@ -63,7 +64,10 @@ export class RecordBookingPaymentUseCase {
       )
     }
 
-    const updated = await Booking.findOneAndUpdate(id, buildPaymentPatch(booking, amount), {
+    // La commission suit le montant encaissé : un complément de paiement la
+    // relève d'autant.
+    const patch = withReferrerCommission(booking, buildPaymentPatch(booking, amount))
+    const updated = await Booking.findOneAndUpdate(id, patch, {
       owner_id: ownerId,
     })
 

@@ -6,6 +6,7 @@ import type { ActorScope } from '#features/managers/scope'
 import type { BookingStatus } from '#models/booking'
 
 import type { StayType } from '../stay_type.ts'
+import type { Referrer } from '../referrer.ts'
 
 export type { BookingStatus }
 
@@ -62,6 +63,11 @@ export interface BookingDto {
   received_amount?: number
   deposit_amount?: number
   sync_status?: 'synced' | 'pending' | 'conflict'
+  /** Apporteur d'affaire, `null` sans apporteur. */
+  referrer: Referrer | null
+  referrer_commission_rate: number
+  /** Commission due à l'apporteur, en francs ; 0 sans apporteur. */
+  referrer_commission_amount: number
   /** Résumé du client, joint à la liste du propriétaire. */
   client?: BookingClientSummary
 }
@@ -87,6 +93,8 @@ export interface CreateOwnerBookingInput {
   /** Immédiat : la réservation naît `in_progress`. */
   is_check_in: boolean
   client_request_id?: string | null
+  /** Apporteur d'affaire, commissionné au taux en vigueur. */
+  referrer?: { name: string; phone?: string | null } | null
   /**
    * Acteur ayant réellement saisi la réservation — un gérant —, `null` ou
    * absent pour le propriétaire. Posé par le contrôleur depuis `ctx.scope`,

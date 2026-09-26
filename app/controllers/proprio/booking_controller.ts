@@ -62,6 +62,7 @@ export default class ProprioBookingController {
       message: payload.message,
       is_check_in: payload.is_check_in ?? false,
       client_request_id: payload.client_request_id,
+      referrer: payload.referrer ?? null,
     })
 
     return ctx.response.created({ data: booking })

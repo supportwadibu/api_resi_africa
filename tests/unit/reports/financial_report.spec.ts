@@ -19,6 +19,7 @@ const data = {
       ca_brut: 1250000,
       depenses: 300000,
       benefice_net: 950000,
+      commissions: 0,
       remboursements: 0,
       taux_occupation: 0.73,
       reservations: 12,
@@ -81,6 +82,19 @@ test.group('renderFinancialReport', () => {
     assert.include(html, 'Fév')
   })
 
+  test('affiche les commissions d’apporteurs quand il y en a, et seulement alors', ({ assert }) => {
+    const withCommissions = renderFinancialReport(
+      {
+        ...data,
+        overview: { ...data.overview, summary: { ...data.overview.summary, commissions: 45000 } },
+      },
+      context
+    )
+
+    assert.include(withCommissions, 'Commissions apporteurs')
+    assert.notInclude(renderFinancialReport(data, context), 'Commissions apporteurs')
+  })
+
   test('porte la note sur la non-répartition des charges communes', ({ assert }) => {
     const html = renderFinancialReport(data, context)
 
@@ -95,6 +109,7 @@ test.group('renderFinancialReport', () => {
             ca_brut: 0,
             depenses: 0,
             benefice_net: 0,
+            commissions: 0,
             remboursements: 0,
             taux_occupation: 0,
             reservations: 0,
@@ -118,6 +133,7 @@ test.group('renderFinancialReport', () => {
             ca_brut: 100000,
             depenses: 250000,
             benefice_net: -150000,
+            commissions: 0,
             remboursements: 0,
             taux_occupation: 0.2,
             reservations: 2,

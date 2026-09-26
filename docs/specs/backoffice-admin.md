@@ -33,7 +33,11 @@ les lectures unitaires `{ data }`, les erreurs `{ code, message }`.
 | GET · POST | `promo-codes` | Codes promo (liste complète, non paginée) · création |
 | PATCH · DELETE | `promo-codes/:id` | Modification (le code est immuable) · suppression d'un code jamais utilisé |
 
-`plans` et `feedbacks` préexistaient et ne changent pas.
+`plans` et `feedbacks` préexistaient. Depuis les forfaits, un plan porte un
+`tier` (`basic` 3 000 F, `full` 5 000 F), requis à la création, et un
+abonnement le `plan_tier` figé à la souscription ; une réservation porte son
+apporteur d'affaire (`referrer`, `referrer_commission_*`). Voir
+[forfaits, apporteur et facture](../superpowers/specs/2026-09-26-forfaits-apporteur-facture-design.md).
 
 ## Logements et résidences
 

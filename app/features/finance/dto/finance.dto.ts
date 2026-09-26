@@ -3,8 +3,13 @@ export interface FinanceSummaryDto {
   ca_brut: number
   /** Dépenses engagées sur la même période. */
   depenses: number
-  /** Bénéfice net, qui peut être négatif si les charges dépassent les revenus. */
+  /**
+   * Bénéfice net : `ca_brut − depenses − commissions`. Peut être négatif si
+   * les charges dépassent les revenus.
+   */
   benefice_net: number
+  /** Commissions dues aux apporteurs d'affaire, réparties comme `ca_brut`. */
+  commissions: number
   /**
    * Sommes rendues sur départs anticipés, déjà déduites de `ca_brut`.
    * Affichées pour rapprocher la caisse, jamais retranchées une seconde fois.

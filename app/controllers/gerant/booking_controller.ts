@@ -102,6 +102,7 @@ export default class GerantBookingController {
       message: payload.message,
       is_check_in: payload.is_check_in ?? false,
       client_request_id: payload.client_request_id,
+      referrer: payload.referrer ?? null,
       created_by: write.created_by,
       // `buildScopedWrite` ne valide que le `property_id` de la requête. Le
       // rejeu d'idempotence, lui, rend une réservation retrouvée par

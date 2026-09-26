@@ -50,5 +50,6 @@ export const controllers = {
     Report: () => import('#controllers/proprio/report_controller'),
     Residence: () => import('#controllers/proprio/residence_controller'),
     Subscription: () => import('#controllers/proprio/subscription_controller'),
+    SubscriptionPayment: () => import('#controllers/proprio/subscription_payment_controller'),
   },
 }

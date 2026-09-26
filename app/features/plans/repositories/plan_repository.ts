@@ -1,4 +1,5 @@
 /* eslint-disable prettier/prettier */
+import { readPlanTier } from '#features/plans/plan_tier'
 import Plan, { type PlanRecord } from '#models/plan'
 
 import type {
@@ -18,6 +19,7 @@ export class PlanRepository {
       duration_days: doc.duration_days,
       max_residences: doc.max_residences,
       features: [...(doc.features ?? [])],
+      tier: readPlanTier(doc.tier),
       is_active: doc.is_active,
       created_at: doc.created_at,
       updated_at: doc.updated_at,
@@ -32,6 +34,7 @@ export class PlanRepository {
       duration_days: input.duration_days,
       max_residences: input.max_residences,
       features: input.features ?? [],
+      tier: input.tier,
       is_active: input.is_active ?? true,
     })
     return PlanRepository.toDto(doc)
@@ -50,6 +53,12 @@ export class PlanRepository {
   async update(id: string, input: UpdatePlanInput): Promise<PlanDto | null> {
     const doc = await Plan.findByIdAndUpdate(id, { ...input })
     return doc ? PlanRepository.toDto(doc) : null
+  }
+
+  /** Plans ouverts à la souscription, du moins cher au plus cher. */
+  async listActive(): Promise<PlanDto[]> {
+    const docs = await Plan.findActive()
+    return docs.map((d) => PlanRepository.toDto(d)).sort((a, b) => a.price - b.price)
   }
 
   async delete(id: string): Promise<boolean> {

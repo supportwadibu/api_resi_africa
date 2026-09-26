@@ -10,6 +10,18 @@ export const subscribeToPlanValidator = vine.compile(
   })
 )
 
+/**
+ * POST /proprio/subscription/checkout
+ *
+ * Identifiant Firestore : la borne Mongo de 24 caractères de
+ * `subscribeToPlanValidator` rejetterait tout plan réel.
+ */
+export const subscriptionCheckoutValidator = vine.compile(
+  vine.object({
+    plan_id: vine.string().trim().minLength(1).maxLength(128),
+  })
+)
+
 export const listSubscriptionsValidator = vine.compile(
   vine.object({
     status: vine.enum(SUBSCRIPTION_STATUSES).optional(),

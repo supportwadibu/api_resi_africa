@@ -8,6 +8,8 @@ import {
   type WithId,
 } from '#firebase/firestore'
 
+import type { PlanTier } from '#features/plans/plan_tier'
+
 export interface PlanDocument {
   name: string
   description: string
@@ -20,6 +22,11 @@ export interface PlanDocument {
   duration_days: number
   max_residences: number
   features: string[]
+  /**
+   * Palier ouvert par le plan. Optionnel en lecture : les plans créés avant
+   * les paliers n'en portent pas et valent `full` (voir `readPlanTier`).
+   */
+  tier?: PlanTier
   is_active: boolean
   created_at: Date
   updated_at: Date
@@ -56,6 +63,7 @@ const Plan = {
     duration_days: number
     max_residences: number
     features?: string[]
+    tier: PlanTier
     is_active?: boolean
   }): Promise<PlanRecord> {
     const now = new Date()
@@ -66,6 +74,7 @@ const Plan = {
       duration_days: input.duration_days,
       max_residences: input.max_residences,
       features: input.features ?? [],
+      tier: input.tier,
       is_active: input.is_active ?? true,
       created_at: now,
       updated_at: now,
@@ -95,6 +104,17 @@ const Plan = {
 
     await docRef.delete()
     return true
+  },
+
+  /**
+   * Plans ouverts à la souscription.
+   *
+   * Sans pagination : le catalogue tient en quelques plans — deux paliers —
+   * et le propriétaire doit tous les voir pour choisir.
+   */
+  async findActive(): Promise<PlanRecord[]> {
+    const snapshot = await plans().where('is_active', '==', true).get()
+    return toDocs<PlanDocument>(snapshot.docs)
   },
 
   /** Liste paginée, optionnellement filtrée sur l'activation. */

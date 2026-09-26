@@ -47,6 +47,13 @@ function renderKeyFigures(summary: FinancialReportData['overview']['summary']): 
       <div class="cards">
         <div class="card"><div class="card-label">Chiffre d'affaires brut</div><div class="card-value">${formatAmount(summary.ca_brut)}</div></div>
         <div class="card"><div class="card-label">Dépenses</div><div class="card-value">${formatAmount(summary.depenses)}</div></div>
+        ${
+          // Carte absente sans apporteur : elle afficherait « 0 F » sur tous les
+          // rapports d'un propriétaire qui n'y recourt pas.
+          summary.commissions > 0
+            ? `<div class="card"><div class="card-label">Commissions apporteurs</div><div class="card-value">${formatAmount(summary.commissions)}</div></div>`
+            : ''
+        }
         <div class="card"><div class="card-label">Bénéfice net</div><div class="card-value">${formatAmount(summary.benefice_net)}</div></div>
         <div class="card"><div class="card-label">Taux d'occupation</div><div class="card-value">${formatPercent(summary.taux_occupation)}</div></div>
         <div class="card"><div class="card-label">Réservations</div><div class="card-value">${summary.reservations}</div></div>

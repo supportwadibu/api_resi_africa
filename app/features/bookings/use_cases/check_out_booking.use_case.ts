@@ -4,6 +4,7 @@ import { DomainError } from '#utils/domain_error'
 
 import type { BookingDto, BookingStatus, CheckOutBookingInput } from '../dto/booking.dto.ts'
 import { buildEarlyCheckOutPatch, quoteEarlyCheckOut } from '../early_check_out.ts'
+import { withReferrerCommission } from '../referrer.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 
 /**
@@ -111,11 +112,10 @@ export class CheckOutBookingUseCase {
 
     if (input.full_stay === false) {
       const quote = quoteEarlyCheckOut(booking, input.actual_check_out_at ?? now, now)
-      patch = buildEarlyCheckOutPatch(
+      // Un séjour écourté réduit le montant retenu, et la commission avec lui.
+      patch = withReferrerCommission(
         booking,
-        quote,
-        input.final_amount ?? quote.proposed_amount,
-        now
+        buildEarlyCheckOutPatch(booking, quote, input.final_amount ?? quote.proposed_amount, now)
       )
     }
 

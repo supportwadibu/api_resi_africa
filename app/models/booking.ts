@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
 
 import type { StayType } from '#features/bookings/stay_type'
+import type { Referrer } from '#features/bookings/referrer'
+import { buildReferrerFields } from '#features/bookings/referrer'
 import type { ActorScope } from '#features/managers/scope'
 import { FIRESTORE_IN_LIMIT, filterByScope, isWithinScope } from '#features/managers/scope'
 import {
@@ -118,6 +120,19 @@ export interface BookingDocument {
   client_request_id?: string | null
   sync_status?: 'synced' | 'pending' | 'conflict'
 
+  /**
+   * Apporteur d'affaire, saisi librement à la création. Absent sur
+   * l'historique et sur toute réservation sans apporteur.
+   */
+  referrer?: Referrer | null
+  /** Taux figé à la création : le changer ne réécrit pas les commissions dues. */
+  referrer_commission_rate?: number
+  /**
+   * Commission due, en francs. Recalculée au taux figé chaque fois que
+   * `total_amount` change — prolongation, encaissement, départ anticipé.
+   */
+  referrer_commission_amount?: number
+
   cancelled_at: Date | null
   completed_at: Date | null
   cancellation_reason: string | null
@@ -221,6 +236,7 @@ export interface OwnerBookingInput {
   client_request_id: string | null
   /** Acteur ayant saisi, `null` pour le propriétaire. Donnée d'audit. */
   created_by?: string | null
+  referrer?: { name: string; phone?: string | null } | null
 }
 
 /**
@@ -265,6 +281,9 @@ export function buildOwnerBookingPayload(input: OwnerBookingInput, now: Date): B
     completed_at: null,
     cancellation_reason: null,
     created_by: input.created_by ?? null,
+    // Même énumération champ par champ : un apporteur omis ici disparaîtrait
+    // sans erreur, et sa commission avec lui.
+    ...buildReferrerFields(input.referrer, input.received_amount),
     created_at: now,
     updated_at: now,
   }
