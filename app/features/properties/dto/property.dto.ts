@@ -14,8 +14,6 @@ export type PropertyStatus =
 
 export type PropertyType = 'apartment' | 'studio' | 'villa' | 'duplex'
 
-export type Furnishing = 'unfurnished' | 'semi_furnished' | 'furnished'
-
 export interface AddressInput {
   street: string
   city: string
@@ -37,7 +35,6 @@ export interface PropertyDetailsInput {
   floor_number?: number
   total_floors?: number
   year_built?: number
-  furnishing?: Furnishing
 }
 
 export interface AmenitiesInput {
@@ -165,7 +162,6 @@ export interface ListPropertiesFilters {
   min_surface?: number
   max_surface?: number
   min_bedrooms?: number
-  furnished?: Furnishing
   featured?: boolean
   available_from?: Date
   is_public?: boolean

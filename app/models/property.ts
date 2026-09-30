@@ -24,11 +24,9 @@ const PROPERTY_STATUSES = [
   'inactive',
 ] as const
 const PROPERTY_TYPES = ['apartment', 'studio', 'villa', 'duplex'] as const
-const FURNISHING_TYPES = ['unfurnished', 'semi_furnished', 'furnished'] as const
 
 export type PropertyStatus = (typeof PROPERTY_STATUSES)[number]
 export type PropertyType = (typeof PROPERTY_TYPES)[number]
-export type FurnishingType = (typeof FURNISHING_TYPES)[number]
 
 export interface PropertyCoordinates {
   latitude: number | null
@@ -54,7 +52,6 @@ export interface PropertyDetails {
   floor_number: number | null
   total_floors: number | null
   year_built: number | null
-  furnishing: FurnishingType
 }
 
 export interface PropertyAmenities {
@@ -238,7 +235,6 @@ function withDefaults(input: Partial<PropertyDocument>): PropertyDocument {
       floor_number: input.details?.floor_number ?? null,
       total_floors: input.details?.total_floors ?? null,
       year_built: input.details?.year_built ?? null,
-      furnishing: input.details?.furnishing ?? 'unfurnished',
     },
 
     amenities: { ...DEFAULT_AMENITIES, ...(input.amenities ?? {}) },
@@ -293,7 +289,6 @@ export interface PropertyFilters {
   status?: PropertyStatus
   property_type?: PropertyType
   city?: string
-  furnishing?: FurnishingType
   is_public?: boolean
   featured?: boolean
   min_price?: number
@@ -325,7 +320,6 @@ function buildQuery(filters: PropertyFilters): FirebaseFirestore.Query<PropertyD
   if (filters.residence_id) query = query.where('residence_id', '==', filters.residence_id)
   if (filters.status) query = query.where('status', '==', filters.status)
   if (filters.property_type) query = query.where('property_type', '==', filters.property_type)
-  if (filters.furnishing) query = query.where('details.furnishing', '==', filters.furnishing)
   if (typeof filters.is_public === 'boolean') {
     query = query.where('visibility.is_public', '==', filters.is_public)
   }
@@ -727,4 +721,4 @@ const Property = {
 }
 
 export default Property
-export { FURNISHING_TYPES, PROPERTY_STATUSES, PROPERTY_TYPES }
+export { PROPERTY_STATUSES, PROPERTY_TYPES }

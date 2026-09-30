@@ -10,6 +10,18 @@ import type {
   UpdatePropertyInput,
 } from '../dto/property.dto.ts'
 
+/**
+ * L'ameublement a été retiré du modèle, mais les biens enregistrés avant le
+ * portent encore dans `details`. Il est écarté à la lecture plutôt que
+ * réécrit en base : la réponse n'annonce plus un champ que personne ne
+ * saisit ni n'affiche, et le document reste intact.
+ */
+function withoutFurnishing(details: PropertyRecord['details']): PropertyRecord['details'] {
+  const copy: PropertyRecord['details'] & { furnishing?: unknown } = { ...details }
+  delete copy.furnishing
+  return copy
+}
+
 export class PropertyRepository {
   static toDto(doc: PropertyRecord): PropertyDto {
     return {
@@ -24,7 +36,7 @@ export class PropertyRepository {
       property_type: doc.property_type,
       status: doc.status,
       address: doc.address,
-      details: doc.details,
+      details: withoutFurnishing(doc.details),
       amenities: doc.amenities ?? {},
       media: doc.media ?? {},
       pricing: {
@@ -153,7 +165,6 @@ export class PropertyRepository {
         status: filters.status,
         property_type: filters.property_type,
         city: filters.city,
-        furnishing: filters.furnished,
         featured: filters.featured,
         is_public: filters.is_public,
         min_price: filters.min_price,
