@@ -7,6 +7,13 @@ const documentFile = vine.file({
   extnames: ['jpg', 'jpeg', 'png', 'webp'],
 })
 
+/**
+ * Date calendaire d'une pièce — naissance, délivrance. Le corps est un
+ * `multipart/form-data` : la date arrive en texte, sans heure, et une heure
+ * ajoutée par l'appareil la décalerait d'un jour selon le fuseau.
+ */
+const calendarDate = () => vine.date({ formats: ['YYYY-MM-DD'] })
+
 export const createClientValidator = vine.compile(
   vine.object({
     full_name: vine.string().trim().minLength(2).maxLength(120),
@@ -14,11 +21,20 @@ export const createClientValidator = vine.compile(
     whatsapp: vine.string().trim().minLength(8).maxLength(20).optional(),
     id_document_type: vine.enum(ID_DOCUMENT_TYPES).optional(),
     id_document_number: vine.string().trim().maxLength(50).optional(),
+    birth_date: calendarDate().optional(),
+    birth_place: vine.string().trim().maxLength(120).optional(),
+    nationality: vine.string().trim().maxLength(60).optional(),
+    address: vine.string().trim().maxLength(200).optional(),
+    id_document_issued_at: calendarDate().optional(),
     id_document_front: documentFile.clone().optional(),
     id_document_back: documentFile.clone().optional(),
   })
 )
 
+/**
+ * Une chaîne vide vaut `null` (`convertEmptyStringsToNull`) : c'est ainsi
+ * qu'un formulaire multipart efface un champ, faute de pouvoir envoyer `null`.
+ */
 export const updateClientValidator = vine.compile(
   vine.object({
     full_name: vine.string().trim().minLength(2).maxLength(120).optional(),
@@ -26,6 +42,11 @@ export const updateClientValidator = vine.compile(
     whatsapp: vine.string().trim().minLength(8).maxLength(20).nullable().optional(),
     id_document_type: vine.enum(ID_DOCUMENT_TYPES).nullable().optional(),
     id_document_number: vine.string().trim().maxLength(50).nullable().optional(),
+    birth_date: calendarDate().nullable().optional(),
+    birth_place: vine.string().trim().maxLength(120).nullable().optional(),
+    nationality: vine.string().trim().maxLength(60).nullable().optional(),
+    address: vine.string().trim().maxLength(200).nullable().optional(),
+    id_document_issued_at: calendarDate().nullable().optional(),
     status: vine.enum(CLIENT_STATUSES).optional(),
     id_document_front: documentFile.clone().optional(),
     id_document_back: documentFile.clone().optional(),

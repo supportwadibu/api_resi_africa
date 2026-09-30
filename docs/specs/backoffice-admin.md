@@ -22,6 +22,9 @@ les lectures unitaires `{ data }`, les erreurs `{ code, message }`.
 | GET | `owners/:id/portfolio` | Résidences avec leurs unités, puis logements autonomes |
 | POST | `owners/:id/validate` | Valide le compte (ouvre l'essai s'il manque) |
 | POST | `owners/:id/reject` | Rejette, `reason` obligatoire |
+| GET | `notifications?page&per_page` | Historique des notifications push envoyées |
+| POST | `notifications` | Notification push : `title`, `body`, `audience` (`all_owners` ou `selected_owners`), `owner_ids` |
+| POST | `owners/:id/reports/police` | Registre des personnes hébergées (PDF paysage) ; `period`, `from`/`to` si `custom`, `residence_id` facultatif |
 | GET | `properties?owner_id&residence_id&status&property_type` | Logements, avec `owner` et `residence` |
 | GET | `properties/:id` | Logement |
 | GET | `properties/:id/clients` | Clients ayant réservé ce logement |

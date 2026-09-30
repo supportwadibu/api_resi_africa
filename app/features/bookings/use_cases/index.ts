@@ -13,3 +13,4 @@ export { default as FindOwnerBookingUseCase } from './find_owner_booking.use_cas
 export { default as RecordBookingPaymentUseCase } from './record_booking_payment.use_case.ts'
 export { default as FindPlatformBookingUseCase } from './find_platform_booking.use_case.ts'
 export { default as ListPlatformBookingsUseCase } from './list_platform_bookings.use_case.ts'
+export { default as UpdateOwnerBookingUseCase } from './update_owner_booking.use_case.ts'

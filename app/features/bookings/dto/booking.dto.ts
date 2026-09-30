@@ -113,6 +113,25 @@ export interface CreateOwnerBookingInput {
   scope?: ActorScope
 }
 
+/**
+ * Ressaisie complète d'une réservation comptoir non terminée.
+ *
+ * Le mobile renvoie tous les champs du formulaire ; seuls l'acompte et le
+ * message peuvent manquer, et gardent alors leur valeur enregistrée.
+ */
+export interface UpdateOwnerBookingInput {
+  property_id: string
+  stay_type: StayType
+  check_in_at: Date
+  /** À défaut, dérivée du type de séjour. */
+  check_out_at?: Date
+  /** Prix convenu du séjour. À défaut, le montant attendu s'applique. */
+  received_amount?: number
+  deposit_amount?: number
+  /** `null` efface le message, absent le conserve. */
+  message?: string | null
+}
+
 export interface BookingPropertySummary {
   id: string
   title: string

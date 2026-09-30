@@ -52,6 +52,22 @@ export interface ClientDocument {
   /** `complete` dès que les deux faces sont déposées. */
   documents_status: 'complete' | 'pending'
 
+  /**
+   * Identité exigée par le registre de police (rapport « police »).
+   *
+   * Optionnels en lecture : les fiches antérieures ne les portent pas, et un
+   * client peut se présenter sans pièce. Données de la personne et non du
+   * séjour : elles ne sont pas figées sur la réservation, contrairement au
+   * nom et au téléphone de `client_snapshot`.
+   */
+  birth_date?: Date | null
+  birth_place?: string | null
+  /** Texte libre, tel qu'il s'écrit sur le registre : « Ivoirienne ». */
+  nationality?: string | null
+  /** Domicile habituel. */
+  address?: string | null
+  id_document_issued_at?: Date | null
+
   stats: ClientStats
   status: ClientStatus
 
@@ -103,6 +119,11 @@ export interface CreateClientDocumentInput {
   id_document_number?: string | null
   id_document_front_public_id?: string | null
   id_document_back_public_id?: string | null
+  birth_date?: Date | null
+  birth_place?: string | null
+  nationality?: string | null
+  address?: string | null
+  id_document_issued_at?: Date | null
   created_by?: string | null
 }
 
@@ -129,6 +150,11 @@ export function buildClientPayload(input: CreateClientDocumentInput, now: Date):
     id_document_front_public_id: front,
     id_document_back_public_id: back,
     documents_status: resolveDocumentsStatus(front, back),
+    birth_date: input.birth_date ?? null,
+    birth_place: input.birth_place ?? null,
+    nationality: input.nationality ?? null,
+    address: input.address ?? null,
+    id_document_issued_at: input.id_document_issued_at ?? null,
     stats: { total_stays: 0, total_paid: 0, last_stay_at: null },
     status: 'active',
     created_by: input.created_by ?? null,

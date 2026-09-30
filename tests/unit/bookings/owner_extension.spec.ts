@@ -1,6 +1,9 @@
 import { test } from '@japa/runner'
 
-import { buildExtensionPatch } from '#features/bookings/use_cases/extend_owner_booking.use_case'
+import {
+  buildExtensionPatch,
+  extendedAgreedAmount,
+} from '#features/bookings/use_cases/extend_owner_booking.use_case'
 import { splitRevenueByMonth } from '#features/finance/revenue_split'
 
 const d = (iso: string) => new Date(iso)
@@ -86,5 +89,42 @@ test.group('buildExtensionPatch', () => {
     assert.equal(parts[0].days, 4)
     assert.equal(parts[1].days, 4)
     assert.equal(parts[0].amount + parts[1].amount, 80000)
+  })
+})
+
+test.group('extendedAgreedAmount', () => {
+  test('un prix négocié prolonge au tarif journalier convenu', ({ assert }) => {
+    // 3 jours négociés à 45 000 F (15 000 F/j) au lieu de 60 000 F :
+    // 2 jours de plus coûtent 30 000 F, pas 40 000 F de grille.
+    const amount = extendedAgreedAmount(
+      { days: 3, expected: 60000, received: 45000 },
+      { days: 5, expected: 100000 }
+    )
+    assert.equal(amount, 75000)
+  })
+
+  test('sans négociation, la grille s’applique, paliers compris', ({ assert }) => {
+    // 5 jours au tarif, prolongés à 10 : le palier de durée joue sur la grille.
+    const amount = extendedAgreedAmount(
+      { days: 5, expected: 100000, received: 100000 },
+      { days: 10, expected: 170000 }
+    )
+    assert.equal(amount, 170000)
+  })
+
+  test('arrondit au franc', ({ assert }) => {
+    const amount = extendedAgreedAmount(
+      { days: 3, expected: 60000, received: 50000 },
+      { days: 4, expected: 80000 }
+    )
+    assert.equal(amount, 66667)
+  })
+
+  test('une réservation sans jours enregistrés retombe sur la grille', ({ assert }) => {
+    const amount = extendedAgreedAmount(
+      { days: 0, expected: 60000, received: 45000 },
+      { days: 5, expected: 100000 }
+    )
+    assert.equal(amount, 100000)
   })
 })

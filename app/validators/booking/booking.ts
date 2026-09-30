@@ -79,6 +79,27 @@ export const extendOwnerBookingValidator = vine.compile(
 )
 
 /**
+ * PUT /proprio/bookings/:id — PUT /gerant/bookings/:id
+ *
+ * La réservation complète, telle que le formulaire de modification la montre.
+ * `PUT` et non `PATCH` : le mobile renvoie tout, et le serveur recalcule
+ * montants et chevauchement sur l'ensemble — un patch partiel ne dirait pas
+ * sur quelle période contrôler.
+ */
+export const updateOwnerBookingValidator = vine.compile(
+  vine.object({
+    property_id: vine.string().trim().minLength(1),
+    stay_type: vine.enum(STAY_TYPES),
+    check_in_at: vine.date({ formats: ['iso8601'] }),
+    check_out_at: vine.date({ formats: ['iso8601'] }).optional(),
+    /** Prix convenu du séjour. À défaut, le montant attendu s'applique. */
+    received_amount: vine.number().min(0).optional(),
+    deposit_amount: vine.number().min(0).optional(),
+    message: vine.string().trim().maxLength(500).nullable().optional(),
+  })
+)
+
+/**
  * Clôture d'un séjour. Corps entièrement optionnel : les versions du mobile
  * déjà installées clôturent sans corps, ce qui vaut séjour mené à terme.
  */

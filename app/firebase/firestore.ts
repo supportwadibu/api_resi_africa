@@ -43,6 +43,9 @@ export const COLLECTIONS = {
   clients: 'clients',
   feedbacks: 'feedbacks',
   reportGenerations: 'report_generations',
+  deviceTokens: 'device_tokens',
+  notificationCampaigns: 'notification_campaigns',
+  notificationDispatches: 'notification_dispatches',
 } as const
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS]

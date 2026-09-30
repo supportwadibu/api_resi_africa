@@ -9,7 +9,7 @@ import type { ActorScope } from '#features/managers/scope'
 import type { PropertyPricing } from '#models/property'
 
 import { findOverlappingPeriod, toPeriods } from '../availability.ts'
-import { countStayDays } from '../stay_pricing.ts'
+import { countStayDays, resolveDiscountPercent } from '../stay_pricing.ts'
 import { defaultCheckOutFor, resolveStayTypePrice, type StayType } from '../stay_type.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 
@@ -22,6 +22,11 @@ import type { BookingDto, CreateOwnerBookingInput } from '../dto/booking.dto.ts'
  * connaît qu'un séjour complet remisé par durée, alors qu'une réservation
  * comptoir peut être infra-journalière et se conclut sur un prix négocié.
  *
+ * Le séjour complet porte le palier de durée du bien, comme en ligne : le
+ * formulaire comptoir l'annonce au propriétaire, et un serveur qui l'ignorait
+ * enregistrait l'écart comme une remise négociée qu'il n'avait pas consentie.
+ * Une demi-journée ou un passage se facture à l'unité, sans palier.
+ *
  * `minimum_stay_days` n'est pas appliqué hors séjour complet : il vaut 1 par
  * défaut, et l'y soumettre rendrait la demi-journée impossible sur tout bien
  * existant.
@@ -31,7 +36,7 @@ export function computeOwnerBookingAmounts(
   stayType: StayType,
   checkIn: Date,
   checkOut: Date
-): { days: number; expected: number } {
+): { days: number; expected: number; discountPercent: number } {
   if (checkOut.getTime() <= checkIn.getTime()) {
     throw new DomainError(
       'invalid_stay_dates',
@@ -45,7 +50,7 @@ export function computeOwnerBookingAmounts(
   if (stayType !== 'full_day') {
     // Une demi-journée ou un passage se facture à l'unité ; `days_count` vaut
     // 1 pour rester lisible par Finance et les écrans existants.
-    return { days: 1, expected: unitPrice }
+    return { days: 1, expected: unitPrice, discountPercent: 0 }
   }
 
   const days = Math.max(1, countStayDays(checkIn, checkOut))
@@ -55,7 +60,15 @@ export function computeOwnerBookingAmounts(
     throw new DomainError('minimum_stay_not_reached', `Séjour minimum de ${minimum} jour(s).`, 422)
   }
 
-  return { days, expected: Math.round(days * unitPrice) }
+  const discountPercent = resolveDiscountPercent(days, pricing.price_tiers)
+
+  // Arrondi au franc, comme `calculateStayPrice` : le FCFA n'a pas de
+  // subdivision en circulation.
+  return {
+    days,
+    discountPercent,
+    expected: Math.round(days * unitPrice * (1 - discountPercent / 100)),
+  }
 }
 
 /**
@@ -116,7 +129,7 @@ export class CreateOwnerBookingUseCase {
     const checkIn = input.check_in_at
     const checkOut = input.check_out_at ?? defaultCheckOutFor(input.stay_type, checkIn)
 
-    const { days, expected } = computeOwnerBookingAmounts(
+    const { days, expected, discountPercent } = computeOwnerBookingAmounts(
       property.pricing,
       input.stay_type,
       checkIn,
@@ -142,6 +155,7 @@ export class CreateOwnerBookingUseCase {
         check_out_at: checkOut,
         days_count: days,
         daily_price: property.pricing.daily_price,
+        duration_discount_percent: discountPercent,
         expected_amount: expected,
         received_amount: input.received_amount ?? expected,
         deposit_amount: input.deposit_amount ?? 0,
