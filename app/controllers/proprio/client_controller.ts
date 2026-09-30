@@ -5,6 +5,8 @@ import {
   updateClientValidator,
 } from '#validators/client/client'
 
+import { readClientIdentity } from '#features/clients/client_identity'
+
 import type { HttpContext } from '@adonisjs/core/http'
 
 import {
@@ -43,6 +45,7 @@ export default class ProprioClientController {
         whatsapp: payload.whatsapp,
         id_document_type: payload.id_document_type,
         id_document_number: payload.id_document_number,
+        ...readClientIdentity(payload),
       },
       { front: payload.id_document_front, back: payload.id_document_back }
     )
@@ -86,6 +89,7 @@ export default class ProprioClientController {
         whatsapp: payload.whatsapp,
         id_document_type: payload.id_document_type,
         id_document_number: payload.id_document_number,
+        ...readClientIdentity(payload),
         status: payload.status,
       },
       { front: payload.id_document_front, back: payload.id_document_back }

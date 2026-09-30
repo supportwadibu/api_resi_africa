@@ -129,7 +129,7 @@ export interface BookingDocument {
   referrer_commission_rate?: number
   /**
    * Commission due, en francs. Recalculée au taux figé chaque fois que
-   * `total_amount` change — prolongation, encaissement, départ anticipé.
+   * `total_amount` change — prolongation, modification, départ anticipé.
    */
   referrer_commission_amount?: number
 
@@ -229,6 +229,8 @@ export interface OwnerBookingInput {
   check_out_at: Date
   days_count: number
   daily_price: number
+  /** Palier de durée appliqué au montant attendu. Absent : aucun. */
+  duration_discount_percent?: number
   expected_amount: number
   received_amount: number
   deposit_amount: number
@@ -262,7 +264,7 @@ export function buildOwnerBookingPayload(input: OwnerBookingInput, now: Date): B
     check_out_at: input.check_out_at,
     days_count: input.days_count,
     daily_price: input.daily_price,
-    duration_discount_percent: 0,
+    duration_discount_percent: input.duration_discount_percent ?? 0,
     subtotal_amount: input.expected_amount,
     // L'écart entre attendu et négocié est une remise consentie.
     discount_amount: Math.max(0, input.expected_amount - input.received_amount),
@@ -513,6 +515,65 @@ const Booking = {
     })
 
     return updated
+  },
+
+  /**
+   * Réécrit une réservation comptoir, chevauchement vérifié dans le même
+   * mouvement.
+   *
+   * Même transaction que `extendBooking`, pour la même raison : hors
+   * transaction, une réservation déplacée et une saisie concurrente sur les
+   * mêmes dates se validaient toutes les deux. Les réservations lues sont
+   * celles du logement **cible** — qui peut ne pas être celui d'origine — à
+   * partir de la nouvelle entrée.
+   *
+   * Le statut est relu dans la transaction : un séjour clôturé ou annulé
+   * depuis un autre appareil entre la lecture du use case et l'écriture ne
+   * doit pas être rouvert par une ressaisie.
+   *
+   * @throws `booking_period_conflict` si `detectConflict` retourne `true`
+   * @throws `booking_not_editable` si le séjour n'est plus actif
+   */
+  async rewriteOwnerBooking(
+    id: string,
+    patch: Record<string, unknown>,
+    scope: { owner_id: string },
+    target: { property_id: string; check_in_at: Date },
+    detectConflict: (active: BookingRecord[]) => boolean
+  ): Promise<BookingRecord | null> {
+    const docRef = bookings().doc(id)
+
+    // Même filtre que `findActiveForProperty` : `end_date`, présent sur toutes
+    // les réservations, là où `check_out_at` manque aux réservations en ligne.
+    const activeQuery = bookings()
+      .where('property_id', '==', target.property_id)
+      .where('end_date', '>', target.check_in_at)
+
+    return db().runTransaction(async (tx) => {
+      // ── Lectures ────────────────────────────────────────────────────────
+      const snapshot = await tx.get(docRef)
+      if (!snapshot.exists) return null
+
+      const current = toDoc<BookingDocument>(snapshot)
+      if (!current || current.owner_id !== scope.owner_id) return null
+
+      const activeSnapshot = await tx.get(activeQuery)
+
+      // ── Vérifications ───────────────────────────────────────────────────
+      if (current.status !== 'confirmed' && current.status !== 'in_progress') {
+        throw new Error('booking_not_editable')
+      }
+
+      if (detectConflict(toDocs<BookingDocument>(activeSnapshot.docs))) {
+        throw new Error('booking_period_conflict')
+      }
+
+      // ── Écritures ───────────────────────────────────────────────────────
+      const now = new Date()
+      tx.update(docRef, toPayload({ ...patch, updated_at: now }))
+
+      return { ...current, ...patch, updated_at: now } as BookingRecord
+    })
   },
 
   async paginate(

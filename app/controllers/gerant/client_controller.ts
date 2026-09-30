@@ -5,6 +5,8 @@ import {
   updateClientValidator,
 } from '#validators/client/client'
 
+import { readClientIdentity } from '#features/clients/client_identity'
+
 import type { HttpContext } from '@adonisjs/core/http'
 
 import {
@@ -56,6 +58,7 @@ export default class GerantClientController {
         whatsapp: payload.whatsapp,
         id_document_type: payload.id_document_type,
         id_document_number: payload.id_document_number,
+        ...readClientIdentity(payload),
         // C'est ce champ qui retient la fiche dans le carnet du gérant tant
         // qu'elle n'a aucune réservation : sans lui, elle disparaîtrait entre
         // sa création au comptoir et la réservation qu'elle sert.
@@ -124,6 +127,7 @@ export default class GerantClientController {
         whatsapp: payload.whatsapp,
         id_document_type: payload.id_document_type,
         id_document_number: payload.id_document_number,
+        ...readClientIdentity(payload),
         status: payload.status,
       },
       { front: payload.id_document_front, back: payload.id_document_back }

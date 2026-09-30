@@ -4,6 +4,7 @@ import {
   createOwnerBookingValidator,
   extendOwnerBookingValidator,
   listBookingsValidator,
+  updateOwnerBookingValidator,
 } from '#validators/booking/booking'
 
 import type { HttpContext } from '@adonisjs/core/http'
@@ -15,6 +16,7 @@ import {
   GetBookingStatsUseCase,
   ListOwnerBookingsUseCase,
   PreviewCheckOutUseCase,
+  UpdateOwnerBookingUseCase,
 } from '../../features/bookings/use_cases/index.ts'
 
 export default class ProprioBookingController {
@@ -76,6 +78,25 @@ export default class ProprioBookingController {
     const booking = await new ExtendOwnerBookingUseCase().execute(ctx.params.id, userId, {
       check_out_at: payload.check_out_at.toJSDate(),
       received_amount: payload.received_amount,
+    })
+
+    return ctx.response.ok({ data: booking })
+  }
+
+  /** Ressaisie d'une réservation comptoir non terminée. */
+  async update(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const payload = await ctx.request.validateUsing(updateOwnerBookingValidator)
+    const booking = await new UpdateOwnerBookingUseCase().execute(ctx.params.id, userId, {
+      property_id: payload.property_id,
+      stay_type: payload.stay_type,
+      check_in_at: payload.check_in_at.toJSDate(),
+      check_out_at: payload.check_out_at?.toJSDate(),
+      received_amount: payload.received_amount,
+      deposit_amount: payload.deposit_amount,
+      message: payload.message,
     })
 
     return ctx.response.ok({ data: booking })

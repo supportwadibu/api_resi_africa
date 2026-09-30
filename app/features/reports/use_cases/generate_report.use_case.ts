@@ -34,8 +34,14 @@ import {
   renderReservationsReport,
   type ReservationRow,
 } from '#features/reports/renderers/reservations_report'
+import {
+  buildPoliceRows,
+  policeFooterText,
+  renderPoliceReport,
+} from '#features/reports/renderers/police_report'
 import ReportGenerationRepository from '#features/reports/repositories/report_generation_repository'
 import ResidenceRepository from '#features/residences/repositories/residence_repository'
+import UserRepository from '#features/users/repositories/user_repository'
 import { renderPdf } from '#services/pdf_renderer'
 
 import type { BookingDto } from '#features/bookings/dto/booking.dto'
@@ -78,6 +84,7 @@ const REPORT_TYPE_SLUGS: Record<GenerateReportInput['type'], string> = {
   financial: 'financier',
   performance: 'performance',
   reservations: 'reservations',
+  police: 'police',
 }
 
 /**
@@ -174,7 +181,8 @@ export class GenerateReportUseCase {
     private paymentRepo: BookingPaymentRepository = new BookingPaymentRepository(),
     private clientRepo: ClientRepository = new ClientRepository(),
     private financeOverview: GetFinanceOverviewUseCase = new GetFinanceOverviewUseCase(),
-    private reportGenerationRepo: ReportGenerationRepository = new ReportGenerationRepository()
+    private reportGenerationRepo: ReportGenerationRepository = new ReportGenerationRepository(),
+    private userRepo: UserRepository = new UserRepository()
   ) {}
 
   async execute(owner_id: string, input: GenerateReportInput): Promise<GeneratedReportDto> {
@@ -212,13 +220,31 @@ export class GenerateReportUseCase {
     // création de l'index dans le message. L'attraper ici le convertirait en
     // « Réessayez » — une invitation à répéter une panne qui ne se résoudra
     // jamais seule, et la perte de l'URL qui la répare.
-    const html = await this.renderHtml(owner_id, input, period.window, context)
+    //
+    // Aucune donnée ne porte la commune — résidences et logements n'ont
+    // qu'une ville, « Abidjan » là où la police attend « Cocody » : celle que
+    // le propriétaire saisit à l'édition prime, la ville n'est qu'un repli.
+    const document =
+      input.type === 'police'
+        ? await this.renderPolice(
+            owner_id,
+            input,
+            context,
+            input.commune ?? residence?.address.city ?? null
+          )
+        : {
+            html: await this.renderHtml(owner_id, input, period.window, context),
+            footer: reportFooterText(context),
+          }
 
     let pdf: Buffer
     let filename: string
 
     try {
-      pdf = await renderPdf(html, { footerText: reportFooterText(context) })
+      pdf = await renderPdf(document.html, {
+        footerText: document.footer,
+        landscape: input.type === 'police',
+      })
       filename = buildFilename(input.type, period.label, now)
     } catch (error) {
       // Seul le rendu PDF passe par ici — Chromium absent de l'image, police
@@ -527,6 +553,56 @@ export class GenerateReportUseCase {
     })
 
     return renderReservationsReport(rows, context)
+  }
+
+  /**
+   * Registre des personnes hébergées.
+   *
+   * Les séjours retenus **chevauchent** la période (`findByPeriod`, annulés
+   * exclus) : un client arrivé la veille et encore présent est hébergé pendant
+   * la période, et la police doit le voir.
+   *
+   * Deux lectures d'identité, selon le canal : la fiche du carnet pour le
+   * comptoir, le compte de la plateforme pour l'en ligne. Tenter les deux pour
+   * tout le monde coûterait une lecture Firestore par client pour rien.
+   */
+  private async renderPolice(
+    owner_id: string,
+    input: GenerateReportInput,
+    context: ReportContext,
+    commune: string | null
+  ): Promise<{ html: string; footer: string }> {
+    const residenceScope = input.residence_id ? { residence_id: input.residence_id } : {}
+    const bookings = await this.bookingRepo.findByPeriod(
+      owner_id,
+      context.period.window,
+      residenceScope
+    )
+
+    const offlineIds = bookings.filter((b) => b.source === 'offline').map((b) => b.client_id)
+    const onlineIds = bookings.filter((b) => b.source !== 'offline').map((b) => b.client_id)
+
+    const [clients, users] = await Promise.all([
+      this.clientsByIds(owner_id, [...new Set(offlineIds)]),
+      this.userRepo.findSummaries([...new Set(onlineIds)]),
+    ])
+
+    const header = {
+      // Sans résidence choisie, l'établissement est celui du propriétaire :
+      // son nom est le seul que le registre puisse porter sans inventer.
+      hotel: context.residence_name ?? context.owner_name,
+      commune: commune && commune.trim() ? commune.trim() : null,
+      from_date: context.period.from_date,
+      to_date: context.period.to_date,
+    }
+
+    return {
+      html: renderPoliceReport(
+        buildPoliceRows(bookings, clients, users, context.generated_at),
+        header
+      ),
+      footer: policeFooterText(header),
+    }
   }
 
   /**

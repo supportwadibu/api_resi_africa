@@ -23,6 +23,13 @@ export interface ClientDto {
   has_document_front: boolean
   has_document_back: boolean
   documents_status: 'complete' | 'pending'
+  /** Identité du registre de police ; `null` tant qu'elle n'est pas saisie. */
+  birth_date: Date | null
+  birth_place: string | null
+  nationality: string | null
+  /** Domicile habituel. */
+  address: string | null
+  id_document_issued_at: Date | null
   stats: ClientStatsDto
   status: ClientStatus
   /**
@@ -48,6 +55,11 @@ export interface CreateClientInput {
   whatsapp?: string | null
   id_document_type?: ClientIdDocumentType | null
   id_document_number?: string | null
+  birth_date?: Date | null
+  birth_place?: string | null
+  nationality?: string | null
+  address?: string | null
+  id_document_issued_at?: Date | null
   /**
    * Acteur ayant saisi la fiche — un gérant —, `null` ou absent pour le
    * propriétaire. Posé par le contrôleur depuis `ctx.scope`, jamais par le
@@ -63,6 +75,11 @@ export interface UpdateClientInput {
   whatsapp?: string | null
   id_document_type?: ClientIdDocumentType | null
   id_document_number?: string | null
+  birth_date?: Date | null
+  birth_place?: string | null
+  nationality?: string | null
+  address?: string | null
+  id_document_issued_at?: Date | null
   status?: ClientStatus
 }
 

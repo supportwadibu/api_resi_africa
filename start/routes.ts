@@ -14,6 +14,9 @@ const AdminResidencesController = () => import('#controllers/admin/residences_co
 const AdminBookingsController = () => import('#controllers/admin/bookings_controller')
 const AdminSubscriptionsController = () => import('#controllers/admin/subscriptions_controller')
 const AdminPromoCodesController = () => import('#controllers/admin/promo_codes_controller')
+const AdminReportsController = () => import('#controllers/admin/reports_controller')
+const AdminNotificationsController = () => import('#controllers/admin/notifications_controller')
+const DeviceTokenController = () => import('#controllers/auth/device_token_controller')
 const ProprioProfileController = () => import('#controllers/proprio/profile_controller')
 const ProprioPropertyController = () => import('#controllers/proprio/property_controller')
 const ProprioPropertyImageController = () =>
@@ -62,6 +65,9 @@ router
       .group(() => {
         router.post('logout', [AuthController, 'logout'])
         router.get('me', [AuthController, 'me'])
+        // Appareils recevant les notifications push, tous rôles confondus.
+        router.post('device-tokens', [DeviceTokenController, 'store'])
+        router.delete('device-tokens', [DeviceTokenController, 'destroy'])
       })
       .prefix('auth')
       .as('auth.protected')
@@ -88,6 +94,15 @@ router
           })
           .prefix('feedbacks')
           .as('feedbacks')
+
+        // Notifications push aux propriétaires : groupées ou ciblées.
+        router
+          .group(() => {
+            router.get('/', [AdminNotificationsController, 'index'])
+            router.post('/', [AdminNotificationsController, 'store'])
+          })
+          .prefix('notifications')
+          .as('notifications')
 
         router
           .group(() => {
@@ -118,6 +133,7 @@ router
             router.get(':id/portfolio', [AdminOwnersController, 'portfolio'])
             router.post(':id/validate', [AdminOwnersController, 'validate'])
             router.post(':id/reject', [AdminOwnersController, 'reject'])
+            router.post(':id/reports/police', [AdminReportsController, 'police'])
           })
           .prefix('owners')
           .as('owners')
@@ -316,6 +332,7 @@ router
                 router.get(':id/check-out/preview', [ProprioBookingController, 'checkOutPreview'])
                 router.patch(':id/check-out', [ProprioBookingController, 'checkOut'])
                 router.patch(':id/extend', [ProprioBookingController, 'extend'])
+                router.put(':id', [ProprioBookingController, 'update'])
               })
               .prefix('bookings')
               .as('bookings')
@@ -382,6 +399,9 @@ router
             router.post('/', [GerantBookingController, 'store'])
             router.get(':id', [GerantBookingController, 'show'])
             router.patch(':id', [GerantBookingController, 'update']).as('update')
+            // `PUT` et non `PATCH` : `PATCH :id` est déjà la prolongation,
+            // publiée et appelée par des clients installés.
+            router.put(':id', [GerantBookingController, 'replace']).as('replace')
             router.patch(':id/cancel', [GerantBookingController, 'cancel'])
             // Mêmes verbes et mêmes chemins que côté propriétaire : le mobile
             // ne fait que substituer le préfixe, et un `POST` ici lui rendrait
@@ -492,6 +512,11 @@ router
     router
       .group(() => {
         router.route('expire-trials', ['GET', 'POST'], [CronController, 'expireTrials'])
+        router.route(
+          'subscription-reminders',
+          ['GET', 'POST'],
+          [CronController, 'subscriptionReminders']
+        )
         router.get('health', [CronController, 'health'])
       })
       .prefix('cron')

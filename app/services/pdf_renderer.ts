@@ -77,6 +77,11 @@ const MARGIN = { top: '18mm', right: '16mm', bottom: '22mm', left: '16mm' }
 export interface RenderPdfOptions {
   /** Répété en bas de chaque feuille, à gauche de « page X / Y ». */
   footerText?: string
+  /**
+   * A4 à l'italienne. Le registre de police aligne neuf colonnes : en
+   * portrait, chacune tomberait sous la largeur d'un numéro de pièce.
+   */
+  landscape?: boolean
 }
 
 /**
@@ -132,6 +137,7 @@ export async function renderPdf(html: string, options: RenderPdfOptions = {}): P
 
     const pdf = await page.pdf({
       format: 'A4',
+      landscape: options.landscape ?? false,
       printBackground: true,
       timeout: RENDER_TIMEOUT_MS,
       margin: MARGIN,

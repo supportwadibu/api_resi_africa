@@ -2,6 +2,7 @@ import logger from '@adonisjs/core/services/logger'
 
 import type { HttpContext } from '@adonisjs/core/http'
 
+import { SendSubscriptionRemindersUseCase } from '../features/notifications/use_cases/index.ts'
 import { SuspendUnverifiedOwnersUseCase } from '../features/subscriptions/use_cases/index.ts'
 
 /**
@@ -35,6 +36,27 @@ export default class CronController {
 
     return ctx.response.ok({
       task: 'expire-trials',
+      ...result,
+      duration_ms: Date.now() - startedAt,
+    })
+  }
+
+  /**
+   * POST|GET /api/v1/cron/subscription-reminders
+   *
+   * Notifie les propriétaires dont l'abonnement expire dans 7 jours, 3 jours
+   * ou le jour même. Idempotent : chaque relance est réservée avant l'envoi,
+   * rappeler la route — une fois par heure, par exemple — ne renvoie rien de
+   * ce qui est déjà parti. Un appel quotidien le matin suffit.
+   */
+  async subscriptionReminders(ctx: HttpContext) {
+    const startedAt = Date.now()
+    const result = await new SendSubscriptionRemindersUseCase().execute()
+
+    logger.info({ ...result, duration_ms: Date.now() - startedAt }, 'Cron : relances d’abonnement')
+
+    return ctx.response.ok({
+      task: 'subscription-reminders',
       ...result,
       duration_ms: Date.now() - startedAt,
     })

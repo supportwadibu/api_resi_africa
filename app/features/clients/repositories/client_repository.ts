@@ -22,6 +22,13 @@ export class ClientRepository {
       has_document_front: Boolean(doc.id_document_front_public_id),
       has_document_back: Boolean(doc.id_document_back_public_id),
       documents_status: doc.documents_status ?? 'pending',
+      // Absents des fiches antérieures au registre de police : `null` dit
+      // « non renseigné », et le rapport imprime alors une case vide.
+      birth_date: doc.birth_date ?? null,
+      birth_place: doc.birth_place ?? null,
+      nationality: doc.nationality ?? null,
+      address: doc.address ?? null,
+      id_document_issued_at: doc.id_document_issued_at ?? null,
       stats: {
         total_stays: doc.stats?.total_stays ?? 0,
         total_paid: doc.stats?.total_paid ?? 0,

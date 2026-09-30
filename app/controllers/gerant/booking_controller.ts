@@ -6,6 +6,7 @@ import {
   extendOwnerBookingValidator,
   listBookingsValidator,
   recordBookingPaymentValidator,
+  updateOwnerBookingValidator,
 } from '#validators/booking/booking'
 
 import { assertWithinScope, buildScopedWrite } from '#features/managers/scope'
@@ -22,6 +23,7 @@ import {
   ListOwnerBookingsUseCase,
   PreviewCheckOutUseCase,
   RecordBookingPaymentUseCase,
+  UpdateOwnerBookingUseCase,
 } from '../../features/bookings/use_cases/index.ts'
 
 /**
@@ -136,6 +138,37 @@ export default class GerantBookingController {
       {
         check_out_at: payload.check_out_at.toJSDate(),
         received_amount: payload.received_amount,
+      }
+    )
+
+    return ctx.response.ok({ data: booking })
+  }
+
+  /**
+   * Ressaisie d'une réservation comptoir non terminée.
+   *
+   * Deux gardes de périmètre : la réservation désignée, et le logement vers
+   * lequel elle serait déplacée. Sans la seconde, un gérant pourrait faire
+   * sortir un séjour de son périmètre vers un logement qui ne lui est pas
+   * confié.
+   */
+  async replace(ctx: HttpContext) {
+    await this.findInScope(ctx)
+
+    const payload = await ctx.request.validateUsing(updateOwnerBookingValidator)
+    assertWithinScope(ctx.scope, payload.property_id)
+
+    const booking = await new UpdateOwnerBookingUseCase().execute(
+      ctx.params.id,
+      ctx.scope.ownerId,
+      {
+        property_id: payload.property_id,
+        stay_type: payload.stay_type,
+        check_in_at: payload.check_in_at.toJSDate(),
+        check_out_at: payload.check_out_at?.toJSDate(),
+        received_amount: payload.received_amount,
+        deposit_amount: payload.deposit_amount,
+        message: payload.message,
       }
     )
 

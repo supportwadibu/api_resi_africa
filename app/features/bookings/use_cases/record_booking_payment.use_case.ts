@@ -3,7 +3,6 @@ import { DomainError } from '#utils/domain_error'
 
 import type { BookingDto } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
-import { withReferrerCommission } from '../referrer.ts'
 
 /**
  * Champs écrits par un encaissement au comptoir.
@@ -11,27 +10,37 @@ import { withReferrerCommission } from '../referrer.ts'
  * Extraite pour être éprouvée sans Firestore : c'est un calcul d'argent, et
  * c'est le genre de composition où un champ omis ne se voit pas.
  *
- * `total_amount` suit `received_amount` : Finance lit le premier pour le
- * chiffre d'affaires constaté, et les laisser diverger ferait apparaître
- * l'encaissement dans la fiche sans qu'il n'entre jamais dans les totaux.
+ * Le versement s'ajoute à l'**acompte** (`deposit_amount`), l'argent déjà
+ * reçu. Il ne touche pas au prix : `received_amount` porte le montant
+ * **négocié** du séjour (voir `offlin-desgin.md`), et `total_amount` le suit.
+ * Cumuler le versement dessus faisait monter le prix à chaque règlement — un
+ * séjour à 60 000 F réglé en deux fois finissait à 120 000 F de chiffre
+ * d'affaires.
  *
- * `discount_amount` est recalculé et non cumulé : l'écart entre attendu et
- * encaissé est une remise consentie, même règle qu'à la création comptoir et
- * qu'à la prolongation. L'incrémenter ferait dériver la remise à chaque
- * versement partiel.
+ * Un versement au-delà du reste dû est refusé : un trop-perçu se rend au
+ * client, il ne s'enregistre pas comme un encaissement.
+ *
+ * @throws `payment_exceeds_balance` si le versement dépasse le reste dû
  */
 export function buildPaymentPatch(
-  current: { expected_amount?: number; received_amount?: number },
+  current: { received_amount?: number; total_amount?: number; deposit_amount?: number },
   amount: number
-): Record<string, unknown> {
-  const expected = current.expected_amount ?? 0
-  const received = (current.received_amount ?? 0) + amount
+): { deposit_amount: number } {
+  // Repli sur `total_amount` : les réservations antérieures à la saisie
+  // comptoir ne portent pas `received_amount`, et leur total en tient lieu.
+  const price = current.received_amount ?? current.total_amount ?? 0
+  const paid = current.deposit_amount ?? 0
+  const balance = Math.max(0, price - paid)
 
-  return {
-    received_amount: received,
-    total_amount: received,
-    discount_amount: Math.max(0, expected - received),
+  if (amount > balance) {
+    throw new DomainError(
+      'payment_exceeds_balance',
+      `Le versement dépasse le reste dû (${balance} F).`,
+      422
+    )
   }
+
+  return { deposit_amount: paid + amount }
 }
 
 /**
@@ -64,9 +73,9 @@ export class RecordBookingPaymentUseCase {
       )
     }
 
-    // La commission suit le montant encaissé : un complément de paiement la
-    // relève d'autant.
-    const patch = withReferrerCommission(booking, buildPaymentPatch(booking, amount))
+    // La commission de l'apporteur porte sur le prix du séjour, qu'un
+    // versement ne change pas : elle n'a pas à être recalculée ici.
+    const patch = buildPaymentPatch(booking, amount)
     const updated = await Booking.findOneAndUpdate(id, patch, {
       owner_id: ownerId,
     })

@@ -222,6 +222,20 @@ const Subscription = {
   },
 
   /**
+   * Abonnements actifs dont l'échéance tombe dans `[from, to[` — les
+   * candidats aux relances. Même index `status + end_date` que `findOverdue`.
+   */
+  async findEndingBetween(from: Date, to: Date): Promise<SubscriptionRecord[]> {
+    const snapshot = await subscriptions()
+      .where('status', 'in', ACTIVE_SUBSCRIPTION_STATUSES)
+      .where('end_date', '>=', from)
+      .where('end_date', '<', to)
+      .get()
+
+    return toDocs<SubscriptionDocument>(snapshot.docs)
+  },
+
+  /**
    * Bascule à `expired` les abonnements actifs dont l'échéance est passée.
    *
    * Remplace le `updateMany` de Mongo. Les écritures sont regroupées en un

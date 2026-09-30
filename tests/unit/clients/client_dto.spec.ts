@@ -88,3 +88,31 @@ test.group('ClientRepository.toDto — auteur de la saisie', () => {
     assert.isNull(ClientRepository.toDto({ ...record, created_by: null }).created_by)
   })
 })
+
+test.group('ClientRepository.toDto — identité du registre de police', () => {
+  test('une fiche antérieure rend des champs d’identité nuls', ({ assert }) => {
+    // `record` n'en porte aucun, comme toute fiche écrite avant le rapport.
+    const dto = ClientRepository.toDto(record)
+    assert.isNull(dto.birth_date)
+    assert.isNull(dto.birth_place)
+    assert.isNull(dto.nationality)
+    assert.isNull(dto.address)
+    assert.isNull(dto.id_document_issued_at)
+  })
+
+  test('reporte les champs d’identité saisis', ({ assert }) => {
+    const dto = ClientRepository.toDto({
+      ...record,
+      birth_date: new Date('1990-04-12'),
+      birth_place: 'Bouaké',
+      nationality: 'Ivoirienne',
+      address: 'Cocody Angré',
+      id_document_issued_at: new Date('2021-03-12'),
+    })
+    assert.deepEqual(dto.birth_date, new Date('1990-04-12'))
+    assert.equal(dto.birth_place, 'Bouaké')
+    assert.equal(dto.nationality, 'Ivoirienne')
+    assert.equal(dto.address, 'Cocody Angré')
+    assert.deepEqual(dto.id_document_issued_at, new Date('2021-03-12'))
+  })
+})

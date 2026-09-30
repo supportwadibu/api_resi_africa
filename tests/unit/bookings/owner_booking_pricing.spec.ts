@@ -65,6 +65,42 @@ test.group('computeOwnerBookingAmounts', () => {
     )
   })
 
+  test('le palier de durée remise un séjour complet, comme l’écran l’annonce', ({ assert }) => {
+    // Sans palier côté serveur, le mobile annonçait 187 000 F et le serveur
+    // enregistrait 220 000 F attendus : l'écart sortait en « remise » négociée.
+    const tiered: PropertyPricing = {
+      ...pricing,
+      price_tiers: [
+        { min_days: 7, discount_percent: 10 },
+        { min_days: 10, discount_percent: 15 },
+      ],
+    }
+    const result = computeOwnerBookingAmounts(
+      tiered,
+      'full_day',
+      new Date('2026-09-25T12:00:00Z'),
+      new Date('2026-10-06T12:00:00Z')
+    )
+    assert.equal(result.days, 11)
+    assert.equal(result.discountPercent, 15)
+    assert.equal(result.expected, 187000)
+  })
+
+  test('le palier de durée ne touche pas une demi-journée', ({ assert }) => {
+    const tiered: PropertyPricing = {
+      ...pricing,
+      price_tiers: [{ min_days: 1, discount_percent: 20 }],
+    }
+    const result = computeOwnerBookingAmounts(
+      tiered,
+      'half_day',
+      new Date('2026-10-28T12:00:00Z'),
+      new Date('2026-10-29T00:00:00Z')
+    )
+    assert.equal(result.discountPercent, 0)
+    assert.equal(result.expected, 10000)
+  })
+
   test('le minimum de séjour ne s’applique pas à une demi-journée', ({ assert }) => {
     // `minimum_stay_days` vaut 1 par défaut : l'y soumettre rendrait la
     // demi-journée impossible sur tout bien existant.
