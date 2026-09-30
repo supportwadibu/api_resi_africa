@@ -10,7 +10,6 @@ const PROPERTY_STATUSES = [
   'maintenance',
   'inactive',
 ] as const
-const FURNISHING = ['unfurnished', 'semi_furnished', 'furnished'] as const
 
 /**
  * Statuts qu'un propriétaire peut poser lui-même.
@@ -44,7 +43,6 @@ const detailsSchema = vine.object({
   floor_number: vine.number().withoutDecimals().optional(),
   total_floors: vine.number().min(0).withoutDecimals().optional(),
   year_built: vine.number().min(1800).max(2100).withoutDecimals().optional(),
-  furnishing: vine.enum(FURNISHING).optional(),
 })
 
 const amenitiesSchema = vine
@@ -184,7 +182,6 @@ export const listPublicPropertiesValidator = vine.compile(
     min_surface: vine.number().min(0).optional(),
     max_surface: vine.number().min(0).optional(),
     min_bedrooms: vine.number().min(0).withoutDecimals().optional(),
-    furnished: vine.enum(FURNISHING).optional(),
     featured: vine.boolean().optional(),
     available_from: vine.date().optional(),
     page: vine.number().positive().withoutDecimals().optional(),
