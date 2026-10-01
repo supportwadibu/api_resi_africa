@@ -1,5 +1,6 @@
 /* eslint-disable prettier/prettier */
 import { GetOwnerPortfolioUseCase } from '#features/properties/use_cases/index'
+import { TRIAL_DURATION_DAYS } from '#utils/enums/subscription_status'
 import {
   listOwnersValidator,
   rejectOwnerValidator,
@@ -73,7 +74,7 @@ export default class AdminOwnersController {
       trial_started: result.trial_started,
       trial_end_date: result.trial_end_date,
       message: result.trial_started
-        ? 'Propriétaire validé. Essai gratuit de 14 jours démarré.'
+        ? `Propriétaire validé. Essai gratuit de ${TRIAL_DURATION_DAYS} jours démarré.`
         : 'Propriétaire validé. (Son essai était déjà ouvert depuis l’inscription.)',
     })
   }

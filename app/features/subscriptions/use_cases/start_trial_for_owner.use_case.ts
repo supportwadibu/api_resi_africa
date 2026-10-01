@@ -13,7 +13,7 @@ import SubscriptionRepository from '../repositories/subscription_repository.ts'
  *
  * Règles métier :
  *  - L'owner ne doit pas avoir de souscription "vivante" en cours.
- *  - end_date = trial_ends_at = now + 14 jours (par défaut).
+ *  - end_date = trial_ends_at = now + TRIAL_DURATION_DAYS (par défaut).
  *  - plan_id = null, amount = 0, is_trial = true, status = 'trial'.
  */
 export class StartTrialForOwnerUseCase {

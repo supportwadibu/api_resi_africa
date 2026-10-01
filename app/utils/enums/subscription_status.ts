@@ -24,4 +24,12 @@ export const ACTIVE_SUBSCRIPTION_STATUSES: SubscriptionStatus[] = [
   'active',
 ]
 
-export const TRIAL_DURATION_DAYS = 14
+/**
+ * Durée de l'essai gratuit : « un mois » annoncé au propriétaire.
+ *
+ * Trente jours plutôt qu'un mois calendaire : toute la chaîne compte l'essai
+ * en jours (`startTrialOnce`, jauge des jours restants du mobile), et un mois
+ * calendaire ferait varier l'essai de 28 à 31 jours selon la date de
+ * validation.
+ */
+export const TRIAL_DURATION_DAYS = 30
