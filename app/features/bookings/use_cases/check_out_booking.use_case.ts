@@ -3,7 +3,11 @@ import type { BookingRecord } from '#models/booking'
 import { DomainError } from '#utils/domain_error'
 
 import type { BookingDto, BookingStatus, CheckOutBookingInput } from '../dto/booking.dto.ts'
-import { buildEarlyCheckOutPatch, quoteEarlyCheckOut } from '../early_check_out.ts'
+import {
+  CLOCK_SKEW_TOLERANCE_MS,
+  buildEarlyCheckOutPatch,
+  quoteEarlyCheckOut,
+} from '../early_check_out.ts'
 import { withReferrerCommission } from '../referrer.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 
@@ -23,12 +27,54 @@ import BookingRepository from '../repositories/booking_repository.ts'
  * anticipé ne passe pas par ici mais par `buildEarlyCheckOutPatch`, qui réécrit
  * la période **et** le montant d'un même geste.
  */
-export function buildCheckOutPatch(now: Date): {
+export function buildCheckOutPatch(
+  now: Date,
+  departure: Date = now
+): {
   status: BookingStatus
   completed_at: Date
   actual_check_out_at: Date
 } {
-  return { status: 'completed', completed_at: now, actual_check_out_at: now }
+  return { status: 'completed', completed_at: now, actual_check_out_at: departure }
+}
+
+/**
+ * Heure de sortie d'un séjour mené à terme.
+ *
+ * Le mobile met la clôture en file quand le réseau manque : sans l'heure
+ * déclarée, un départ saisi à 11 h et synchronisé à 18 h serait consigné à
+ * 18 h. Mêmes garde-fous que le départ anticipé — après l'entrée, pas dans le
+ * futur au-delà de la dérive d'horloge tolérée. `completed_at`, lui, reste
+ * l'heure serveur de l'écriture.
+ */
+export function resolveFullStayDeparture(
+  booking: { start_date: Date; check_in_at?: Date },
+  declared: Date | undefined,
+  now: Date
+): Date {
+  if (!declared) return now
+
+  // Repli sur `start_date` : les réservations antérieures à la saisie
+  // comptoir ne portent pas `check_in_at`.
+  const checkIn = booking.check_in_at ?? booking.start_date
+
+  if (declared.getTime() <= checkIn.getTime()) {
+    throw new DomainError(
+      'invalid_departure',
+      'L’heure de sortie doit être postérieure à l’entrée du client.',
+      422
+    )
+  }
+
+  if (declared.getTime() > now.getTime() + CLOCK_SKEW_TOLERANCE_MS) {
+    throw new DomainError(
+      'departure_in_future',
+      'L’heure de sortie ne peut pas être dans le futur.',
+      422
+    )
+  }
+
+  return declared
 }
 
 /**
@@ -108,7 +154,12 @@ export class CheckOutBookingUseCase {
     const now = new Date()
     const booking = await findClosableBooking(id, ownerId, now)
 
-    let patch: Record<string, unknown> = buildCheckOutPatch(now)
+    let patch: Record<string, unknown> = buildCheckOutPatch(
+      now,
+      input.full_stay === false
+        ? now
+        : resolveFullStayDeparture(booking, input.actual_check_out_at, now)
+    )
 
     if (input.full_stay === false) {
       const quote = quoteEarlyCheckOut(booking, input.actual_check_out_at ?? now, now)

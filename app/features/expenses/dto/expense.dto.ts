@@ -53,6 +53,8 @@ export interface CreateExpenseInput {
    * client. Donnée d'audit, n'entrant dans aucun calcul.
    */
   created_by?: string | null
+  /** UUID d'idempotence d'une saisie hors ligne. Voir `ExpenseDocument`. */
+  client_request_id?: string | null
 }
 
 export interface UpdateExpenseInput {

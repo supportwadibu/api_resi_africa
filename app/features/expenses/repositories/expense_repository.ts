@@ -12,6 +12,15 @@ import type {
   UpdateExpenseInput,
 } from '../dto/expense.dto.ts'
 
+/**
+ * Dépense accompagnée de son auteur. `created_by` n'est pas exposé dans le
+ * DTO, mais le rejeu d'une saisie idempotente doit le comparer à l'appelant.
+ */
+export interface AuthoredExpense {
+  dto: ExpenseDto
+  created_by: string | null
+}
+
 export class ExpenseRepository {
   static toDto(doc: ExpenseRecord): ExpenseDto {
     return {
@@ -85,10 +94,27 @@ export class ExpenseRepository {
     }))
   }
 
-  async create(input: CreateExpenseInput): Promise<ExpenseDto> {
-    const doc = await Expense.create(input)
-    const [withProperty] = await this.attachTargets([ExpenseRepository.toDto(doc)])
-    return withProperty
+  /**
+   * Crée la dépense. Avec un `client_request_id`, l'écriture se fait sous
+   * l'identifiant dérivé et un rejeu rend la dépense déjà écrite — à l'appelant
+   * d'en vérifier l'auteur sur le document retourné.
+   */
+  async create(input: CreateExpenseInput): Promise<AuthoredExpense> {
+    const record = input.client_request_id
+      ? await Expense.createOnce({ ...input, client_request_id: input.client_request_id })
+      : await Expense.create(input)
+    return this.authored(record)
+  }
+
+  /** Dépense déjà écrite sous ce `client_request_id`, avec son auteur. */
+  async findByRequestId(ownerId: string, requestId: string): Promise<AuthoredExpense | null> {
+    const record = await Expense.findByRequestId(ownerId, requestId)
+    return record ? this.authored(record) : null
+  }
+
+  private async authored(record: ExpenseRecord): Promise<AuthoredExpense> {
+    const [dto] = await this.attachTargets([ExpenseRepository.toDto(record)])
+    return { dto, created_by: record.created_by ?? null }
   }
 
   async findByIdAndOwner(id: string, owner_id: string): Promise<ExpenseDto | null> {

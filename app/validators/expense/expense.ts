@@ -20,6 +20,8 @@ export const createExpenseValidator = vine.compile(
     amount: vine.number().positive(),
     spent_at: vine.date(),
     note: vine.string().trim().maxLength(500).optional(),
+    /** UUID d'idempotence d'une saisie hors ligne, rejouée par la file. */
+    client_request_id: vine.string().trim().minLength(1).maxLength(64).optional(),
   })
 )
 

@@ -1,5 +1,15 @@
+import { createHash } from 'node:crypto'
+
 import { FIRESTORE_IN_LIMIT, isWithinScope } from '#features/managers/scope'
-import { COLLECTIONS, collection, toDoc, toDocs, toPayload, type WithId } from '#firebase/firestore'
+import {
+  COLLECTIONS,
+  collection,
+  toDoc,
+  toDocs,
+  toPayload,
+  transaction,
+  type WithId,
+} from '#firebase/firestore'
 
 /**
  * Dépense engagée par un propriétaire, sur un bien ou sur une résidence.
@@ -56,11 +66,32 @@ export interface ExpenseDocument {
    */
   created_by?: string | null
 
+  /**
+   * UUID d'idempotence posé par le mobile sur une saisie hors ligne : la file
+   * de synchronisation rejoue après un timeout, et la dépense serait sinon
+   * comptée deux fois. Optionnel : absent sur l'historique et sur toute saisie
+   * en ligne.
+   */
+  client_request_id?: string | null
+
   created_at: Date
   updated_at: Date
 }
 
 export type ExpenseRecord = WithId<ExpenseDocument>
+
+/**
+ * Identifiant du document d'une dépense saisie avec `client_request_id`.
+ *
+ * Même parti que les réservations comptoir (`Booking.ownerRequestDocId`) :
+ * l'identifiant dérivé rend la création atomique sans index, là où une
+ * recherche suivie d'un `add()` laisserait deux rejeux concurrents créer
+ * deux dépenses. Le propriétaire entre dans le condensat, pour qu'un
+ * identifiant de requête deviné ne désigne rien chez un autre compte.
+ */
+export function expenseRequestDocId(ownerId: string, requestId: string): string {
+  return createHash('sha256').update(`expense:${ownerId}:${requestId}`).digest('hex')
+}
 
 function expenses() {
   return collection<ExpenseDocument>(COLLECTIONS.expenses)
@@ -86,6 +117,7 @@ export function withDefaults(input: Partial<ExpenseDocument>): ExpenseDocument {
     spent_at: input.spent_at ?? now,
     note: input.note?.trim() || null,
     created_by: input.created_by ?? null,
+    client_request_id: input.client_request_id ?? null,
     created_at: input.created_at ?? now,
     updated_at: now,
   }
@@ -169,6 +201,34 @@ const Expense = {
     const payload = withDefaults(input)
     const docRef = await expenses().add(toPayload(payload) as unknown as ExpenseDocument)
     return { ...payload, _id: docRef.id }
+  },
+
+  /** Dépense déjà écrite sous ce `client_request_id`, s'il y en a une. */
+  async findByRequestId(ownerId: string, requestId: string): Promise<ExpenseRecord | null> {
+    if (!requestId) return null
+    return toDoc<ExpenseDocument>(
+      await expenses().doc(expenseRequestDocId(ownerId, requestId)).get()
+    )
+  },
+
+  /**
+   * Crée la dépense sous son identifiant dérivé, ou rend celle qui l'occupe
+   * déjà. La lecture et l'écriture tiennent dans une transaction : deux
+   * rejeux concurrents ne peuvent pas lire tous deux « absente ».
+   */
+  async createOnce(
+    input: Partial<ExpenseDocument> & { owner_id: string; client_request_id: string }
+  ): Promise<ExpenseRecord> {
+    const payload = withDefaults(input)
+    const docRef = expenses().doc(expenseRequestDocId(input.owner_id, input.client_request_id))
+
+    return transaction(async (tx) => {
+      const existing = await tx.get(docRef)
+      if (existing.exists) return toDoc<ExpenseDocument>(existing) as ExpenseRecord
+
+      tx.set(docRef, toPayload(payload) as unknown as ExpenseDocument)
+      return { ...payload, _id: docRef.id }
+    })
   },
 
   /**
