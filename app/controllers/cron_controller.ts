@@ -2,6 +2,7 @@ import logger from '@adonisjs/core/services/logger'
 
 import type { HttpContext } from '@adonisjs/core/http'
 
+import { SyncStayStatusesUseCase } from '../features/bookings/use_cases/index.ts'
 import { SendSubscriptionRemindersUseCase } from '../features/notifications/use_cases/index.ts'
 import { SuspendUnverifiedOwnersUseCase } from '../features/subscriptions/use_cases/index.ts'
 
@@ -57,6 +58,26 @@ export default class CronController {
 
     return ctx.response.ok({
       task: 'subscription-reminders',
+      ...result,
+      duration_ms: Date.now() - startedAt,
+    })
+  }
+
+  /**
+   * POST|GET /api/v1/cron/stay-statuses
+   *
+   * Met les séjours à l'heure : « en cours » à l'arrivée, « terminé » six
+   * heures après la sortie prévue. Idempotent ; un appel toutes les quinze
+   * minutes suffit à ce qu'un séjour fini ne reste pas affiché « En cours ».
+   */
+  async stayStatuses(ctx: HttpContext) {
+    const startedAt = Date.now()
+    const result = await new SyncStayStatusesUseCase().execute()
+
+    logger.info({ ...result, duration_ms: Date.now() - startedAt }, 'Cron : statuts des séjours')
+
+    return ctx.response.ok({
+      task: 'stay-statuses',
       ...result,
       duration_ms: Date.now() - startedAt,
     })

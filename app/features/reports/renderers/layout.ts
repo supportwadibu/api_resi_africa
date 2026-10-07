@@ -43,7 +43,18 @@ export function formatPercent(ratio: number): string {
  * périodes sans suggérer une précision que la donnée n'a pas.
  */
 export function formatDays(value: number): string {
-  return `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(value)} j`
+  return `${formatDayCount(value)} j`
+}
+
+/**
+ * Nombre de jours sans unité, au dixième.
+ *
+ * Les jours occupés sont répartis au prorata du temps passé dans la période :
+ * un séjour à cheval sur la borne en apporte une fraction, et l'afficher brut
+ * imprimerait seize décimales sur le PDF.
+ */
+export function formatDayCount(value: number): string {
+  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(value)
 }
 
 /**

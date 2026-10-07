@@ -517,6 +517,7 @@ router
           ['GET', 'POST'],
           [CronController, 'subscriptionReminders']
         )
+        router.route('stay-statuses', ['GET', 'POST'], [CronController, 'stayStatuses'])
         router.get('health', [CronController, 'health'])
       })
       .prefix('cron')

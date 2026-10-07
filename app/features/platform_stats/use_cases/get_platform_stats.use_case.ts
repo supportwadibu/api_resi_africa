@@ -5,6 +5,7 @@ import {
   occupancyForWindow,
   revenueForMonth,
 } from '#features/bookings/booking_stats'
+import { exploitedUnits } from '#features/finance/occupancy'
 
 import type { PlatformStatsDto } from '../dto/platform_stats.dto.ts'
 import PlatformStatsRepository from '../repositories/platform_stats_repository.ts'
@@ -35,10 +36,12 @@ export class GetPlatformStatsUseCase {
     const currentRevenue = revenueForMonth(inRange, current)
     const previousRevenue = revenueForMonth(inRange, previous)
 
-    const byStatus = counters.catalog.properties_by_status
-    // `published + rented` : même parc exploité que le tableau de bord
-    // propriétaire — un bien loué sort des publiés sans quitter le parc.
-    const exploited = byStatus.published + byStatus.rented
+    // Même parc exploité que le tableau de bord propriétaire : tout logement
+    // qui n'est pas mis hors service.
+    const exploited = exploitedUnits({
+      total: counters.catalog.properties,
+      inactive: counters.catalog.properties_by_status.inactive,
+    })
 
     return {
       generated_at: now,

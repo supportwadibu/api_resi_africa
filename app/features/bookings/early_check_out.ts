@@ -12,7 +12,7 @@ import { countStayDays } from './stay_pricing.ts'
  * de quelques minutes sur celle du serveur : sans marge, une sortie « à
  * l'instant » serait refusée comme future.
  */
-const CLOCK_SKEW_TOLERANCE_MS = 5 * 60 * 1000
+export const CLOCK_SKEW_TOLERANCE_MS = 5 * 60 * 1000
 
 /** Réservation réduite à ce dont le départ anticipé a besoin. */
 export interface EarlyCheckOutBooking {

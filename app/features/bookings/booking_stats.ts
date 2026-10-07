@@ -8,11 +8,10 @@
  * le rapport.
  */
 
-import { daysWithinWindow, splitRevenueByMonth } from '#features/finance/revenue_split'
+import { occupancyRate } from '#features/finance/occupancy'
+import { splitRevenueByMonth } from '#features/finance/revenue_split'
 
-import { stayTypeOccupancyDays, type StayType } from './stay_type.ts'
-
-const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24
+import type { StayType } from './stay_type.ts'
 
 /** Fenêtre bornée à gauche, ouverte à droite : `from` inclus, `to` exclu. */
 export interface MonthWindow {
@@ -27,6 +26,9 @@ export interface StatsBooking {
   end_date: Date
   total_amount: number
   stay_type?: StayType | string
+  /** Jours vendus. Optionnels : l'occupation les recompte en leur absence. */
+  days_count?: number
+  nights_count?: number
 }
 
 /**
@@ -150,37 +152,14 @@ export function growthPercent(current: number, previous: number): number | null 
 /**
  * Part des jours-bien occupés sur la fenêtre.
  *
- * Même formule que le relevé financier : les jours retenus sont ceux tombant
- * dans la fenêtre, pondérés par le type de séjour — une demi-journée
- * n'immobilise pas le bien autant qu'un séjour complet. Le dénominateur est la
- * capacité du parc exploité, plafonné à 1 pour les séjours débordant la
- * fenêtre.
+ * Délègue à `occupancyRate` (`finance/occupancy.ts`), la formule commune à
+ * tous les écrans : jours vendus au prorata du temps passé dans la fenêtre,
+ * pondérés par type de séjour, rapportés à la capacité exacte du parc.
  */
 export function occupancyForWindow(
   bookings: StatsBooking[],
   exploitedProperties: number,
   window: MonthWindow
 ): number {
-  if (!exploitedProperties) return 0
-
-  const occupiedDays = bookings.reduce(
-    (sum, b) =>
-      sum +
-      stayTypeOccupancyDays(
-        // Les réservations antérieures au séjour comptoir n'ont pas de type :
-        // elles sont toutes des séjours complets.
-        (b.stay_type as StayType) ?? 'full_day',
-        daysWithinWindow(b.start_date, b.end_date, window.from, window.to)
-      ),
-    0
-  )
-
-  const windowDays = Math.max(
-    1,
-    Math.ceil((window.to.getTime() - window.from.getTime()) / MILLISECONDS_PER_DAY)
-  )
-  const capacity = windowDays * exploitedProperties
-  if (capacity <= 0) return 0
-
-  return Math.min(1, occupiedDays / capacity)
+  return occupancyRate(bookings, exploitedProperties, window.from, window.to)
 }

@@ -210,8 +210,9 @@ test.group('occupancyForWindow', () => {
   })
 
   test('sur le mois écoulé, le dénominateur suit les jours passés', ({ assert }) => {
-    // Du 1er au 11 mars, lu le 15 à midi : 10 jours occupés sur les 15 jours
-    // entamés depuis le 1er, et non sur les 31 du mois entier.
+    // Du 1er au 11 mars, lu le 15 à midi : 10 jours occupés sur les 14,5 jours
+    // écoulés depuis le 1er, et non sur les 31 du mois entier. La capacité est
+    // la durée exacte : l'arrondir au jour entamé sous-évaluait le taux.
     const rate = occupancyForWindow(
       [
         booking({
@@ -223,7 +224,7 @@ test.group('occupancyForWindow', () => {
       elapsedWindow(monthWindow(NOW), NOW)
     )
 
-    assert.closeTo(rate, 10 / 15, 0.01)
+    assert.closeTo(rate, 10 / 14.5, 0.001)
   })
 
   test('un parc plus grand dilue le taux', ({ assert }) => {
@@ -255,7 +256,8 @@ test.group('occupancyForWindow', () => {
 
   test('ne retient que les jours tombant dans la fenêtre', ({ assert }) => {
     // Du 25 février au 5 mars : la part de mars va du 1er 00h au 5 à 12h,
-    // soit 4 jours et demi, comptés 5 au jour entamé.
+    // soit 4 jours et demi sur les 8 vendus. Arrondie à 5 au jour entamé, elle
+    // s'ajoutait aux 4 de février : 9 jours comptés pour 8 vendus.
     const rate = occupancyForWindow(
       [
         booking({
@@ -267,7 +269,7 @@ test.group('occupancyForWindow', () => {
       monthWindow(NOW)
     )
 
-    assert.closeTo(rate, 5 / 31, 0.001)
+    assert.closeTo(rate, 4.5 / 31, 0.001)
   })
 
   test('sans bien exploité, le taux n’a pas de dénominateur', ({ assert }) => {

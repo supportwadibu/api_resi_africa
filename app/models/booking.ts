@@ -138,6 +138,13 @@ export interface BookingDocument {
   cancellation_reason: string | null
 
   /**
+   * Séjour clos par la tâche planifiée, et non par le propriétaire.
+   * `actual_check_out_at` y vaut alors la sortie prévue, faute d'en connaître
+   * une autre. Absent sur toute clôture manuelle et sur l'historique.
+   */
+  closed_automatically?: boolean
+
+  /**
    * Acteur ayant réellement saisi l'enregistrement — un gérant, ou `null` pour
    * le propriétaire. Optionnel : absent sur les documents antérieurs au rôle
    * gérant. Donnée d'audit, n'entrant dans aucun calcul.
@@ -677,6 +684,44 @@ const Booking = {
   async findEndingAfter(from: Date): Promise<BookingRecord[]> {
     const snapshot = await bookings().where('end_date', '>=', from).get()
     return toDocs<BookingDocument>(snapshot.docs).filter((doc) => doc.status !== 'cancelled')
+  },
+
+  /**
+   * Réservations encore ouvertes de toute la plateforme : `confirmed` ou
+   * `in_progress`.
+   *
+   * Une seule clause, sur `status` : un index simple suffit, là où un filtre
+   * de date en plus exigerait un index composite. Le volume — les séjours non
+   * clos — reste borné.
+   */
+  async findOpenStays(): Promise<BookingRecord[]> {
+    const snapshot = await bookings().where('status', 'in', ['confirmed', 'in_progress']).get()
+    return toDocs<BookingDocument>(snapshot.docs)
+  },
+
+  /**
+   * Applique une bascule de statut si le séjour est toujours dans l'état lu.
+   *
+   * Relu dans une transaction : un propriétaire qui clôture au comptoir pendant
+   * que la tâche tourne a consigné l'heure réelle de sortie, et la tâche ne
+   * doit pas l'écraser par la sortie prévue. Rend `false` quand le statut a
+   * changé entre-temps.
+   */
+  async applyStatusTransition(
+    id: string,
+    expected: BookingStatus,
+    patch: Record<string, unknown>
+  ): Promise<boolean> {
+    const docRef = bookings().doc(id)
+
+    return db().runTransaction(async (tx) => {
+      const snapshot = await tx.get(docRef)
+      const current = toDoc<BookingDocument>(snapshot)
+      if (!current || current.status !== expected) return false
+
+      tx.update(docRef, toPayload({ ...patch, updated_at: new Date() }))
+      return true
+    })
   },
 
   /**

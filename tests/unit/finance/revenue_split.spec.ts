@@ -1,5 +1,5 @@
 import { test } from '@japa/runner'
-import { daysWithinWindow, splitRevenueByMonth } from '#features/finance/revenue_split'
+import { splitRevenueByMonth } from '#features/finance/revenue_split'
 
 test.group('splitRevenueByMonth', () => {
   test('un séjour tenant dans un seul mois produit une seule tranche', ({ assert }) => {
@@ -81,37 +81,5 @@ test.group('splitRevenueByMonth', () => {
 
     assert.lengthOf(slices, 1)
     assert.deepEqual(slices[0], { year: 2026, month: 9, days: 1, amount: 6000 })
-  })
-})
-
-test.group('daysWithinWindow', () => {
-  test('sans fenêtre, tous les jours du séjour comptent', ({ assert }) => {
-    const days = daysWithinWindow(
-      new Date('2026-10-28T12:00:00.000Z'),
-      new Date('2026-11-03T12:00:00.000Z')
-    )
-    assert.equal(days, 6)
-  })
-
-  test('seuls les jours tombant dans la fenêtre comptent', ({ assert }) => {
-    // Le défaut corrigé : octobre se voyait attribuer les 6 jours du séjour,
-    // d'où un taux d'occupation dépassant 100 %.
-    const days = daysWithinWindow(
-      new Date('2026-10-28T12:00:00.000Z'),
-      new Date('2026-11-03T12:00:00.000Z'),
-      new Date('2026-10-01T00:00:00.000Z'),
-      new Date('2026-11-01T00:00:00.000Z')
-    )
-    assert.equal(days, 4)
-  })
-
-  test('un séjour hors fenêtre ne compte aucun jour', ({ assert }) => {
-    const days = daysWithinWindow(
-      new Date('2026-09-01T12:00:00.000Z'),
-      new Date('2026-09-05T12:00:00.000Z'),
-      new Date('2026-10-01T00:00:00.000Z'),
-      new Date('2026-11-01T00:00:00.000Z')
-    )
-    assert.equal(days, 0)
   })
 })

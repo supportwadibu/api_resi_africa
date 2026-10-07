@@ -1,5 +1,16 @@
+import { createHash } from 'node:crypto'
+
+import { belongsToResidence } from '#features/finance/residence_scope'
 import { FIRESTORE_IN_LIMIT, isWithinScope } from '#features/managers/scope'
-import { COLLECTIONS, collection, toDoc, toDocs, toPayload, type WithId } from '#firebase/firestore'
+import {
+  COLLECTIONS,
+  collection,
+  toDoc,
+  toDocs,
+  toPayload,
+  transaction,
+  type WithId,
+} from '#firebase/firestore'
 
 /**
  * Dépense engagée par un propriétaire, sur un bien ou sur une résidence.
@@ -56,11 +67,32 @@ export interface ExpenseDocument {
    */
   created_by?: string | null
 
+  /**
+   * UUID d'idempotence posé par le mobile sur une saisie hors ligne : la file
+   * de synchronisation rejoue après un timeout, et la dépense serait sinon
+   * comptée deux fois. Optionnel : absent sur l'historique et sur toute saisie
+   * en ligne.
+   */
+  client_request_id?: string | null
+
   created_at: Date
   updated_at: Date
 }
 
 export type ExpenseRecord = WithId<ExpenseDocument>
+
+/**
+ * Identifiant du document d'une dépense saisie avec `client_request_id`.
+ *
+ * Même parti que les réservations comptoir (`Booking.ownerRequestDocId`) :
+ * l'identifiant dérivé rend la création atomique sans index, là où une
+ * recherche suivie d'un `add()` laisserait deux rejeux concurrents créer
+ * deux dépenses. Le propriétaire entre dans le condensat, pour qu'un
+ * identifiant de requête deviné ne désigne rien chez un autre compte.
+ */
+export function expenseRequestDocId(ownerId: string, requestId: string): string {
+  return createHash('sha256').update(`expense:${ownerId}:${requestId}`).digest('hex')
+}
 
 function expenses() {
   return collection<ExpenseDocument>(COLLECTIONS.expenses)
@@ -86,6 +118,7 @@ export function withDefaults(input: Partial<ExpenseDocument>): ExpenseDocument {
     spent_at: input.spent_at ?? now,
     note: input.note?.trim() || null,
     created_by: input.created_by ?? null,
+    client_request_id: input.client_request_id ?? null,
     created_at: input.created_at ?? now,
     updated_at: now,
   }
@@ -96,6 +129,12 @@ export interface ExpenseFilters {
   property_id?: string
   residence_id?: string
   category?: ExpenseCategory
+  /**
+   * Logements de la résidence `residence_id`. Fournis, le filtre de résidence
+   * couvre ses charges communes **et** celles de ses logements, comme le
+   * relevé Finance ; absents, il ne retient que les charges communes.
+   */
+  residence_unit_ids?: readonly string[]
   /** Bornes inclusives sur `spent_at`. */
   from?: Date
   to?: Date
@@ -119,7 +158,11 @@ function buildQuery(filters: ExpenseFilters): FirebaseFirestore.Query<ExpenseDoc
 
   if (filters.owner_id) query = query.where('owner_id', '==', filters.owner_id)
   if (filters.property_id) query = query.where('property_id', '==', filters.property_id)
-  if (filters.residence_id) query = query.where('residence_id', '==', filters.residence_id)
+  // Avec ses logements, la résidence se filtre en mémoire : ses charges vivent
+  // sur deux champs, qu'aucune égalité ne réunit.
+  if (filters.residence_id && !filters.residence_unit_ids) {
+    query = query.where('residence_id', '==', filters.residence_id)
+  }
   if (filters.category) query = query.where('category', '==', filters.category)
 
   // Filtrage délégué à Firestore tant que la liste tient dans la limite de
@@ -137,6 +180,14 @@ export function matchesInMemory(doc: ExpenseRecord, filters: ExpenseFilters): bo
 
   if (filters.from && spentAt < filters.from.getTime()) return false
   if (filters.to && spentAt > filters.to.getTime()) return false
+
+  if (
+    filters.residence_id &&
+    filters.residence_unit_ids &&
+    !belongsToResidence(doc, filters.residence_id, new Set(filters.residence_unit_ids))
+  ) {
+    return false
+  }
 
   // Le périmètre est repris ici dans les deux cas où `buildQuery` n'a pas pu le
   // confier à Firestore — périmètre vide, ou de plus de 30 logements, où `in`
@@ -169,6 +220,34 @@ const Expense = {
     const payload = withDefaults(input)
     const docRef = await expenses().add(toPayload(payload) as unknown as ExpenseDocument)
     return { ...payload, _id: docRef.id }
+  },
+
+  /** Dépense déjà écrite sous ce `client_request_id`, s'il y en a une. */
+  async findByRequestId(ownerId: string, requestId: string): Promise<ExpenseRecord | null> {
+    if (!requestId) return null
+    return toDoc<ExpenseDocument>(
+      await expenses().doc(expenseRequestDocId(ownerId, requestId)).get()
+    )
+  },
+
+  /**
+   * Crée la dépense sous son identifiant dérivé, ou rend celle qui l'occupe
+   * déjà. La lecture et l'écriture tiennent dans une transaction : deux
+   * rejeux concurrents ne peuvent pas lire tous deux « absente ».
+   */
+  async createOnce(
+    input: Partial<ExpenseDocument> & { owner_id: string; client_request_id: string }
+  ): Promise<ExpenseRecord> {
+    const payload = withDefaults(input)
+    const docRef = expenses().doc(expenseRequestDocId(input.owner_id, input.client_request_id))
+
+    return transaction(async (tx) => {
+      const existing = await tx.get(docRef)
+      if (existing.exists) return toDoc<ExpenseDocument>(existing) as ExpenseRecord
+
+      tx.set(docRef, toPayload(payload) as unknown as ExpenseDocument)
+      return { ...payload, _id: docRef.id }
+    })
   },
 
   /**

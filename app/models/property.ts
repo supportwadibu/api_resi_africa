@@ -408,6 +408,11 @@ export interface OwnerPropertyStats {
   published: number
   rented: number
   draft: number
+  /**
+   * Logements mis hors service : seuls exclus de la capacité du taux
+   * d'occupation (voir `exploitedUnits`).
+   */
+  inactive: number
   total_views: number
 }
 
@@ -436,13 +441,21 @@ export function needsInMemoryStats(scopePropertyIds?: string[] | null): boolean 
  * compteur ne le portent pas.
  */
 export function computeStatsInMemory(docs: readonly PropertyRecord[]): OwnerPropertyStats {
-  const stats: OwnerPropertyStats = { total: 0, published: 0, rented: 0, draft: 0, total_views: 0 }
+  const stats: OwnerPropertyStats = {
+    total: 0,
+    published: 0,
+    rented: 0,
+    draft: 0,
+    inactive: 0,
+    total_views: 0,
+  }
 
   for (const doc of docs) {
     stats.total += 1
     if (doc.status === 'published') stats.published += 1
     if (doc.status === 'rented') stats.rented += 1
     if (doc.status === 'draft') stats.draft += 1
+    if (doc.status === 'inactive') stats.inactive += 1
     stats.total_views += doc.metadata?.views_count ?? 0
   }
 
@@ -693,7 +706,7 @@ const Property = {
     // filtrer ce que la requête n'exprime pas.
     if (needsInMemoryStats(scopePropertyIds)) {
       if (scopePropertyIds!.length === 0) {
-        return { total: 0, published: 0, rented: 0, draft: 0, total_views: 0 }
+        return { total: 0, published: 0, rented: 0, draft: 0, inactive: 0, total_views: 0 }
       }
 
       const snapshot = await base.get()
@@ -708,15 +721,16 @@ const Property = {
       base = base.where(FieldPath.documentId(), 'in', scopePropertyIds)
     }
 
-    const [total, published, rented, draft, totalViews] = await Promise.all([
+    const [total, published, rented, draft, inactive, totalViews] = await Promise.all([
       countQuery(base),
       countQuery(base.where('status', '==', 'published')),
       countQuery(base.where('status', '==', 'rented')),
       countQuery(base.where('status', '==', 'draft')),
+      countQuery(base.where('status', '==', 'inactive')),
       sumQuery(base, 'metadata.views_count'),
     ])
 
-    return { total, published, rented, draft, total_views: totalViews }
+    return { total, published, rented, draft, inactive, total_views: totalViews }
   },
 }
 

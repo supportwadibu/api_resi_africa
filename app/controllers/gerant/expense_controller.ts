@@ -92,6 +92,7 @@ export default class GerantExpenseController {
       // du logement.
       residence_id: null,
       created_by: write.created_by,
+      client_request_id: payload.client_request_id,
     })
 
     return ctx.response.created({ data: expense })

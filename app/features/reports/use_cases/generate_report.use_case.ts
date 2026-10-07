@@ -8,12 +8,11 @@ import {
   type MonthWindow,
 } from '#features/bookings/booking_stats'
 import BookingRepository from '#features/bookings/repositories/booking_repository'
-import { stayTypeOccupancyDays, type StayType } from '#features/bookings/stay_type'
 import ClientRepository from '#features/clients/repositories/client_repository'
 import ExpenseRepository from '#features/expenses/repositories/expense_repository'
+import { sumOccupiedDays, windowDays } from '#features/finance/occupancy'
 import { aggregateGrossRevenue } from '#features/finance/repositories/finance_repository'
 import { belongsToResidence } from '#features/finance/residence_scope'
-import { daysWithinWindow } from '#features/finance/revenue_split'
 import GetFinanceOverviewUseCase from '#features/finance/use_cases/get_finance_overview.use_case'
 import OwnerRepository from '#features/owners/repositories/owner_repository'
 import PropertyRepository from '#features/properties/repositories/property_repository'
@@ -61,8 +60,6 @@ import type {
  * fait sans toucher au use case le jour où ça change.
  */
 const MAX_PROPERTIES = 100
-
-const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24
 
 /** Mois abrégés en français, indexés comme `Date.getUTCMonth()`. */
 const MONTH_LABELS = [
@@ -120,39 +117,19 @@ function buildFilename(type: GenerateReportInput['type'], periodLabel: string, n
   return `rapport-${REPORT_TYPE_SLUGS[type]}-${periodSlug}-${now.getTime()}.pdf`
 }
 
-/** Jours d'une fenêtre, au minimum un jour pour ne jamais diviser par zéro. */
-function windowDays(window: { from: Date; to: Date }): number {
-  return Math.max(
-    1,
-    Math.ceil((window.to.getTime() - window.from.getTime()) / MILLISECONDS_PER_DAY)
-  )
-}
-
 /**
- * Jours-bien occupés d'un lot de réservations sur une fenêtre, pondérés par
- * type de séjour.
+ * Jours-bien occupés d'un lot de réservations sur une fenêtre.
  *
- * C'est le **numérateur** d'`occupancyForWindow` (`booking_stats.ts`) et de
- * `moyen_sejour` (`FinanceRepository.overview`), avec la même formule : jours
- * bornés à la fenêtre puis pondérés par `stayTypeOccupancyDays`. Il est
- * reconstitué ici parce que le document l'expose brut — « 22 / 31 jours », le
- * séjour moyen — là où ces deux primitives ne rendent qu'un ratio. Toute
- * divergence de formule ferait afficher au PDF des jours qui ne correspondent
- * pas au taux affiché juste à côté.
+ * C'est le **numérateur** d'`occupancyRate` et de `moyen_sejour`, par la même
+ * primitive (`sumOccupiedDays`). Il est exposé ici parce que le document
+ * l'affiche brut — « 22 / 31 jours », le séjour moyen — là où le taux ne rend
+ * qu'un ratio.
  */
 function occupiedDaysInWindow(
   bookings: readonly BookingDto[],
   window: { from: Date; to: Date }
 ): number {
-  return bookings.reduce(
-    (sum, booking) =>
-      sum +
-      stayTypeOccupancyDays(
-        (booking.stay_type as StayType) ?? 'full_day',
-        daysWithinWindow(booking.start_date, booking.end_date, window.from, window.to)
-      ),
-    0
-  )
+  return sumOccupiedDays(bookings, window.from, window.to)
 }
 
 /** Découpe une fenêtre en mois calendaires, bornés par la fenêtre elle-même. */
@@ -409,24 +386,17 @@ export class GenerateReportUseCase {
 
     // Deux périmètres, exactement comme `FinanceRepository.overview` :
     //
-    // - sans résidence, le parc exploité est `published + rented` — un bien
-    //   réservé passe en « rented » et sort des publiés, mais reste exploité ;
+    // - sans résidence, le parc exploité est tout logement qui n'est pas mis
+    //   hors service (`exploitedUnits`) — un logement en brouillon se loue au
+    //   comptoir, un logement réservé en ligne reste exploité ;
     // - restreint à une résidence, la capacité est celle de **toutes** ses
-    //   unités, `draft` comprises (`Property.findIdsByResidence`, qui ne filtre
-    //   sur aucun statut).
-    //
-    // Cette seconde branche n'est pas un oubli de Finance : une résidence de dix
-    // unités dont trois en préparation reste une résidence de dix unités, et
-    // l'occupation que son propriétaire compare d'un mois à l'autre doit se
-    // lire sur un dénominateur qui ne bouge pas quand il publie une unité de
-    // plus. Reprendre ici le filtre de statut diviserait par sept là où l'écran
-    // divise par dix — un taux 43 % plus haut sur le PDF, pour la même période,
-    // sur le cas d'usage le plus courant du rapport.
+    //   unités (`Property.findIdsByResidence`, qui ne filtre sur aucun
+    //   statut) : une résidence de dix unités reste une résidence de dix
+    //   unités, et l'occupation comparée d'un mois à l'autre doit se lire sur
+    //   un dénominateur qui ne bouge pas.
     const exploitedProperties = input.residence_id
       ? properties.data
-      : properties.data.filter(
-          (property) => property.status === 'published' || property.status === 'rented'
-        )
+      : properties.data.filter((property) => property.status !== 'inactive')
 
     // Fenêtre **coupée à aujourd'hui**, au numérateur comme au dénominateur —
     // exactement comme `FinanceRepository.overview` : le rapport doit
@@ -435,10 +405,10 @@ export class GenerateReportUseCase {
     // afficherait ~16 % ; couper les deux ne compte que les jours écoulés.
     //
     // Une période entièrement future n'a aucun jour écoulé : capacité nulle,
-    // taux nul, plutôt que le jour plancher de `windowDays`.
+    // taux nul.
     const now = new Date()
     const elapsed = elapsedWindow(window, now)
-    const elapsedDays = elapsed.to > elapsed.from ? windowDays(elapsed) : 0
+    const elapsedDays = windowDays(elapsed.from, elapsed.to)
     const availableDays = elapsedDays * exploitedProperties.length
     const occupiedDays = Math.min(availableDays, occupiedDaysInWindow(bookings, elapsed))
     const grossRevenue = aggregateGrossRevenue(bookings, window)

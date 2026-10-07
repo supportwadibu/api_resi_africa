@@ -1,5 +1,8 @@
 import { test } from '@japa/runner'
-import { buildCheckOutPatch } from '#features/bookings/use_cases/check_out_booking.use_case'
+import {
+  buildCheckOutPatch,
+  resolveFullStayDeparture,
+} from '#features/bookings/use_cases/check_out_booking.use_case'
 import { splitRevenueByMonth } from '#features/finance/revenue_split'
 
 test.group('buildCheckOutPatch', () => {
@@ -35,5 +38,48 @@ test.group('buildCheckOutPatch', () => {
 
     assert.equal(octobre.days, 4)
     assert.equal(octobre.amount, 40000)
+  })
+})
+
+test.group('resolveFullStayDeparture', () => {
+  const entree = new Date('2026-10-01T12:00:00Z')
+  const maintenant = new Date('2026-10-03T18:00:00Z')
+  const booking = { start_date: entree, check_in_at: entree }
+
+  test('sans heure déclarée, la sortie est l’instant de la clôture', ({ assert }) => {
+    assert.deepEqual(resolveFullStayDeparture(booking, undefined, maintenant), maintenant)
+  })
+
+  test('retient l’heure déclarée : un départ saisi hors ligne et synchronisé plus tard', ({
+    assert,
+  }) => {
+    const saisie = new Date('2026-10-03T11:00:00Z')
+
+    assert.deepEqual(resolveFullStayDeparture(booking, saisie, maintenant), saisie)
+  })
+
+  test('tolère une horloge de téléphone en avance de quelques minutes', ({ assert }) => {
+    const enAvance = new Date('2026-10-03T18:03:00Z')
+
+    assert.deepEqual(resolveFullStayDeparture(booking, enAvance, maintenant), enAvance)
+  })
+
+  test('refuse une sortie dans le futur', ({ assert }) => {
+    const future = new Date('2026-10-03T19:00:00Z')
+
+    assert.throws(() => resolveFullStayDeparture(booking, future, maintenant))
+  })
+
+  test('refuse une sortie antérieure ou égale à l’entrée', ({ assert }) => {
+    assert.throws(() => resolveFullStayDeparture(booking, entree, maintenant))
+  })
+
+  test('se rabat sur start_date pour une réservation antérieure à la saisie comptoir', ({
+    assert,
+  }) => {
+    const ancienne = { start_date: entree }
+    const avantEntree = new Date('2026-10-01T10:00:00Z')
+
+    assert.throws(() => resolveFullStayDeparture(ancienne, avantEntree, maintenant))
   })
 })

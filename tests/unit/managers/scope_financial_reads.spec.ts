@@ -98,14 +98,16 @@ test.group('Property.statsByOwner : périmètre', () => {
     propertyRecord('unit-2', 'rented', 5),
     propertyRecord('unit-3', 'draft', 2),
     propertyRecord('unit-4', 'published', 100),
+    propertyRecord('unit-5', 'inactive', 0),
   ]
 
   test('les agrégats se recomposent à l’identique en mémoire', ({ assert }) => {
     assert.deepEqual(computeStatsInMemory(PARC), {
-      total: 4,
+      total: 5,
       published: 2,
       rented: 1,
       draft: 1,
+      inactive: 1,
       total_views: 117,
     })
   })
@@ -116,6 +118,7 @@ test.group('Property.statsByOwner : périmètre', () => {
       published: 0,
       rented: 0,
       draft: 0,
+      inactive: 0,
       total_views: 0,
     })
   })

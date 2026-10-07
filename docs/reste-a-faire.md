@@ -24,6 +24,10 @@ points sont classés par urgence. Le fonctionnement livré est décrit dans :
       Sans cela, aucune notification ne part (erreur au premier envoi).
 - [ ] **Programmer la tâche sur cron-job.org** — un appel par jour, le matin :
       `GET https://<api>/api/v1/cron/subscription-reminders?secret=<CRON_SECRET>`.
+- [ ] **Programmer la bascule des séjours sur cron-job.org** — toutes les
+      15 minutes : `GET https://<api>/api/v1/cron/stay-statuses?secret=<CRON_SECRET>`.
+      Sans elle, une réservation future reste « Confirmée » à l'arrivée et un
+      séjour fini reste « En cours » tant que le propriétaire ne l'a pas clos.
 - [ ] **Vérifier l'index Firestore `subscriptions : status + end_date`** en
       production (déclaré dans `firestore.indexes.json`, utilisé par les
       relances).

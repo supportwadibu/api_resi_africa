@@ -14,7 +14,7 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  * — la relancer ne suspend jamais deux fois le même compte.
  *
  * Sans cette exécution périodique, les essais échus restent `trial` et aucun
- * propriétaire n'est jamais suspendu : la règle des 14 jours devient lettre
+ * propriétaire n'est jamais suspendu : la durée d'essai devient lettre
  * morte.
  */
 export default class ExpireTrials extends BaseCommand {

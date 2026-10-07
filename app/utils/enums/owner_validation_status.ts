@@ -7,7 +7,7 @@ export const OwnerValidationStatusEnum = {
   ACTIVE: 'active',
   REJECTED: 'rejected',
   /**
-   * Essai de 14 jours écoulé sans que le dossier ait été validé.
+   * Essai gratuit écoulé sans que le dossier ait été validé.
    *
    * La suspension est fonctionnelle, jamais authentifiante : `is_active` reste
    * à `true` pour que le propriétaire puisse se connecter, consulter son état
