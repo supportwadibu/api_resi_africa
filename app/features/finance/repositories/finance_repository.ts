@@ -3,11 +3,11 @@ import Expense from '#models/expense'
 import Property from '#models/property'
 
 import { elapsedWindow } from '#features/bookings/booking_stats'
-import { stayTypeOccupancyDays } from '#features/bookings/stay_type'
 
 import Residence from '#models/residence'
 
-import { daysWithinWindow, splitRevenueByMonth } from '../revenue_split.ts'
+import { exploitedUnits, occupancyRate, sumOccupiedDays } from '../occupancy.ts'
+import { splitRevenueByMonth } from '../revenue_split.ts'
 import { sumResidenceExpenses } from '../residence_scope.ts'
 
 import type { FinanceFilters, FinanceOverviewDto, RevenuePointDto } from '../dto/finance.dto.ts'
@@ -15,8 +15,6 @@ import type { ActorScope } from '#features/managers/scope'
 import type { BookingRecord } from '#models/booking'
 import type { ExpenseRecord } from '#models/expense'
 import type { RevenueSlice } from '../revenue_split.ts'
-
-const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24
 
 /** Mois abrégés en français, indexés comme `Date.getMonth()`. */
 const MONTH_LABELS = [
@@ -204,41 +202,17 @@ export class FinanceRepository {
     const depenses = await this.sumExpenses(filters, range, unitIds, expenseSummary?.total)
     const commissions = aggregateCommissions(bookings, range)
 
-    // Seuls les jours tombant dans la fenêtre comptent : un séjour à cheval
-    // sur la borne imputait auparavant ses jours entiers à la période, d'où
-    // des taux d'occupation supérieurs à 100 % plafonnés artificiellement.
-    //
-    // La pondération par type de séjour suit : une demi-journée n'immobilise
-    // pas le bien autant qu'un séjour complet, et la compter pour un jour
-    // entier gonflerait le taux.
-    const totalDays = bookings.reduce(
-      (sum, b) =>
-        sum +
-        stayTypeOccupancyDays(
-          b.stay_type ?? 'full_day',
-          daysWithinWindow(b.start_date, b.end_date, range.from, range.to)
-        ),
-      0
-    )
+    // Jours vendus imputés à la fenêtre au prorata du temps, pondérés par type
+    // de séjour : voir `occupancy.ts`. `totalDays` garde la fenêtre entière :
+    // la durée moyenne de séjour porte sur toutes les réservations de la
+    // période.
+    const totalDays = sumOccupiedDays(bookings, range.from, range.to)
 
     // Le taux se mesure sur les jours écoulés (`elapsedWindow`) : sur le mois
     // en cours, le 10, on divise par dix jours et non par trente, et les
     // réservations déjà prises pour la fin du mois n'y entrent pas encore.
-    // `totalDays` garde la fenêtre entière : la durée moyenne de séjour porte
-    // sur toutes les réservations de la période.
     const occupancyRange =
       range.from && range.to ? elapsedWindow({ from: range.from, to: range.to }, new Date()) : null
-    const occupiedDaysToDate = occupancyRange
-      ? bookings.reduce(
-          (sum, b) =>
-            sum +
-            stayTypeOccupancyDays(
-              b.stay_type ?? 'full_day',
-              daysWithinWindow(b.start_date, b.end_date, occupancyRange.from, occupancyRange.to)
-            ),
-          0
-        )
-      : 0
 
     // Une résidence demandée mais introuvable rendrait un relevé vide
     // indistinguable d’une résidence sans activité : le use case tranche.
@@ -255,16 +229,17 @@ export class FinanceRepository {
         benefice_net: caBrut - depenses - commissions,
         commissions,
         remboursements: aggregateRefunds(bookings, range),
-        // `published + rented` : un bien réservé passe en « rented » et sort
-        // des publiés, alors qu'il fait toujours partie du parc exploité.
-        taux_occupation: this.occupancyRate(
-          occupiedDaysToDate,
-          // Restreint à une résidence, la capacité est celle de ses unités.
-          // Garder le parc entier au dénominateur écraserait le taux d’une
-          // résidence de trois studios chez un propriétaire qui en a trente.
-          unitIds ? unitIds.size : propertyStats.published + propertyStats.rented,
-          occupancyRange ?? {}
-        ),
+        taux_occupation: occupancyRange
+          ? occupancyRate(
+              bookings,
+              // Restreint à une résidence, la capacité est celle de ses unités.
+              // Garder le parc entier au dénominateur écraserait le taux d’une
+              // résidence de trois studios chez un propriétaire qui en a trente.
+              unitIds ? unitIds.size : exploitedUnits(propertyStats),
+              occupancyRange.from,
+              occupancyRange.to
+            )
+          : 0,
         reservations: bookings.length,
         moyen_sejour: bookings.length ? totalDays / bookings.length : 0,
       },
@@ -349,33 +324,6 @@ export class FinanceRepository {
     ])
 
     return { bookings, expenses }
-  }
-
-  /**
-   * Part des jours-bien occupés sur la période.
-   *
-   * Rapport entre les jours réservés et la capacité — le nombre de biens
-   * publiés multiplié par la durée de la fenêtre. Sans bien publié ou sans
-   * fenêtre bornée, le taux n'a pas de dénominateur et vaut zéro plutôt que
-   * l'infini.
-   */
-  private occupancyRate(
-    occupiedDays: number,
-    exploitedProperties: number,
-    range: { from?: Date; to?: Date }
-  ): number {
-    if (!exploitedProperties || !range.from || !range.to) return 0
-
-    const windowDays = Math.max(
-      1,
-      Math.ceil((range.to.getTime() - range.from.getTime()) / MILLISECONDS_PER_DAY)
-    )
-    const capacity = windowDays * exploitedProperties
-    if (capacity <= 0) return 0
-
-    // Plafonné à 1 : des séjours débordant la fenêtre pourraient sinon donner
-    // un taux supérieur à 100 %.
-    return Math.min(1, occupiedDays / capacity)
   }
 }
 

@@ -164,6 +164,7 @@ export class ExpenseRepository {
         owner_id: filters.owner_id,
         property_id: filters.property_id,
         residence_id: filters.residence_id,
+        residence_unit_ids: await this.residenceUnitIds(filters),
         category: filters.category,
         from: filters.from,
         to: filters.to,
@@ -204,11 +205,26 @@ export class ExpenseRepository {
     return docs.map((doc) => ExpenseRepository.toDto(doc))
   }
 
+  /**
+   * Logements de la résidence filtrée, restreints au périmètre de l'appelant.
+   *
+   * Le filtre `residence_id` ne retenait que les charges communes, alors que
+   * le relevé Finance d'une résidence additionne aussi celles de ses
+   * logements : sur l'écran Finance, la ventilation par catégorie ne sommait
+   * donc pas au total « Dépenses » affiché juste au-dessus. Les deux suivent
+   * désormais `belongsToResidence`.
+   */
+  private async residenceUnitIds(filters: ListExpensesFilters): Promise<string[] | undefined> {
+    if (!filters.residence_id) return undefined
+    return Property.findIdsByResidence(filters.residence_id, filters.scope_property_ids)
+  }
+
   async summary(filters: ListExpensesFilters): Promise<ExpenseSummaryDto> {
     const summary = await Expense.summary({
       owner_id: filters.owner_id,
       property_id: filters.property_id,
       residence_id: filters.residence_id,
+      residence_unit_ids: await this.residenceUnitIds(filters),
       category: filters.category,
       from: filters.from,
       to: filters.to,

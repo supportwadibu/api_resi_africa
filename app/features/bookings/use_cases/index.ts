@@ -14,3 +14,4 @@ export { default as RecordBookingPaymentUseCase } from './record_booking_payment
 export { default as FindPlatformBookingUseCase } from './find_platform_booking.use_case.ts'
 export { default as ListPlatformBookingsUseCase } from './list_platform_bookings.use_case.ts'
 export { default as UpdateOwnerBookingUseCase } from './update_owner_booking.use_case.ts'
+export { default as SyncStayStatusesUseCase } from './sync_stay_statuses.use_case.ts'

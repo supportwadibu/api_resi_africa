@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 
+import { belongsToResidence } from '#features/finance/residence_scope'
 import { FIRESTORE_IN_LIMIT, isWithinScope } from '#features/managers/scope'
 import {
   COLLECTIONS,
@@ -128,6 +129,12 @@ export interface ExpenseFilters {
   property_id?: string
   residence_id?: string
   category?: ExpenseCategory
+  /**
+   * Logements de la résidence `residence_id`. Fournis, le filtre de résidence
+   * couvre ses charges communes **et** celles de ses logements, comme le
+   * relevé Finance ; absents, il ne retient que les charges communes.
+   */
+  residence_unit_ids?: readonly string[]
   /** Bornes inclusives sur `spent_at`. */
   from?: Date
   to?: Date
@@ -151,7 +158,11 @@ function buildQuery(filters: ExpenseFilters): FirebaseFirestore.Query<ExpenseDoc
 
   if (filters.owner_id) query = query.where('owner_id', '==', filters.owner_id)
   if (filters.property_id) query = query.where('property_id', '==', filters.property_id)
-  if (filters.residence_id) query = query.where('residence_id', '==', filters.residence_id)
+  // Avec ses logements, la résidence se filtre en mémoire : ses charges vivent
+  // sur deux champs, qu'aucune égalité ne réunit.
+  if (filters.residence_id && !filters.residence_unit_ids) {
+    query = query.where('residence_id', '==', filters.residence_id)
+  }
   if (filters.category) query = query.where('category', '==', filters.category)
 
   // Filtrage délégué à Firestore tant que la liste tient dans la limite de
@@ -169,6 +180,14 @@ export function matchesInMemory(doc: ExpenseRecord, filters: ExpenseFilters): bo
 
   if (filters.from && spentAt < filters.from.getTime()) return false
   if (filters.to && spentAt > filters.to.getTime()) return false
+
+  if (
+    filters.residence_id &&
+    filters.residence_unit_ids &&
+    !belongsToResidence(doc, filters.residence_id, new Set(filters.residence_unit_ids))
+  ) {
+    return false
+  }
 
   // Le périmètre est repris ici dans les deux cas où `buildQuery` n'a pas pu le
   // confier à Firestore — périmètre vide, ou de plus de 30 logements, où `in`

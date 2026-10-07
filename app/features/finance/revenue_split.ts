@@ -28,19 +28,6 @@ function startOfNextMonth(date: Date): Date {
 }
 
 /**
- * Jours entamés entre deux instants, au minimum 1.
- *
- * `Math.ceil` : une sortie à 14h le lendemain d'une entrée à 12h dépasse la
- * journée due et en entame une seconde — même règle que `countStayDays`. Le
- * minimum de 1 couvre les séjours infra-journaliers (passage, demi-journée),
- * dont le montant ne doit pas disparaître dans une tranche à zéro jour.
- */
-function countDays(start: Date, end: Date): number {
-  const raw = Math.ceil((end.getTime() - start.getTime()) / MILLISECONDS_PER_DAY)
-  return Math.max(1, raw)
-}
-
-/**
  * Découpe un séjour en tranches mensuelles, montant réparti au prorata.
  *
  * Le reste d'arrondi est imputé à la dernière tranche : le FCFA n'a pas de
@@ -100,19 +87,4 @@ export function splitRevenueByMonth(start: Date, end: Date, amount: number): Rev
 
     return { year: slice.year, month: slice.month, days, amount: sliceAmount }
   })
-}
-
-/**
- * Jours du séjour tombant à l'intérieur d'une fenêtre.
- *
- * Sert au taux d'occupation : un séjour à cheval sur la borne ne doit imputer
- * à la fenêtre que les jours qui lui reviennent.
- */
-export function daysWithinWindow(start: Date, end: Date, from?: Date, to?: Date): number {
-  const effectiveStart = from && from > start ? from : start
-  const effectiveEnd = to && to < end ? to : end
-
-  if (effectiveEnd <= effectiveStart) return 0
-
-  return countDays(effectiveStart, effectiveEnd)
 }

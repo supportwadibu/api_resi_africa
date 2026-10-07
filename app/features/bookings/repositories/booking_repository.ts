@@ -1,3 +1,4 @@
+import { exploitedUnits } from '#features/finance/occupancy'
 import { SCOPE_READ_LIMIT } from '#features/managers/scope'
 import Booking, { type BookingRecord } from '#models/booking'
 import Property from '#models/property'
@@ -265,6 +266,20 @@ export class BookingRepository {
     return docs.map((doc) => BookingRepository.toDto(doc))
   }
 
+  /** Séjours non clos de toute la plateforme, pour la bascule de statut. */
+  async findOpenStays(): Promise<BookingRecord[]> {
+    return Booking.findOpenStays()
+  }
+
+  /** Bascule de statut, appliquée seulement si le séjour n'a pas bougé. */
+  async applyStatusTransition(
+    id: string,
+    expected: BookingRecord['status'],
+    patch: Record<string, unknown>
+  ): Promise<boolean> {
+    return Booking.applyStatusTransition(id, expected, patch)
+  }
+
   /**
    * Chiffres du tableau de bord : occupation, séjours à venir et en cours,
    * revenu du mois rapporté au précédent.
@@ -307,12 +322,9 @@ export class BookingRepository {
       // Sur les jours écoulés, et non le mois entier : c'est la convention de
       // l'onglet Statistiques, et rapporter au mois complet donnerait un taux
       // structurellement bas les premiers jours du mois.
-      //
-      // `published + rented` : un bien réservé passe en « rented » et sort des
-      // publiés, alors qu'il fait toujours partie du parc exploité.
       taux_occupation: occupancyForWindow(
         bookings,
-        propertyStats.published + propertyStats.rented,
+        exploitedUnits(propertyStats),
         elapsedWindow(current, now)
       ),
       upcoming: countUpcoming(bookings, now, current),

@@ -2,7 +2,7 @@ import { elapsedWindow } from '#features/bookings/booking_stats'
 import { filterByScope } from '#features/managers/scope'
 
 import { aggregateGrossRevenue, aggregateRevenuePoints } from './repositories/finance_repository.ts'
-import { daysWithinWindow } from './revenue_split.ts'
+import { occupancyRate } from './occupancy.ts'
 
 import type { RevenuePointDto } from './dto/finance.dto.ts'
 import type { ActorScope } from '#features/managers/scope'
@@ -11,14 +11,15 @@ import type { ActorScope } from '#features/managers/scope'
 // divergentes dans la même feature laisseraient croire à deux notions.
 import type { ScopedExpense } from './residence_scope.ts'
 
-const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24
-
 /** Réservation réduite à ce que le relevé d'un gérant en lit. */
 export interface ScopedBooking {
   property_id?: string | null
   start_date: Date
   end_date: Date
   total_amount: number
+  days_count?: number
+  nights_count?: number
+  stay_type?: string
 }
 
 export type { ScopedExpense }
@@ -64,24 +65,11 @@ export function computeOccupancyRate(
       ? new Set(bookings.map((b) => b.property_id ?? '')).size
       : scope.propertyIds.length
 
-  // `ceil` avec un plancher à 1, comme partout ailleurs — `countDays`,
-  // `countStayDays`, `FinanceRepository.occupancyRate`. Le numérateur vient de
-  // `daysWithinWindow`, qui arrondit au jour entamé : un dénominateur en
-  // `floor` rendait au gérant un taux surévalué que le relevé du propriétaire
-  // ne recoupait pas sur la même période. Le plancher couvre la fenêtre d'un
-  // seul jour, dont la capacité tombait à zéro et le taux à zéro avec elle.
-  const windowDays = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / MILLISECONDS_PER_DAY))
-  const capacity = propertiesCount * windowDays
-  if (capacity <= 0) return 0
-
-  const occupiedDays = bookings.reduce(
-    (sum, booking) => sum + daysWithinWindow(booking.start_date, booking.end_date, from, to),
-    0
-  )
-
-  // Plafonné à 1 : un séjour débordant la fenêtre donnerait sinon un taux
-  // supérieur à 100 %, comme dans `FinanceRepository.occupancyRate`.
-  return Math.min(1, occupiedDays / capacity)
+  // Même formule que le relevé du propriétaire : voir `occupancy.ts`. Le
+  // relevé gérant comptait chaque séjour pour un jour plein quel que soit son
+  // type, et arrondissait au jour entamé — deux taux différents pour le même
+  // logement selon qui le lisait.
+  return occupancyRate(bookings, propertiesCount, from, to)
 }
 
 /**

@@ -4,6 +4,7 @@ import type { ReportContext } from '#features/reports/dto/report.dto'
 import {
   escapeHtml,
   formatAmount,
+  formatDayCount,
   formatDays,
   formatPercent,
   renderDocument,
@@ -34,7 +35,7 @@ function renderKeyFigures(data: PerformanceReportData): string {
       <h2>Chiffres clés</h2>
       <div class="cards">
         <div class="card"><div class="card-label">Taux d'occupation</div><div class="card-value">${formatPercent(ratio)}</div></div>
-        <div class="card"><div class="card-label">Jours occupés</div><div class="card-value">${data.occupied_days} / ${data.available_days}</div></div>
+        <div class="card"><div class="card-label">Jours occupés</div><div class="card-value">${formatDayCount(data.occupied_days)} / ${formatDayCount(data.available_days)}</div></div>
         <div class="card"><div class="card-label">Séjour moyen</div><div class="card-value">${formatDays(data.average_stay)}</div></div>
         <div class="card"><div class="card-label">RevPAR</div><div class="card-value">${formatAmount(revpar)}</div></div>
       </div>
@@ -93,7 +94,7 @@ function renderPropertiesTable(properties: PerformancePropertyRow[]): string {
         <tr>
           <td>${escapeHtml(property.property_title)}</td>
           <td>${formatPercent(ratio)}</td>
-          <td>${property.occupied_days} / ${property.available_days}</td>
+          <td>${formatDayCount(property.occupied_days)} / ${formatDayCount(property.available_days)}</td>
           <td>${formatAmount(property.gross_revenue)}</td>
           <td>${formatAmount(revpar)}</td>
         </tr>`
