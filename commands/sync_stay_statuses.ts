@@ -3,8 +3,8 @@ import { BaseCommand } from '@adonisjs/core/ace'
 import type { CommandOptions } from '@adonisjs/core/types/ace'
 
 /**
- * Met les statuts des séjours à l'heure : « en cours » à l'arrivée,
- * « terminé » après la sortie prévue et son délai de grâce.
+ * Clôt les séjours dont la sortie prévue et son délai de grâce sont passés.
+ * L'arrivée, elle, s'enregistre au comptoir.
  *
  *     node ace bookings:sync-statuses
  *
@@ -13,7 +13,7 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  */
 export default class SyncStayStatuses extends BaseCommand {
   static commandName = 'bookings:sync-statuses'
-  static description = 'Bascule les séjours en cours et clôt ceux dont la sortie est passée'
+  static description = 'Clôt les séjours dont la sortie est passée'
 
   static options: CommandOptions = {
     startApp: true,
@@ -27,7 +27,7 @@ export default class SyncStayStatuses extends BaseCommand {
 
     this.logger.info(
       `${result.examined} séjour(s) ouvert(s) examiné(s) — ` +
-        `${result.started} passé(s) en cours, ${result.completed} clos, ` +
+        `${result.completed} clos, ` +
         `${result.skipped} modifié(s) entre-temps, ${result.failed} en échec.`
     )
   }

@@ -93,6 +93,13 @@ export interface BookingDocument {
   actual_check_out_at?: Date
 
   /**
+   * Arrivée réellement constatée au comptoir. Même règle que la sortie : la
+   * période facturée reste `check_in_at`, celle-ci n'est qu'informative.
+   * Absente tant que l'arrivée n'est pas enregistrée, et sur l'historique.
+   */
+  actual_check_in_at?: Date
+
+  /**
    * Période et montant vendus, figés par un départ anticipé.
    *
    * Absents tant que le séjour n'a pas été écourté — et sur tout l'historique.

@@ -1,14 +1,17 @@
 import type { BookingStatus } from '#models/booking'
 
 /**
- * Bascule automatique du statut d'un séjour selon l'heure.
+ * Clôture automatique d'un séjour selon l'heure.
  *
- * Le statut ne bougeait qu'à la main : une réservation future restait
- * `confirmed` le jour de l'arrivée, et un séjour dont le propriétaire oubliait
- * la clôture restait « En cours » des jours après le départ du client. La
- * tâche planifiée `cron/stay-statuses` applique cette règle à intervalle
- * régulier ; la clôture manuelle reste possible — et préférable, puisqu'elle
- * consigne l'heure réelle de sortie.
+ * Un séjour dont le propriétaire oubliait la clôture restait « En cours » des
+ * jours après le départ du client. La tâche planifiée `cron/stay-statuses`
+ * applique cette règle à intervalle régulier ; la clôture manuelle reste
+ * possible — et préférable, puisqu'elle consigne l'heure réelle de sortie.
+ *
+ * L'arrivée, elle, ne bascule plus seule : une réservation passait « En
+ * cours » à l'heure prévue, client présent ou non, et le registre de police
+ * déclarait hébergé quelqu'un qui ne s'était pas présenté. Elle s'enregistre
+ * au comptoir (`CheckInBookingUseCase`).
  */
 
 /**
@@ -30,14 +33,14 @@ export interface StayStatusBooking {
   check_out_at?: Date
 }
 
-export type StayTransition =
-  | { status: 'in_progress' }
-  | {
-      status: 'completed'
-      completed_at: Date
-      actual_check_out_at: Date
-      closed_automatically: true
-    }
+// Alias et non interface : le patch part dans `applyStatusTransition`, qui
+// attend un `Record<string, unknown>` qu'une interface ne satisfait pas.
+export type StayTransition = {
+  status: 'completed'
+  completed_at: Date
+  actual_check_out_at: Date
+  closed_automatically: true
+}
 
 /**
  * Transition due à l'instant `now`, ou `null` si le statut est à jour.
@@ -50,6 +53,10 @@ export type StayTransition =
  * règle que `buildCheckOutPatch` : la période facturée pilote la répartition
  * du revenu. La sortie consignée est la sortie **prévue**, faute d'en connaître
  * une autre ; `closed_automatically` le signale.
+ *
+ * Une réservation restée `confirmed` — arrivée jamais enregistrée — est close
+ * de la même façon, comme avant : la traiter en absence relève d'une
+ * annulation, que seul le propriétaire peut décider.
  */
 export function resolveStayTransition(
   booking: StayStatusBooking,
@@ -57,9 +64,8 @@ export function resolveStayTransition(
 ): StayTransition | null {
   if (booking.status !== 'confirmed' && booking.status !== 'in_progress') return null
 
-  const checkIn = booking.check_in_at ?? booking.start_date
   const checkOut = booking.check_out_at ?? booking.end_date
-  if (!checkIn || !checkOut) return null
+  if (!checkOut) return null
 
   if (now.getTime() >= checkOut.getTime() + AUTO_CLOSE_GRACE_MS) {
     return {
@@ -68,10 +74,6 @@ export function resolveStayTransition(
       actual_check_out_at: checkOut,
       closed_automatically: true,
     }
-  }
-
-  if (booking.status === 'confirmed' && now.getTime() >= checkIn.getTime()) {
-    return { status: 'in_progress' }
   }
 
   return null

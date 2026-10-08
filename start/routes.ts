@@ -329,6 +329,7 @@ router
               .group(() => {
                 router.get('/', [ProprioBookingController, 'index'])
                 router.post('/', [ProprioBookingController, 'store'])
+                router.patch(':id/check-in', [ProprioBookingController, 'checkIn'])
                 router.get(':id/check-out/preview', [ProprioBookingController, 'checkOutPreview'])
                 router.patch(':id/check-out', [ProprioBookingController, 'checkOut'])
                 router.patch(':id/extend', [ProprioBookingController, 'extend'])
@@ -406,6 +407,7 @@ router
             // Mêmes verbes et mêmes chemins que côté propriétaire : le mobile
             // ne fait que substituer le préfixe, et un `POST` ici lui rendrait
             // un 404 muet.
+            router.patch(':id/check-in', [GerantBookingController, 'checkIn'])
             router.get(':id/check-out/preview', [GerantBookingController, 'checkOutPreview'])
             router.patch(':id/check-out', [GerantBookingController, 'checkOut'])
             router.patch(':id/extend', [GerantBookingController, 'update']).as('extend')

@@ -119,6 +119,18 @@ export const checkOutBookingValidator = vine.compile(
   })
 )
 
+/**
+ * PATCH /proprio/bookings/:id/check-in — PATCH /gerant/bookings/:id/check-in
+ *
+ * Corps optionnel : l'heure d'arrivée n'est envoyée que par une saisie faite
+ * hors ligne, qui part plus tard. Sans elle, l'arrivée vaut l'heure serveur.
+ */
+export const checkInBookingValidator = vine.compile(
+  vine.object({
+    actual_check_in_at: vine.date({ formats: ['iso8601'] }).optional(),
+  })
+)
+
 export const checkOutPreviewValidator = vine.compile(
   vine.object({
     at: vine.date({ formats: ['iso8601'] }).optional(),

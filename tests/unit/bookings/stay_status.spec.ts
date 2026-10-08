@@ -14,9 +14,12 @@ const stay = (status: 'confirmed' | 'in_progress' | 'completed' | 'cancelled') =
 })
 
 test.group('resolveStayTransition', () => {
-  test('une réservation confirmée passe en cours à l’heure d’arrivée', ({ assert }) => {
-    assert.isNull(resolveStayTransition(stay('confirmed'), new Date('2026-10-02T12:59:00Z')))
-    assert.deepEqual(resolveStayTransition(stay('confirmed'), CHECK_IN), { status: 'in_progress' })
+  test('une réservation confirmée ne passe plus seule en cours à l’heure d’arrivée', ({
+    assert,
+  }) => {
+    // L'arrivée s'enregistre au comptoir : un client absent n'est pas hébergé.
+    assert.isNull(resolveStayTransition(stay('confirmed'), CHECK_IN))
+    assert.isNull(resolveStayTransition(stay('confirmed'), CHECK_OUT))
   })
 
   test('un séjour en cours reste ouvert pendant le délai de grâce', ({ assert }) => {
@@ -51,9 +54,10 @@ test.group('resolveStayTransition', () => {
     assert.isNull(resolveStayTransition(stay('cancelled'), now))
   })
 
-  test('repli sur start_date / end_date pour les réservations en ligne', ({ assert }) => {
-    const online = { status: 'confirmed' as const, start_date: CHECK_IN, end_date: CHECK_OUT }
+  test('repli sur end_date pour les réservations en ligne', ({ assert }) => {
+    const online = { status: 'in_progress' as const, start_date: CHECK_IN, end_date: CHECK_OUT }
+    const now = new Date(CHECK_OUT.getTime() + AUTO_CLOSE_GRACE_MS)
 
-    assert.deepEqual(resolveStayTransition(online, CHECK_IN), { status: 'in_progress' })
+    assert.equal(resolveStayTransition(online, now)?.status, 'completed')
   })
 })

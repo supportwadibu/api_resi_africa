@@ -51,6 +51,8 @@ export interface BookingDto {
   stay_type?: StayType
   check_in_at?: Date
   check_out_at?: Date
+  /** Arrivée réellement constatée, distincte de la période facturée. */
+  actual_check_in_at?: Date
   /** Sortie réellement constatée, distincte de la période facturée. */
   actual_check_out_at?: Date
   /** Sortie, durée et montant vendus, présents seulement après un départ anticipé. */

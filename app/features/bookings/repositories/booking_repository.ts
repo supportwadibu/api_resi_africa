@@ -58,6 +58,9 @@ export class BookingRepository {
       stay_type: doc.stay_type ?? 'full_day',
       check_in_at: doc.check_in_at ?? doc.start_date,
       check_out_at: doc.check_out_at ?? doc.end_date,
+      // Sans repli : l'arrivée n'est constatée que par son enregistrement, et
+      // l'heure prévue la ferait passer pour faite.
+      actual_check_in_at: doc.actual_check_in_at,
       // Sans repli : une réservation non clôturée n'a pas de sortie constatée,
       // et la remplacer par la sortie prévue laisserait croire au départ.
       actual_check_out_at: doc.actual_check_out_at,
