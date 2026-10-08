@@ -29,6 +29,8 @@ export interface StatsBooking {
   /** Jours vendus. Optionnels : l'occupation les recompte en leur absence. */
   days_count?: number
   nights_count?: number
+  /** Commission due à l'apporteur. Absente de l'historique et sans apporteur. */
+  referrer_commission_amount?: number
 }
 
 /**
@@ -134,6 +136,27 @@ export function revenueForMonth(bookings: StatsBooking[], window: MonthWindow): 
   }
 
   return total
+}
+
+/**
+ * Revenu du mois revenant au propriétaire : le revenu constaté, moins les
+ * commissions d'apporteurs.
+ *
+ * Les commissions sont réparties au prorata des jours, comme le revenu dont
+ * elles sont une part, et comme `aggregateCommissions` les retranche du
+ * bénéfice net de Finance. Le tableau de bord affichait le revenu brut : la
+ * commission apparaissait sur la fiche et dans le bénéfice, mais pas ici, et
+ * le même mois se lisait différemment d'un écran à l'autre.
+ *
+ * Réservé au propriétaire : le volume d'affaires de la plateforme
+ * (`platform_stats`) reste brut.
+ */
+export function netRevenueForMonth(bookings: StatsBooking[], window: MonthWindow): number {
+  const commissions = bookings
+    .filter((b) => (b.referrer_commission_amount ?? 0) > 0)
+    .map((b) => ({ ...b, total_amount: b.referrer_commission_amount ?? 0 }))
+
+  return revenueForMonth(bookings, window) - revenueForMonth(commissions, window)
 }
 
 /**

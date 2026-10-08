@@ -6,6 +6,7 @@ import {
   elapsedWindow,
   growthPercent,
   monthWindow,
+  netRevenueForMonth,
   occupancyForWindow,
   revenueForMonth,
 } from '#features/bookings/booking_stats'
@@ -20,6 +21,7 @@ const booking = (
     end_date: Date
     total_amount: number
     stay_type: string
+    referrer_commission_amount: number
   }> = {}
 ) => ({
   status: 'confirmed',
@@ -171,6 +173,49 @@ test.group('revenueForMonth', () => {
     )
 
     assert.equal(revenue, 0)
+  })
+})
+
+test.group('netRevenueForMonth', () => {
+  test('retranche la commission de l’apporteur', ({ assert }) => {
+    const revenue = netRevenueForMonth(
+      [
+        booking({ total_amount: 60000, referrer_commission_amount: 6000 }),
+        booking({ total_amount: 40000 }),
+      ],
+      monthWindow(NOW)
+    )
+
+    assert.equal(revenue, 94000)
+  })
+
+  test('ne retranche que la part de commission du mois, comme le revenu', ({ assert }) => {
+    // Même séjour à cheval que pour `revenueForMonth` : 5 jours sur 6 en mars.
+    const revenue = netRevenueForMonth(
+      [
+        booking({
+          start_date: new Date('2026-02-28T12:00:00Z'),
+          end_date: new Date('2026-03-06T12:00:00Z'),
+          total_amount: 60000,
+          referrer_commission_amount: 6000,
+        }),
+      ],
+      monthWindow(NOW)
+    )
+
+    assert.equal(
+      revenue,
+      revenueForMonth(
+        [
+          booking({
+            start_date: new Date('2026-02-28T12:00:00Z'),
+            end_date: new Date('2026-03-06T12:00:00Z'),
+            total_amount: 54000,
+          }),
+        ],
+        monthWindow(NOW)
+      )
+    )
   })
 })
 

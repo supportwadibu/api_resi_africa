@@ -9,8 +9,8 @@ import {
   elapsedWindow,
   growthPercent,
   monthWindow,
+  netRevenueForMonth,
   occupancyForWindow,
-  revenueForMonth,
 } from '../booking_stats.ts'
 
 import type {
@@ -318,8 +318,10 @@ export class BookingRepository {
       Property.statsByOwner(owner_id, scope_property_ids),
     ])
 
-    const currentRevenue = revenueForMonth(bookings, current)
-    const previousRevenue = revenueForMonth(bookings, previous)
+    // Net des commissions d'apporteurs : c'est ce qui revient au propriétaire,
+    // et le chiffre que Finance retient pour son bénéfice.
+    const currentRevenue = netRevenueForMonth(bookings, current)
+    const previousRevenue = netRevenueForMonth(bookings, previous)
 
     return {
       // Sur les jours écoulés, et non le mois entier : c'est la convention de
