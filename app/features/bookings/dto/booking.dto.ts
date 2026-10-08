@@ -61,6 +61,8 @@ export interface BookingDto {
   refunded_amount: number
   expected_amount?: number
   received_amount?: number
+  /** Prix négocié par unité du type de séjour ; `null` au tarif ou sur l'historique. */
+  agreed_unit_price?: number | null
   deposit_amount?: number
   sync_status?: 'synced' | 'pending' | 'conflict'
   /** Apporteur d'affaire, `null` sans apporteur. */
@@ -88,6 +90,8 @@ export interface CreateOwnerBookingInput {
   check_out_at?: Date
   /** Montant convenu avec le client. À défaut, le montant attendu s'applique. */
   received_amount?: number
+  /** Prix négocié par unité. Prime sur `received_amount`. */
+  agreed_unit_price?: number
   deposit_amount?: number
   message?: string
   /** Immédiat : la réservation naît `in_progress`. */
@@ -127,6 +131,8 @@ export interface UpdateOwnerBookingInput {
   check_out_at?: Date
   /** Prix convenu du séjour. À défaut, le montant attendu s'applique. */
   received_amount?: number
+  /** Prix négocié par unité. Prime sur `received_amount`. */
+  agreed_unit_price?: number
   deposit_amount?: number
   /** `null` efface le message, absent le conserve. */
   message?: string | null

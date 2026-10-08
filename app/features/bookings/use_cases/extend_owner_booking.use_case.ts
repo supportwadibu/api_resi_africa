@@ -53,13 +53,24 @@ export function buildExtensionPatch(
  * prolongation plein tarif — et effaçait au passage la remise déjà consentie
  * sur les premiers jours.
  *
+ * Le prix unitaire saisi au comptoir, figé sur la réservation, fait foi. Le
+ * quotient prix ÷ jours n'est qu'un repli pour l'historique qui ne le porte
+ * pas : un total calculé sur un autre décompte de jours que le nôtre le
+ * faussait — 15 000 F convenus pour un jour, comptés ici sur deux, donnaient
+ * 7 500 F le jour ajouté.
+ *
  * Sans négociation, la grille s'applique au séjour entier : le palier de durée
  * que la prolongation peut franchir profite alors au client, comme en ligne.
  */
 export function extendedAgreedAmount(
-  current: { days: number; expected: number; received: number },
+  current: { days: number; expected: number; received: number; agreedUnitPrice?: number | null },
   extended: { days: number; expected: number }
 ): number {
+  const unit = current.agreedUnitPrice
+  if (typeof unit === 'number' && Number.isFinite(unit)) {
+    return Math.round(unit * extended.days)
+  }
+
   const negotiated = current.received !== current.expected
   if (!negotiated || current.days <= 0) return extended.expected
 
@@ -148,6 +159,8 @@ export class ExtendOwnerBookingUseCase {
           days: booking.days_count ?? booking.nights_count ?? 0,
           expected: booking.expected_amount ?? currentReceived,
           received: currentReceived,
+          // Absent de l'historique : le repli sur le quotient s'applique.
+          agreedUnitPrice: booking.agreed_unit_price ?? null,
         },
         { days, expected }
       )

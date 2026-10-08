@@ -115,6 +115,15 @@ export interface BookingDocument {
   expected_amount?: number
   /** Montant réellement convenu, saisi par le propriétaire. */
   received_amount?: number
+  /**
+   * Prix négocié par unité du type de séjour — par jour pour un séjour
+   * complet —, tel que saisi au comptoir. Figé comme `daily_price` : c'est lui
+   * qui tarife les jours ajoutés par une prolongation.
+   *
+   * Absent de l'historique et de toute réservation au tarif : la prolongation
+   * retombe alors sur `received_amount ÷ days_count`.
+   */
+  agreed_unit_price?: number | null
   deposit_amount?: number
 
   client_request_id?: string | null
@@ -240,6 +249,8 @@ export interface OwnerBookingInput {
   duration_discount_percent?: number
   expected_amount: number
   received_amount: number
+  /** Prix négocié par unité, `null` au tarif. */
+  agreed_unit_price?: number | null
   deposit_amount: number
   message: string | null
   client_request_id: string | null
@@ -278,6 +289,7 @@ export function buildOwnerBookingPayload(input: OwnerBookingInput, now: Date): B
     total_amount: input.received_amount,
     expected_amount: input.expected_amount,
     received_amount: input.received_amount,
+    agreed_unit_price: input.agreed_unit_price ?? null,
     deposit_amount: input.deposit_amount,
     promo_code: null,
     message: input.message,

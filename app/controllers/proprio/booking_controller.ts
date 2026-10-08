@@ -60,6 +60,7 @@ export default class ProprioBookingController {
       check_in_at: payload.check_in_at.toJSDate(),
       check_out_at: payload.check_out_at?.toJSDate(),
       received_amount: payload.received_amount,
+      agreed_unit_price: payload.agreed_unit_price,
       deposit_amount: payload.deposit_amount,
       message: payload.message,
       is_check_in: payload.is_check_in ?? false,
@@ -95,6 +96,7 @@ export default class ProprioBookingController {
       check_in_at: payload.check_in_at.toJSDate(),
       check_out_at: payload.check_out_at?.toJSDate(),
       received_amount: payload.received_amount,
+      agreed_unit_price: payload.agreed_unit_price,
       deposit_amount: payload.deposit_amount,
       message: payload.message,
     })

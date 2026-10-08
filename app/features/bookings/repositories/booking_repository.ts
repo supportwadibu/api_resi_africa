@@ -69,6 +69,9 @@ export class BookingRepository {
       refunded_amount: doc.refunded_amount ?? 0,
       expected_amount: doc.expected_amount ?? doc.total_amount,
       received_amount: doc.received_amount ?? doc.total_amount,
+      // Absent de l'historique : le prix unitaire n'était pas conservé, seul
+      // le total convenu l'était.
+      agreed_unit_price: doc.agreed_unit_price ?? null,
       deposit_amount: doc.deposit_amount ?? 0,
       sync_status: doc.sync_status ?? 'synced',
       // Absents de l'historique et des réservations sans apporteur.
