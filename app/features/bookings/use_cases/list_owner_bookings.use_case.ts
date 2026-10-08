@@ -10,7 +10,7 @@ import type {
 import BookingRepository from '../repositories/booking_repository.ts'
 
 export class ListOwnerBookingsUseCase {
-  constructor(private repo: BookingRepository = new BookingRepository()) { }
+  constructor(private repo: BookingRepository = new BookingRepository()) {}
 
   async execute(
     owner_id: string,

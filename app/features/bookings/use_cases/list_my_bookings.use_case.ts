@@ -1,8 +1,5 @@
 /* eslint-disable prettier/prettier */
-import type {
-  ListBookingsInput,
-  ListBookingsOutput,
-} from '../dto/booking.dto.ts'
+import type { ListBookingsInput, ListBookingsOutput } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 
 /**
