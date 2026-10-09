@@ -48,6 +48,8 @@ export interface LoginInput {
 export interface GoogleLoginInput {
   id_token: string
   device: DeviceContext
+  /** Rôle d'un compte créé à cette connexion. Ignoré pour un compte existant. */
+  role_name?: 'proprio' | 'client'
 }
 
 export interface RefreshTokensInput {

@@ -169,6 +169,21 @@ const BookingPayment = {
     return toDocs<BookingPaymentDocument>(snapshot.docs)
   },
 
+  /**
+   * Paiements d'une page de réservations, pour habiller l'historique du
+   * client. Par lots de 30 : la limite d'un filtre `in` de Firestore.
+   */
+  async findByBookings(bookingIds: readonly string[]): Promise<BookingPaymentRecord[]> {
+    const ids = [...new Set(bookingIds)]
+    const chunks: string[][] = []
+    for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30))
+
+    const snapshots = await Promise.all(
+      chunks.map((chunk) => payments().where('booking_id', 'in', chunk).get())
+    )
+    return snapshots.flatMap((snapshot) => toDocs<BookingPaymentDocument>(snapshot.docs))
+  },
+
   async paginateByClient(
     clientId: string,
     options: { limit: number; offset: number }

@@ -10,8 +10,16 @@ import logger from '@adonisjs/core/services/logger'
 
 import { StartTrialForOwnerUseCase } from '../../../features/subscriptions/use_cases/start_trial_for_owner.use_case.ts'
 
-/** Rôle attribué à tout compte créé via Google. */
-const DEFAULT_GOOGLE_ROLE = 'proprio' as const
+/**
+ * Rôle d'un compte créé par Google.
+ *
+ * `proprio` par défaut : l'application propriétaire, premier client de cette
+ * route, n'envoie aucun rôle et doit continuer d'obtenir un compte
+ * propriétaire.
+ */
+export function googleSignupRole(requested?: 'proprio' | 'client'): 'proprio' | 'client' {
+  return requested ?? 'proprio'
+}
 
 /**
  * Use case : connecte (ou inscrit) un utilisateur à partir d'un ID token Google.
@@ -119,9 +127,10 @@ export class GoogleLoginUseCase {
     identity: GoogleIdentity,
     input: GoogleLoginInput
   ): Promise<GoogleLoginOutput> {
-    const role = await Role.findOne({ name: DEFAULT_GOOGLE_ROLE })
+    const roleName = googleSignupRole(input.role_name)
+    const role = await Role.findOne({ name: roleName })
     if (!role) {
-      throw new AuthError('role_not_found', `Le rôle "${DEFAULT_GOOGLE_ROLE}" n'existe pas.`, 500)
+      throw new AuthError('role_not_found', `Le rôle "${roleName}" n'existe pas.`, 500)
     }
 
     const user = await User.create({
@@ -158,8 +167,9 @@ export class GoogleLoginUseCase {
 
     // Le compte naît `owner_status: 'pending'` : inscrit, dossier non validé.
     // L'essai démarre malgré tout, pour que le propriétaire puisse découvrir
-    // l'application pendant l'examen de sa pièce d'identité.
-    await this.startTrial(user._id)
+    // l'application pendant l'examen de sa pièce d'identité. Un client n'a
+    // pas d'abonnement : pas d'essai.
+    if (roleName === 'proprio') await this.startTrial(user._id)
 
     const tokens = await issueTokens(user, input.device)
     return { ...tokens, is_new_user: true }

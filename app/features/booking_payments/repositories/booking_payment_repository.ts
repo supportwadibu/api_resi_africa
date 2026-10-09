@@ -45,6 +45,21 @@ export class BookingPaymentRepository {
     return BookingPaymentRepository.toDto(latest)
   }
 
+  /**
+   * Dernier paiement d'une réservation, quel que soit son statut.
+   *
+   * Sert la confirmation : le webhook ou la page de retour de Wave ont pu
+   * constater le paiement avant que le client revienne dans l'app, et il doit
+   * alors lire « payé », pas « introuvable ».
+   */
+  async findLatestByBooking(bookingId: string): Promise<BookingPaymentDto | null> {
+    const all = await BookingPayment.findByBooking(bookingId)
+    if (all.length === 0) return null
+
+    const latest = all.sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0]
+    return BookingPaymentRepository.toDto(latest)
+  }
+
   async create(input: {
     booking_id: string
     client_id: string
@@ -96,6 +111,13 @@ export class BookingPaymentRepository {
     range: { from?: Date; to?: Date } = {}
   ): Promise<BookingPaymentDto[]> {
     const docs = await BookingPayment.findSettledByOwner(ownerId, range)
+    return docs.map((doc) => BookingPaymentRepository.toDto(doc))
+  }
+
+  /** Paiements d'une page de réservations, quel que soit leur statut. */
+  async findByBookings(bookingIds: readonly string[]): Promise<BookingPaymentDto[]> {
+    if (bookingIds.length === 0) return []
+    const docs = await BookingPayment.findByBookings(bookingIds)
     return docs.map((doc) => BookingPaymentRepository.toDto(doc))
   }
 

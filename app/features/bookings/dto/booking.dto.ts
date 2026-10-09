@@ -2,6 +2,7 @@
  * Repris du modèle plutôt que redéclaré : une copie en dur diverge dès qu'un
  * statut est ajouté, ce qui est arrivé avec `in_progress`.
  */
+import type { BookingPaymentStatus } from '#features/booking_payments/dto/booking_payment.dto'
 import type { ActorScope } from '#features/managers/scope'
 import type { BookingStatus } from '#models/booking'
 
@@ -47,6 +48,12 @@ export interface BookingDto {
    * identifiant à afficher, et devrait relancer une requête par réservation.
    */
   property?: BookingPropertySummary
+  /**
+   * Dernier état du paiement en ligne, joint à la liste du client seulement :
+   * l'historique doit distinguer une réservation payée d'une réservation en
+   * attente. `null` si aucun paiement n'a été lancé.
+   */
+  payment_status?: BookingPaymentStatus | null
   source?: 'online' | 'offline'
   stay_type?: StayType
   check_in_at?: Date
