@@ -9,8 +9,8 @@ import {
   elapsedWindow,
   growthPercent,
   monthWindow,
+  netRevenueForMonth,
   occupancyForWindow,
-  revenueForMonth,
 } from '../booking_stats.ts'
 
 import type {
@@ -58,6 +58,9 @@ export class BookingRepository {
       stay_type: doc.stay_type ?? 'full_day',
       check_in_at: doc.check_in_at ?? doc.start_date,
       check_out_at: doc.check_out_at ?? doc.end_date,
+      // Sans repli : l'arrivée n'est constatée que par son enregistrement, et
+      // l'heure prévue la ferait passer pour faite.
+      actual_check_in_at: doc.actual_check_in_at,
       // Sans repli : une réservation non clôturée n'a pas de sortie constatée,
       // et la remplacer par la sortie prévue laisserait croire au départ.
       actual_check_out_at: doc.actual_check_out_at,
@@ -69,6 +72,9 @@ export class BookingRepository {
       refunded_amount: doc.refunded_amount ?? 0,
       expected_amount: doc.expected_amount ?? doc.total_amount,
       received_amount: doc.received_amount ?? doc.total_amount,
+      // Absent de l'historique : le prix unitaire n'était pas conservé, seul
+      // le total convenu l'était.
+      agreed_unit_price: doc.agreed_unit_price ?? null,
       deposit_amount: doc.deposit_amount ?? 0,
       sync_status: doc.sync_status ?? 'synced',
       // Absents de l'historique et des réservations sans apporteur.
@@ -315,8 +321,10 @@ export class BookingRepository {
       Property.statsByOwner(owner_id, scope_property_ids),
     ])
 
-    const currentRevenue = revenueForMonth(bookings, current)
-    const previousRevenue = revenueForMonth(bookings, previous)
+    // Net des commissions d'apporteurs : c'est ce qui revient au propriétaire,
+    // et le chiffre que Finance retient pour son bénéfice.
+    const currentRevenue = netRevenueForMonth(bookings, current)
+    const previousRevenue = netRevenueForMonth(bookings, previous)
 
     return {
       // Sur les jours écoulés, et non le mois entier : c'est la convention de

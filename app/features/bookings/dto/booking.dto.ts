@@ -2,6 +2,7 @@
  * Repris du modèle plutôt que redéclaré : une copie en dur diverge dès qu'un
  * statut est ajouté, ce qui est arrivé avec `in_progress`.
  */
+import type { BookingPaymentStatus } from '#features/booking_payments/dto/booking_payment.dto'
 import type { ActorScope } from '#features/managers/scope'
 import type { BookingStatus } from '#models/booking'
 
@@ -47,10 +48,18 @@ export interface BookingDto {
    * identifiant à afficher, et devrait relancer une requête par réservation.
    */
   property?: BookingPropertySummary
+  /**
+   * Dernier état du paiement en ligne, joint à la liste du client seulement :
+   * l'historique doit distinguer une réservation payée d'une réservation en
+   * attente. `null` si aucun paiement n'a été lancé.
+   */
+  payment_status?: BookingPaymentStatus | null
   source?: 'online' | 'offline'
   stay_type?: StayType
   check_in_at?: Date
   check_out_at?: Date
+  /** Arrivée réellement constatée, distincte de la période facturée. */
+  actual_check_in_at?: Date
   /** Sortie réellement constatée, distincte de la période facturée. */
   actual_check_out_at?: Date
   /** Sortie, durée et montant vendus, présents seulement après un départ anticipé. */
@@ -61,6 +70,8 @@ export interface BookingDto {
   refunded_amount: number
   expected_amount?: number
   received_amount?: number
+  /** Prix négocié par unité du type de séjour ; `null` au tarif ou sur l'historique. */
+  agreed_unit_price?: number | null
   deposit_amount?: number
   sync_status?: 'synced' | 'pending' | 'conflict'
   /** Apporteur d'affaire, `null` sans apporteur. */
@@ -88,6 +99,8 @@ export interface CreateOwnerBookingInput {
   check_out_at?: Date
   /** Montant convenu avec le client. À défaut, le montant attendu s'applique. */
   received_amount?: number
+  /** Prix négocié par unité. Prime sur `received_amount`. */
+  agreed_unit_price?: number
   deposit_amount?: number
   message?: string
   /** Immédiat : la réservation naît `in_progress`. */
@@ -127,6 +140,8 @@ export interface UpdateOwnerBookingInput {
   check_out_at?: Date
   /** Prix convenu du séjour. À défaut, le montant attendu s'applique. */
   received_amount?: number
+  /** Prix négocié par unité. Prime sur `received_amount`. */
+  agreed_unit_price?: number
   deposit_amount?: number
   /** `null` efface le message, absent le conserve. */
   message?: string | null

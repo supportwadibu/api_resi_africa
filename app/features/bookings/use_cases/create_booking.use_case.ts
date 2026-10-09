@@ -1,10 +1,7 @@
 /* eslint-disable prettier/prettier */
 import { DomainError } from '#utils/domain_error'
 
-import type {
-  BookingDto,
-  CreateBookingInput,
-} from '../dto/booking.dto.ts'
+import type { BookingDto, CreateBookingInput } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 import PromoCodeRepository from '../repositories/promo_code_repository.ts'
 import { calculateStayPrice } from '../stay_pricing.ts'
@@ -13,7 +10,7 @@ export class CreateBookingUseCase {
   constructor(
     private repo: BookingRepository = new BookingRepository(),
     private promoRepo: PromoCodeRepository = new PromoCodeRepository()
-  ) { }
+  ) {}
 
   async execute(input: CreateBookingInput): Promise<BookingDto> {
     const property = await this.repo.getAvailablePropertyForBooking(input.property_id)

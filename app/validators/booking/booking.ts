@@ -49,6 +49,12 @@ export const createOwnerBookingValidator = vine.compile(
     check_in_at: vine.date({ formats: ['iso8601'] }),
     check_out_at: vine.date({ formats: ['iso8601'] }).optional(),
     received_amount: vine.number().min(0).optional(),
+    /**
+     * Prix négocié par unité du type de séjour. Prime sur `received_amount` :
+     * le serveur en tire le total sur **sa** durée, et le fige pour tarifer
+     * une prolongation.
+     */
+    agreed_unit_price: vine.number().min(0).optional(),
     deposit_amount: vine.number().min(0).optional(),
     message: vine.string().trim().maxLength(500).optional(),
     is_check_in: vine.boolean().optional(),
@@ -94,6 +100,8 @@ export const updateOwnerBookingValidator = vine.compile(
     check_out_at: vine.date({ formats: ['iso8601'] }).optional(),
     /** Prix convenu du séjour. À défaut, le montant attendu s'applique. */
     received_amount: vine.number().min(0).optional(),
+    /** Prix négocié par unité, même règle qu'à la création. */
+    agreed_unit_price: vine.number().min(0).optional(),
     deposit_amount: vine.number().min(0).optional(),
     message: vine.string().trim().maxLength(500).nullable().optional(),
   })
@@ -108,6 +116,18 @@ export const checkOutBookingValidator = vine.compile(
     full_stay: vine.boolean().optional(),
     actual_check_out_at: vine.date({ formats: ['iso8601'] }).optional(),
     final_amount: vine.number().min(0).optional(),
+  })
+)
+
+/**
+ * PATCH /proprio/bookings/:id/check-in — PATCH /gerant/bookings/:id/check-in
+ *
+ * Corps optionnel : l'heure d'arrivée n'est envoyée que par une saisie faite
+ * hors ligne, qui part plus tard. Sans elle, l'arrivée vaut l'heure serveur.
+ */
+export const checkInBookingValidator = vine.compile(
+  vine.object({
+    actual_check_in_at: vine.date({ formats: ['iso8601'] }).optional(),
   })
 )
 

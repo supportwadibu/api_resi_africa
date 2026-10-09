@@ -64,9 +64,14 @@ export default class AuthController {
   }
 
   async google(ctx: HttpContext) {
-    const { id_token: idToken } = await ctx.request.validateUsing(googleLoginValidator)
+    const { id_token: idToken, role_name: roleName } =
+      await ctx.request.validateUsing(googleLoginValidator)
     const device = getDeviceContext(ctx)
-    const result = await new GoogleLoginUseCase().execute({ id_token: idToken, device })
+    const result = await new GoogleLoginUseCase().execute({
+      id_token: idToken,
+      device,
+      role_name: roleName,
+    })
 
     return result.is_new_user ? ctx.response.created(result) : ctx.response.ok(result)
   }

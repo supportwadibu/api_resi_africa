@@ -1,4 +1,5 @@
 import {
+  checkInBookingValidator,
   checkOutBookingValidator,
   checkOutPreviewValidator,
   createOwnerBookingValidator,
@@ -10,6 +11,7 @@ import {
 import type { HttpContext } from '@adonisjs/core/http'
 
 import {
+  CheckInBookingUseCase,
   CheckOutBookingUseCase,
   CreateOwnerBookingUseCase,
   ExtendOwnerBookingUseCase,
@@ -60,6 +62,7 @@ export default class ProprioBookingController {
       check_in_at: payload.check_in_at.toJSDate(),
       check_out_at: payload.check_out_at?.toJSDate(),
       received_amount: payload.received_amount,
+      agreed_unit_price: payload.agreed_unit_price,
       deposit_amount: payload.deposit_amount,
       message: payload.message,
       is_check_in: payload.is_check_in ?? false,
@@ -95,10 +98,23 @@ export default class ProprioBookingController {
       check_in_at: payload.check_in_at.toJSDate(),
       check_out_at: payload.check_out_at?.toJSDate(),
       received_amount: payload.received_amount,
+      agreed_unit_price: payload.agreed_unit_price,
       deposit_amount: payload.deposit_amount,
       message: payload.message,
     })
 
+    return ctx.response.ok({ data: booking })
+  }
+
+  /** Arrivée du client, enregistrée à partir du jour J du séjour. */
+  async checkIn(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const payload = await ctx.request.validateUsing(checkInBookingValidator)
+    const booking = await new CheckInBookingUseCase().execute(ctx.params.id, userId, {
+      actual_check_in_at: payload.actual_check_in_at?.toJSDate(),
+    })
     return ctx.response.ok({ data: booking })
   }
 

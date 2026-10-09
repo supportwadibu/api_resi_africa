@@ -1,14 +1,11 @@
 /* eslint-disable prettier/prettier */
 import { DomainError } from '#utils/domain_error'
 
-import type {
-  BookingDto,
-  CancelBookingInput,
-} from '../dto/booking.dto.ts'
+import type { BookingDto, CancelBookingInput } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 
 export class CancelBookingUseCase {
-  constructor(private repo: BookingRepository = new BookingRepository()) { }
+  constructor(private repo: BookingRepository = new BookingRepository()) {}
 
   async execute(
     id: string,

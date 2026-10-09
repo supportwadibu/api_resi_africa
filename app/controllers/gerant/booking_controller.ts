@@ -1,4 +1,5 @@
 import {
+  checkInBookingValidator,
   checkOutBookingValidator,
   checkOutPreviewValidator,
   createOwnerBookingValidator,
@@ -15,6 +16,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 
 import {
   CancelOwnerBookingUseCase,
+  CheckInBookingUseCase,
   CheckOutBookingUseCase,
   CreateOwnerBookingUseCase,
   ExtendOwnerBookingUseCase,
@@ -100,6 +102,7 @@ export default class GerantBookingController {
       check_in_at: payload.check_in_at.toJSDate(),
       check_out_at: payload.check_out_at?.toJSDate(),
       received_amount: payload.received_amount,
+      agreed_unit_price: payload.agreed_unit_price,
       deposit_amount: payload.deposit_amount,
       message: payload.message,
       is_check_in: payload.is_check_in ?? false,
@@ -167,6 +170,7 @@ export default class GerantBookingController {
         check_in_at: payload.check_in_at.toJSDate(),
         check_out_at: payload.check_out_at?.toJSDate(),
         received_amount: payload.received_amount,
+        agreed_unit_price: payload.agreed_unit_price,
         deposit_amount: payload.deposit_amount,
         message: payload.message,
       }
@@ -182,6 +186,17 @@ export default class GerantBookingController {
    * use case ne suffit pas, toutes les réservations du propriétaire le passent
    * — y compris celles des logements qui ne sont pas confiés à ce gérant.
    */
+  /** Arrivée du client, cadrée sur le périmètre comme la clôture. */
+  async checkIn(ctx: HttpContext) {
+    await this.findInScope(ctx)
+
+    const payload = await ctx.request.validateUsing(checkInBookingValidator)
+    const booking = await new CheckInBookingUseCase().execute(ctx.params.id, ctx.scope.ownerId, {
+      actual_check_in_at: payload.actual_check_in_at?.toJSDate(),
+    })
+    return ctx.response.ok({ data: booking })
+  }
+
   async checkOut(ctx: HttpContext) {
     await this.findInScope(ctx)
 

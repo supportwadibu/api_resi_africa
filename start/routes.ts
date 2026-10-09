@@ -329,6 +329,7 @@ router
               .group(() => {
                 router.get('/', [ProprioBookingController, 'index'])
                 router.post('/', [ProprioBookingController, 'store'])
+                router.patch(':id/check-in', [ProprioBookingController, 'checkIn'])
                 router.get(':id/check-out/preview', [ProprioBookingController, 'checkOutPreview'])
                 router.patch(':id/check-out', [ProprioBookingController, 'checkOut'])
                 router.patch(':id/extend', [ProprioBookingController, 'extend'])
@@ -406,6 +407,7 @@ router
             // Mêmes verbes et mêmes chemins que côté propriétaire : le mobile
             // ne fait que substituer le préfixe, et un `POST` ici lui rendrait
             // un 404 muet.
+            router.patch(':id/check-in', [GerantBookingController, 'checkIn'])
             router.get(':id/check-out/preview', [GerantBookingController, 'checkOutPreview'])
             router.patch(':id/check-out', [GerantBookingController, 'checkOut'])
             router.patch(':id/extend', [GerantBookingController, 'update']).as('extend')
@@ -468,34 +470,53 @@ router
 
     router
       .group(() => {
+        // Public : on parcourt les résidences sans compte, la connexion n'est
+        // exigée qu'au moment de réserver.
         router
           .group(() => {
             router.get('/', [ClientPropertyController, 'index'])
             router.get('search', [ClientPropertyController, 'search'])
             router.get('featured', [ClientPropertyController, 'featured'])
-            router.post(':property_id/bookings', [ClientBookingController, 'store'])
+            router.get(':id/availability', [ClientPropertyController, 'availability'])
             router.get(':id', [ClientPropertyController, 'show'])
           })
           .prefix('properties')
           .as('properties')
 
+        // Le groupe n'avait aucun middleware : `ctx.authUser` restait vide et
+        // chaque appel rendait 401, connecté ou non.
         router
           .group(() => {
-            router.get('/', [ClientBookingController, 'index'])
-            router.patch(':id', [ClientBookingController, 'update'])
-            router.patch(':id/cancel', [ClientBookingController, 'cancel'])
-            router.post(':id/payments/wave/init', [
-              ClientBookingPaymentController,
-              'initializeWave',
-            ])
+            router.post('properties/:property_id/bookings', [ClientBookingController, 'store'])
+            router
+              .group(() => {
+                router.get('/', [ClientBookingController, 'index'])
+                router.patch(':id', [ClientBookingController, 'update'])
+                router.patch(':id/cancel', [ClientBookingController, 'cancel'])
+                router.post(':id/payments/wave/init', [
+                  ClientBookingPaymentController,
+                  'initializeWave',
+                ])
+                router.post(':id/payments/wave/confirm', [
+                  ClientBookingPaymentController,
+                  'confirmWave',
+                ])
+              })
+              .prefix('bookings')
+              .as('bookings')
           })
-          .prefix('bookings')
-          .as('bookings')
+          .use([middleware.auth(), middleware.role(['client'])])
       })
       .prefix('client')
       .as('client')
 
     router.post('payments/wave/webhook', [ClientBookingPaymentController, 'waveWebhook'])
+    router
+      .get('payments/wave/bookings/:booking_id/return', [
+        ClientBookingPaymentController,
+        'waveReturn',
+      ])
+      .as('booking_wave_return')
     router
       .post('payments/wave/subscriptions/webhook', [
         ProprioSubscriptionPaymentController,

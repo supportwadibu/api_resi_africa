@@ -28,6 +28,14 @@ export class InitializeBookingPaymentUseCase {
       throw new DomainError('invalid_payment_amount', 'Le montant de paiement est invalide.', 422)
     }
 
+    // Une réservation déjà payée ne rouvre pas de session : « Réessayer » après
+    // un paiement constaté ailleurs (webhook, page de retour) encaisserait deux
+    // fois.
+    const latest = await this.paymentRepo.findLatestByBooking(booking.id)
+    if (latest?.status === 'success') {
+      throw new DomainError('booking_already_paid', 'Cette réservation est déjà payée.', 409)
+    }
+
     const existing = await this.paymentRepo.findPendingByBooking(booking.id)
     if (existing?.payment_url) {
       return { payment: existing, payment_url: existing.payment_url }
@@ -36,13 +44,16 @@ export class InitializeBookingPaymentUseCase {
     const currency = env.get('WAVE_CURRENCY') ?? 'XOF'
     const appUrl = env.get('APP_URL')
     const transactionReference = `BOOKING-${booking.id}-${crypto.randomUUID()}`
+    // Page servie par l'API : les anciennes URL pointaient vers des routes
+    // inexistantes, et le client tombait sur une 404 après avoir payé.
+    const returnUrl = `${appUrl}/api/v1/payments/wave/bookings/${booking.id}/return`
 
     const checkout = await this.waveService.createCheckoutSession({
       amount: booking.total_amount,
       currency,
       transactionReference,
-      successUrl: `${appUrl}/api/v1/client/bookings/${booking.id}/payments/wave/success`,
-      errorUrl: `${appUrl}/api/v1/client/bookings/${booking.id}/payments/wave/error`,
+      successUrl: `${returnUrl}?outcome=success`,
+      errorUrl: `${returnUrl}?outcome=error`,
       metadata: {
         booking_id: booking.id,
         client_id: booking.client_id,

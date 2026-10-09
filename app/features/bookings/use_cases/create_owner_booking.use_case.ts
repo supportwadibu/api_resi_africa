@@ -72,6 +72,32 @@ export function computeOwnerBookingAmounts(
 }
 
 /**
+ * Prix convenu d'un séjour comptoir, et le prix unitaire à figer.
+ *
+ * Un prix unitaire prime sur un total : le total se recalcule alors sur la
+ * durée **du serveur**. Le mobile multipliait de son côté, sur un décompte de
+ * jours qui pouvait différer d'un jour du nôtre — une sortie une minute après
+ * l'heure d'entrée, saisie à la seconde, entame ici un second jour. Le prix
+ * stocké divisé par nos jours ne retombait plus sur le prix convenu, et la
+ * prolongation facturait 7 500 F un jour négocié à 15 000 F.
+ *
+ * Un total seul vient d'un appareil antérieur au prix unitaire : il est repris
+ * tel quel, sans prix unitaire à figer.
+ */
+export function resolveAgreedAmount(
+  input: { agreed_unit_price?: number | null; received_amount?: number },
+  amounts: { days: number; expected: number }
+): { received: number; agreedUnitPrice: number | null } {
+  const unit = input.agreed_unit_price
+  if (typeof unit === 'number' && Number.isFinite(unit)) {
+    // Arrondi au franc : le FCFA n'a pas de subdivision en circulation.
+    return { received: Math.round(unit * amounts.days), agreedUnitPrice: unit }
+  }
+
+  return { received: input.received_amount ?? amounts.expected, agreedUnitPrice: null }
+}
+
+/**
  * Enregistre une réservation prise au comptoir.
  *
  * Distinct de `CreateBookingUseCase` : les deux ne partagent ni les règles ni
@@ -135,6 +161,7 @@ export class CreateOwnerBookingUseCase {
       checkIn,
       checkOut
     )
+    const { received, agreedUnitPrice } = resolveAgreedAmount(input, { days, expected })
 
     // Le chevauchement est vérifié *dans* la transaction d'écriture : hors
     // transaction, deux saisies concurrentes sur le même bien et la même nuit
@@ -157,7 +184,8 @@ export class CreateOwnerBookingUseCase {
         daily_price: property.pricing.daily_price,
         duration_discount_percent: discountPercent,
         expected_amount: expected,
-        received_amount: input.received_amount ?? expected,
+        received_amount: received,
+        agreed_unit_price: agreedUnitPrice,
         deposit_amount: input.deposit_amount ?? 0,
         message: input.message ?? null,
         client_request_id: input.client_request_id ?? null,

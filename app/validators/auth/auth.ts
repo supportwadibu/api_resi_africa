@@ -29,7 +29,10 @@ export const registerInitValidator = vine.compile(
     phone: phone().nullable().optional(),
     password: password(),
     password_confirmation: password().sameAs('password'),
-    role_name: vine.enum(['admin', 'proprio', 'client'] as const),
+    // `admin` absent à dessein : la route est publique, et l'accepter laissait
+    // n'importe qui se créer un compte administrateur. Les administrateurs
+    // naissent de `BOOTSTRAP_ADMINS` ou de `node ace admin:create`.
+    role_name: vine.enum(['proprio', 'client'] as const),
   })
 )
 
@@ -62,6 +65,10 @@ export const loginValidator = vine.compile(
 export const googleLoginValidator = vine.compile(
   vine.object({
     id_token: vine.string().trim().minLength(20).maxLength(4096),
+    // Lu à la création du compte seulement : un compte existant garde son
+    // rôle, sinon une connexion depuis l'app client changerait un
+    // propriétaire en client. Absent pour l'application propriétaire.
+    role_name: vine.enum(['proprio', 'client'] as const).optional(),
   })
 )
 

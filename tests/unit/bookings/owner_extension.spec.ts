@@ -4,6 +4,7 @@ import {
   buildExtensionPatch,
   extendedAgreedAmount,
 } from '#features/bookings/use_cases/extend_owner_booking.use_case'
+import { resolveAgreedAmount } from '#features/bookings/use_cases/create_owner_booking.use_case'
 import { splitRevenueByMonth } from '#features/finance/revenue_split'
 
 const d = (iso: string) => new Date(iso)
@@ -126,5 +127,48 @@ test.group('extendedAgreedAmount', () => {
       { days: 5, expected: 100000 }
     )
     assert.equal(amount, 100000)
+  })
+
+  test('le prix unitaire figé fait foi, même si le total a été compté sur un autre nombre de jours', ({
+    assert,
+  }) => {
+    // Le cas remonté du terrain : 15 000 F/j convenus sur une grille à
+    // 20 000 F. Le mobile a compté 1 jour (15 000 F), le serveur 2 : le
+    // quotient donnait 7 500 F le jour. Prolongé à 3 jours : 45 000 F.
+    const amount = extendedAgreedAmount(
+      { days: 2, expected: 40000, received: 15000, agreedUnitPrice: 15000 },
+      { days: 3, expected: 60000 }
+    )
+    assert.equal(amount, 45000)
+  })
+
+  test('un prix unitaire égal à la grille reste le prix convenu', ({ assert }) => {
+    // Le propriétaire a saisi un prix : il s'applique aux jours ajoutés, même
+    // si un palier de durée aurait fait baisser la grille.
+    const amount = extendedAgreedAmount(
+      { days: 2, expected: 40000, received: 40000, agreedUnitPrice: 20000 },
+      { days: 7, expected: 126000 }
+    )
+    assert.equal(amount, 140000)
+  })
+})
+
+test.group('resolveAgreedAmount', () => {
+  test('le total suit le prix unitaire sur la durée du serveur', ({ assert }) => {
+    const result = resolveAgreedAmount(
+      { agreed_unit_price: 15000, received_amount: 15000 },
+      { days: 2, expected: 40000 }
+    )
+    assert.deepEqual(result, { received: 30000, agreedUnitPrice: 15000 })
+  })
+
+  test('un total seul, envoyé par un appareil plus ancien, est repris tel quel', ({ assert }) => {
+    const result = resolveAgreedAmount({ received_amount: 35000 }, { days: 2, expected: 40000 })
+    assert.deepEqual(result, { received: 35000, agreedUnitPrice: null })
+  })
+
+  test('sans prix convenu, le montant attendu s’applique', ({ assert }) => {
+    const result = resolveAgreedAmount({}, { days: 2, expected: 40000 })
+    assert.deepEqual(result, { received: 40000, agreedUnitPrice: null })
   })
 })

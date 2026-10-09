@@ -9,7 +9,7 @@ import type { BookingDto, UpdateOwnerBookingInput } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 import { withReferrerCommission } from '../referrer.ts'
 import { defaultCheckOutFor, type StayType } from '../stay_type.ts'
-import { computeOwnerBookingAmounts } from './create_owner_booking.use_case.ts'
+import { computeOwnerBookingAmounts, resolveAgreedAmount } from './create_owner_booking.use_case.ts'
 
 /**
  * Une réservation peut-elle encore être ressaisie ?
@@ -60,11 +60,13 @@ export function buildEditPatch(input: {
   check_out_at: Date
   amounts: { days: number; expected: number; discountPercent: number }
   received_amount: number | undefined
+  /** Prix négocié par unité ; prime sur `received_amount`. */
+  agreed_unit_price?: number | null
   deposit_amount: number
   message: string | null
 }): Record<string, unknown> {
   const { expected, days, discountPercent } = input.amounts
-  const received = input.received_amount ?? expected
+  const { received, agreedUnitPrice } = resolveAgreedAmount(input, { days, expected })
 
   return {
     property_id: input.property.id,
@@ -85,6 +87,10 @@ export function buildEditPatch(input: {
     subtotal_amount: expected,
     expected_amount: expected,
     received_amount: received,
+    // Réécrit à chaque ressaisie, `null` compris : le formulaire renvoie tout,
+    // et un séjour remis au tarif ne doit pas garder l'ancien prix négocié
+    // pour sa prochaine prolongation.
+    agreed_unit_price: agreedUnitPrice,
     total_amount: received,
     // Même règle qu'à la création : l'écart entre attendu et convenu est une
     // remise consentie, jamais négative.
@@ -135,6 +141,7 @@ export class UpdateOwnerBookingUseCase {
         check_out_at: checkOut,
         amounts,
         received_amount: input.received_amount,
+        agreed_unit_price: input.agreed_unit_price,
         // Absent : l'acompte déjà enregistré tient toujours. Le ramener à zéro
         // parce qu'un écran ne l'a pas renvoyé effacerait un versement réel.
         deposit_amount: input.deposit_amount ?? booking.deposit_amount ?? 0,
