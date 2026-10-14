@@ -1,0 +1,45 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "otp_codes": {
+      "$userId": {
+        "$purpose": {
+          ".read": false,
+          ".write": false
+        }
+      }
+    },
+
+    "auth_attempts": {
+      "$target": {
+        ".read": false,
+        ".write": false,
+        ".indexOn": ["created_at"]
+      }
+    },
+
+    "notifications": {
+      "$userId": {
+        ".read": "auth != null && auth.uid == $userId",
+        ".write": false,
+        ".indexOn": ["created_at"]
+      }
+    },
+
+    "unread_counts": {
+      "$userId": {
+        ".read": "auth != null && auth.uid == $userId",
+        ".write": false
+      }
+    },
+
+    "presence": {
+      "$userId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $userId"
+      }
+    }
+  }
+}

@@ -1,0 +1,253 @@
+import Expense, { type ExpenseRecord } from '#models/expense'
+import Property from '#models/property'
+import Residence from '#models/residence'
+
+import type {
+  CreateExpenseInput,
+  ExpenseDto,
+  ExpensePropertySummary,
+  ExpenseResidenceSummary,
+  ExpenseSummaryDto,
+  ListExpensesFilters,
+  UpdateExpenseInput,
+} from '../dto/expense.dto.ts'
+
+/**
+ * Dépense accompagnée de son auteur. `created_by` n'est pas exposé dans le
+ * DTO, mais le rejeu d'une saisie idempotente doit le comparer à l'appelant.
+ */
+export interface AuthoredExpense {
+  dto: ExpenseDto
+  created_by: string | null
+}
+
+export class ExpenseRepository {
+  static toDto(doc: ExpenseRecord): ExpenseDto {
+    return {
+      id: doc._id,
+      owner_id: doc.owner_id,
+      property_id: doc.property_id ?? null,
+      // Absent des dépenses antérieures aux résidences : elles portent
+      // toutes un `property_id`.
+      residence_id: doc.residence_id ?? null,
+      category: doc.category,
+      amount: doc.amount,
+      spent_at: doc.spent_at,
+      note: doc.note ?? null,
+      created_at: doc.created_at,
+      updated_at: doc.updated_at,
+    }
+  }
+
+  /**
+   * Résout les cibles d'un lot de dépenses en une passe.
+   *
+   * Un `Map` par type de cible sur les identifiants distincts : plusieurs
+   * dépenses portent couramment sur le même bien ou la même résidence, et une
+   * lecture par dépense multiplierait les allers-retours Firestore pour rien.
+   *
+   * Les deux jointures sont faites ici plutôt que dans deux méthodes : une
+   * charge commune n’a pas de bien, et un appelant qui n’en joindrait qu’une
+   * renverrait une dépense sans libellé affichable.
+   */
+  private async attachTargets(expenses: ExpenseDto[]): Promise<ExpenseDto[]> {
+    const onlyIds = (values: Array<string | null>) => [
+      ...new Set(values.filter((id): id is string => Boolean(id))),
+    ]
+
+    const propertyIds = onlyIds(expenses.map((e) => e.property_id))
+    const residenceIds = onlyIds(expenses.map((e) => e.residence_id))
+    if (!propertyIds.length && !residenceIds.length) return expenses
+
+    const properties = new Map<string, ExpensePropertySummary>()
+    const residences = new Map<string, ExpenseResidenceSummary>()
+
+    await Promise.all([
+      ...propertyIds.map(async (id) => {
+        const property = await Property.findById(id)
+        if (property) {
+          properties.set(id, {
+            id: property._id,
+            title: property.title,
+            city: property.address?.city ?? '',
+          })
+        }
+      }),
+      ...residenceIds.map(async (id) => {
+        const residence = await Residence.findById(id)
+        if (residence) {
+          residences.set(id, {
+            id: residence._id,
+            name: residence.name,
+            city: residence.address?.city ?? '',
+          })
+        }
+      }),
+    ])
+
+    return expenses.map((expense) => ({
+      ...expense,
+      // `null` plutôt qu’absent : une cible supprimée depuis doit se
+      // distinguer d’une cible jamais renseignée.
+      property: expense.property_id ? (properties.get(expense.property_id) ?? null) : null,
+      residence: expense.residence_id ? (residences.get(expense.residence_id) ?? null) : null,
+    }))
+  }
+
+  /**
+   * Crée la dépense. Avec un `client_request_id`, l'écriture se fait sous
+   * l'identifiant dérivé et un rejeu rend la dépense déjà écrite — à l'appelant
+   * d'en vérifier l'auteur sur le document retourné.
+   */
+  async create(input: CreateExpenseInput): Promise<AuthoredExpense> {
+    const record = input.client_request_id
+      ? await Expense.createOnce({ ...input, client_request_id: input.client_request_id })
+      : await Expense.create(input)
+    return this.authored(record)
+  }
+
+  /** Dépense déjà écrite sous ce `client_request_id`, avec son auteur. */
+  async findByRequestId(ownerId: string, requestId: string): Promise<AuthoredExpense | null> {
+    const record = await Expense.findByRequestId(ownerId, requestId)
+    return record ? this.authored(record) : null
+  }
+
+  private async authored(record: ExpenseRecord): Promise<AuthoredExpense> {
+    const [dto] = await this.attachTargets([ExpenseRepository.toDto(record)])
+    return { dto, created_by: record.created_by ?? null }
+  }
+
+  async findByIdAndOwner(id: string, owner_id: string): Promise<ExpenseDto | null> {
+    const doc = await Expense.findByIdAndOwner(id, owner_id)
+    if (!doc) return null
+
+    const [withProperty] = await this.attachTargets([ExpenseRepository.toDto(doc)])
+    return withProperty
+  }
+
+  async update(
+    id: string,
+    input: UpdateExpenseInput,
+    owner_id: string
+  ): Promise<ExpenseDto | null> {
+    // Les clés absentes ne doivent pas écraser l'existant : seules celles
+    // effectivement fournies partent dans le patch.
+    const patch: Record<string, unknown> = {}
+    if (input.property_id !== undefined) patch.property_id = input.property_id
+    if (input.category !== undefined) patch.category = input.category
+    if (input.amount !== undefined) patch.amount = input.amount
+    if (input.spent_at !== undefined) patch.spent_at = input.spent_at
+    if (input.note !== undefined) patch.note = input.note?.trim() || null
+
+    const doc = await Expense.findByIdAndUpdate(id, patch, owner_id)
+    if (!doc) return null
+
+    const [withProperty] = await this.attachTargets([ExpenseRepository.toDto(doc)])
+    return withProperty
+  }
+
+  async delete(id: string, owner_id: string): Promise<boolean> {
+    return Expense.deleteOne(id, owner_id)
+  }
+
+  async paginate(filters: ListExpensesFilters): Promise<{
+    data: ExpenseDto[]
+    total: number
+    page: number
+    perPage: number
+  }> {
+    const page = Math.max(1, filters.page ?? 1)
+    const perPage = Math.min(100, Math.max(1, filters.per_page ?? 20))
+
+    const { data, total } = await Expense.paginate(
+      {
+        owner_id: filters.owner_id,
+        property_id: filters.property_id,
+        residence_id: filters.residence_id,
+        residence_unit_ids: await this.residenceUnitIds(filters),
+        category: filters.category,
+        from: filters.from,
+        to: filters.to,
+        // Le périmètre doit descendre jusqu'à la requête : omis ici, la liste
+        // porterait sur toutes les dépenses du propriétaire sans la moindre
+        // erreur de compilation, les filtres étant recopiés champ par champ.
+        scope_property_ids: filters.scope_property_ids,
+      },
+      { limit: perPage, offset: (page - 1) * perPage }
+    )
+
+    return {
+      data: await this.attachTargets(data.map((d) => ExpenseRepository.toDto(d))),
+      total,
+      page,
+      perPage,
+    }
+  }
+
+  /**
+   * Toutes les dépenses d'un propriétaire sur une fenêtre, sans distinction de
+   * cible.
+   *
+   * Sert au relevé d'une résidence : ses charges sont ses charges communes
+   * (`residence_id`) **et** celles de ses unités (`property_id`), deux champs
+   * que `summary` ne sait pas combiner puisqu'il ne filtre que par égalité.
+   * Reprend `belongsToResidence`/`sumResidenceExpenses` de `residence_scope.ts`
+   * pour ce classement — jamais deux requêtes `summary` distinctes additionnées,
+   * qui compteraient deux fois une dépense historique portant à la fois
+   * `residence_id` et `property_id` (voir le commentaire de
+   * `belongsToResidence`).
+   */
+  async findAllForOwner(
+    owner_id: string,
+    range: { from?: Date; to?: Date } = {}
+  ): Promise<ExpenseDto[]> {
+    const docs = await Expense.findAllForOwner(owner_id, range)
+    return docs.map((doc) => ExpenseRepository.toDto(doc))
+  }
+
+  /**
+   * Logements de la résidence filtrée, restreints au périmètre de l'appelant.
+   *
+   * Le filtre `residence_id` ne retenait que les charges communes, alors que
+   * le relevé Finance d'une résidence additionne aussi celles de ses
+   * logements : sur l'écran Finance, la ventilation par catégorie ne sommait
+   * donc pas au total « Dépenses » affiché juste au-dessus. Les deux suivent
+   * désormais `belongsToResidence`.
+   */
+  private async residenceUnitIds(filters: ListExpensesFilters): Promise<string[] | undefined> {
+    if (!filters.residence_id) return undefined
+    return Property.findIdsByResidence(filters.residence_id, filters.scope_property_ids)
+  }
+
+  async summary(filters: ListExpensesFilters): Promise<ExpenseSummaryDto> {
+    const summary = await Expense.summary({
+      owner_id: filters.owner_id,
+      property_id: filters.property_id,
+      residence_id: filters.residence_id,
+      residence_unit_ids: await this.residenceUnitIds(filters),
+      category: filters.category,
+      from: filters.from,
+      to: filters.to,
+      // Le périmètre doit descendre jusqu'à la requête, comme pour `paginate` :
+      // omis ici, le total et la ventilation porteraient sur toutes les dépenses
+      // du propriétaire alors que la liste affichée à côté, elle, est cloisonnée
+      // — deux chiffres contradictoires sur le même écran, dont le plus large
+      // révélerait les logements non confiés.
+      scope_property_ids: filters.scope_property_ids,
+    })
+    const { total, count } = summary
+
+    return {
+      total,
+      count,
+      by_category: summary.by_category.map((bucket) => ({
+        ...bucket,
+        // Un total nul ne donne aucune part : éviter la division par zéro
+        // plutôt que de renvoyer `NaN` jusqu'au graphique.
+        share_percent: total > 0 ? Math.round((bucket.amount / total) * 100) : 0,
+      })),
+    }
+  }
+}
+
+export default ExpenseRepository

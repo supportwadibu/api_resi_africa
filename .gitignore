@@ -1,0 +1,43 @@
+# Dependencies and AdonisJS build
+node_modules
+build
+tmp/*
+!tmp/.gitkeep
+
+# Secrets
+.env
+service.json
+.env.local
+.env.production.local
+.env.development.local
+# Toute variante locale de .env : seuls deux fichiers d'exemple sont versionnés.
+#
+# `.env.render.example` n'en fait volontairement pas partie : un fichier nommé
+# « exemple » invite à le remplir, et il l'a été — avec de vrais secrets JWT,
+# Cloudinary et CRON. Le tenir hors de git supprime le piège plutôt que de
+# compter sur la vigilance.
+.env.*
+!.env.example
+!.env.production.example
+
+# Comptes de service Firebase — contiennent une clé privée donnant un accès
+# administrateur complet au projet (lecture/écriture de toutes les données,
+# contournement des règles de sécurité). Ne jamais committer.
+*firebase-adminsdk*.json
+service-account*.json
+secrets/
+
+# Frontend assets compiled code
+public/assets
+
+# Build tools specific
+npm-debug.log
+yarn-error.log
+
+# Editors specific
+.fleet
+.idea
+.vscode
+
+# Platform specific
+.DS_Store

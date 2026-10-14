@@ -1,0 +1,20 @@
+# Exclu du contexte envoyé au démon Docker.
+#
+# `node_modules` surtout : le `COPY . .` de l'étape de build l'écraserait par
+# celui de la machine de développement, dont les binaires natifs sont compilés
+# pour un autre système que l'image.
+
+node_modules
+build
+.git
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# `tests/` n'est volontairement pas exclu : `bin/test.ts` importe
+# `tests/bootstrap.js`, et sans le dossier la compilation du build échoue.
+docs
+*.md
+.vscode
+.superpowers

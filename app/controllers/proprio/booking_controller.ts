@@ -1,0 +1,151 @@
+import {
+  checkInBookingValidator,
+  checkOutBookingValidator,
+  checkOutPreviewValidator,
+  createOwnerBookingValidator,
+  extendOwnerBookingValidator,
+  listBookingsValidator,
+  updateOwnerBookingValidator,
+} from '#validators/booking/booking'
+
+import type { HttpContext } from '@adonisjs/core/http'
+
+import {
+  CheckInBookingUseCase,
+  CheckOutBookingUseCase,
+  CreateOwnerBookingUseCase,
+  ExtendOwnerBookingUseCase,
+  GetBookingStatsUseCase,
+  ListOwnerBookingsUseCase,
+  PreviewCheckOutUseCase,
+  UpdateOwnerBookingUseCase,
+} from '../../features/bookings/use_cases/index.ts'
+
+export default class ProprioBookingController {
+  async index(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const payload = await ctx.request.validateUsing(listBookingsValidator, {
+      data: ctx.request.qs(),
+    })
+    const result = await new ListOwnerBookingsUseCase().execute(userId, payload)
+    return ctx.response.ok(result)
+  }
+
+  /**
+   * Chiffres du tableau de bord des réservations : occupation du mois,
+   * séjours à venir et en cours, revenu du mois rapporté au précédent.
+   *
+   * Sans paramètre de période : l'écran affiche le mois en cours, et laisser
+   * le cadrage au client ferait diverger les trois tuiles et le bloc revenus.
+   */
+  async stats(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const stats = await new GetBookingStatsUseCase().execute(userId)
+    return ctx.response.ok({ data: stats })
+  }
+
+  async store(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const payload = await ctx.request.validateUsing(createOwnerBookingValidator)
+
+    const booking = await new CreateOwnerBookingUseCase().execute({
+      owner_id: userId,
+      property_id: payload.property_id,
+      client_id: payload.client_id,
+      stay_type: payload.stay_type,
+      check_in_at: payload.check_in_at.toJSDate(),
+      check_out_at: payload.check_out_at?.toJSDate(),
+      received_amount: payload.received_amount,
+      agreed_unit_price: payload.agreed_unit_price,
+      deposit_amount: payload.deposit_amount,
+      message: payload.message,
+      is_check_in: payload.is_check_in ?? false,
+      client_request_id: payload.client_request_id,
+      referrer: payload.referrer ?? null,
+    })
+
+    return ctx.response.created({ data: booking })
+  }
+
+  async extend(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const payload = await ctx.request.validateUsing(extendOwnerBookingValidator)
+    const booking = await new ExtendOwnerBookingUseCase().execute(ctx.params.id, userId, {
+      check_out_at: payload.check_out_at.toJSDate(),
+      received_amount: payload.received_amount,
+    })
+
+    return ctx.response.ok({ data: booking })
+  }
+
+  /** Ressaisie d'une réservation comptoir non terminée. */
+  async update(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const payload = await ctx.request.validateUsing(updateOwnerBookingValidator)
+    const booking = await new UpdateOwnerBookingUseCase().execute(ctx.params.id, userId, {
+      property_id: payload.property_id,
+      stay_type: payload.stay_type,
+      check_in_at: payload.check_in_at.toJSDate(),
+      check_out_at: payload.check_out_at?.toJSDate(),
+      received_amount: payload.received_amount,
+      agreed_unit_price: payload.agreed_unit_price,
+      deposit_amount: payload.deposit_amount,
+      message: payload.message,
+    })
+
+    return ctx.response.ok({ data: booking })
+  }
+
+  /** Arrivée du client, enregistrée à partir du jour J du séjour. */
+  async checkIn(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const payload = await ctx.request.validateUsing(checkInBookingValidator)
+    const booking = await new CheckInBookingUseCase().execute(ctx.params.id, userId, {
+      actual_check_in_at: payload.actual_check_in_at?.toJSDate(),
+    })
+    return ctx.response.ok({ data: booking })
+  }
+
+  async checkOut(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const payload = await ctx.request.validateUsing(checkOutBookingValidator)
+    const booking = await new CheckOutBookingUseCase().execute(ctx.params.id, userId, {
+      full_stay: payload.full_stay,
+      actual_check_out_at: payload.actual_check_out_at?.toJSDate(),
+      final_amount: payload.final_amount,
+      early_checkout_option: payload.early_checkout_option,
+      penalty_amount: payload.penalty_amount,
+    })
+    return ctx.response.ok({ data: booking })
+  }
+
+  /** Chiffrage d'un départ anticipé, affiché avant validation. */
+  async checkOutPreview(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const payload = await ctx.request.validateUsing(checkOutPreviewValidator, {
+      data: ctx.request.qs(),
+    })
+    const quote = await new PreviewCheckOutUseCase().execute(
+      ctx.params.id,
+      userId,
+      payload.at?.toJSDate()
+    )
+    return ctx.response.ok({ data: quote })
+  }
+}
