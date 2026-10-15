@@ -165,6 +165,10 @@ export interface ListPropertiesFilters {
   featured?: boolean
   available_from?: Date
   is_public?: boolean
+  latitude?: number
+  longitude?: number
+  /** Rayon de recherche en kilomètres */
+  radius?: number
   page?: number
   per_page?: number
   sort?: string

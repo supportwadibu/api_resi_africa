@@ -297,6 +297,9 @@ export interface PropertyFilters {
   max_surface?: number
   min_bedrooms?: number
   available_from?: Date
+  latitude?: number
+  longitude?: number
+  radius?: number
   /**
    * Logements du périmètre de l'appelant. `null` ou absent = aucune
    * restriction. Alimenté par le middleware `scope()`.
@@ -339,6 +342,24 @@ function buildQuery(filters: PropertyFilters): FirebaseFirestore.Query<PropertyD
   return query
 }
 
+export function haversineDistanceKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2)
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
 /**
  * Applique les critères que Firestore ne sait pas exprimer.
  *
@@ -351,6 +372,17 @@ export function matchesInMemory(doc: PropertyRecord, filters: PropertyFilters): 
   if (filters.city) {
     const wanted = filters.city.trim().toLowerCase()
     if (!doc.address.city?.toLowerCase().includes(wanted)) return false
+  }
+
+  // Rayon géographique
+  if (typeof filters.latitude === 'number' && typeof filters.longitude === 'number') {
+    const lat = doc.address?.coordinates?.latitude
+    const lng = doc.address?.coordinates?.longitude
+    if (typeof lat !== 'number' || typeof lng !== 'number') return false
+    if (typeof filters.radius === 'number') {
+      const dist = haversineDistanceKm(filters.latitude, filters.longitude, lat, lng)
+      if (dist > filters.radius) return false
+    }
   }
 
   // Les bornes portent sur le tarif journalier — l'unité dans laquelle le bien
@@ -485,7 +517,10 @@ function needsInMemoryFilter(filters: PropertyFilters): boolean {
     typeof filters.min_surface === 'number' ||
     typeof filters.max_surface === 'number' ||
     typeof filters.min_bedrooms === 'number' ||
-    Boolean(filters.available_from)
+    Boolean(filters.available_from) ||
+    typeof filters.latitude === 'number' ||
+    typeof filters.longitude === 'number' ||
+    typeof filters.radius === 'number'
   )
 }
 
@@ -583,6 +618,18 @@ const Property = {
     const matching = toDocs<PropertyDocument>(snapshot.docs).filter((doc) =>
       matchesInMemory(doc, filters)
     )
+
+    if (typeof filters.latitude === 'number' && typeof filters.longitude === 'number') {
+      const lat = filters.latitude
+      const lng = filters.longitude
+      matching.sort((a, b) => {
+        const aLat = a.address?.coordinates?.latitude ?? 0
+        const aLng = a.address?.coordinates?.longitude ?? 0
+        const bLat = b.address?.coordinates?.latitude ?? 0
+        const bLng = b.address?.coordinates?.longitude ?? 0
+        return haversineDistanceKm(lat, lng, aLat, aLng) - haversineDistanceKm(lat, lng, bLat, bLng)
+      })
+    }
 
     return {
       data: matching.slice(options.offset, options.offset + options.limit),
