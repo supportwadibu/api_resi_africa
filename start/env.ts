@@ -90,6 +90,16 @@ export default await Env.create(new URL('../', import.meta.url), {
   CRON_SECRET: Env.schema.string.optional(),
 
   /**
+   * Activation et planification de l'ordonnanceur interne node-cron.
+   */
+  ENABLE_CRON_JOBS: Env.schema.boolean.optional(),
+  CRON_TIMEZONE: Env.schema.string.optional(),
+  CRON_STAY_STATUSES_SCHEDULE: Env.schema.string.optional(),
+  CRON_SUBSCRIPTION_REMINDERS_SCHEDULE: Env.schema.string.optional(),
+  CRON_EXPIRE_TRIALS_SCHEDULE: Env.schema.string.optional(),
+  CRON_PURGE_SESSIONS_SCHEDULE: Env.schema.string.optional(),
+
+  /**
    * Administrateurs garantis au démarrage du serveur HTTP : tableau JSON de
    * `{ full_name, email, phone?, password }`. Les comptes absents sont créés,
    * les autres jamais réécrits — le mot de passe ne sert qu'à la création.

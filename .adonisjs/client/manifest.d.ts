@@ -5,6 +5,7 @@
 
 /// <reference path="../../adonisrc.ts" />
 /// <reference path="../../config/cloudinary.ts" />
+/// <reference path="../../config/cron.ts" />
 /// <reference path="../../config/firebase.ts" />
 /// <reference path="../../config/hash.ts" />
 /// <reference path="../../config/logger.ts" />

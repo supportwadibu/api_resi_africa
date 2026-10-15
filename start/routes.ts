@@ -539,6 +539,7 @@ router
           [CronController, 'subscriptionReminders']
         )
         router.route('stay-statuses', ['GET', 'POST'], [CronController, 'stayStatuses'])
+        router.route('purge-sessions', ['GET', 'POST'], [CronController, 'purgeSessions'])
         router.get('health', [CronController, 'health'])
       })
       .prefix('cron')

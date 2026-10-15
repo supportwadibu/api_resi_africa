@@ -5,6 +5,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { SyncStayStatusesUseCase } from '../features/bookings/use_cases/index.ts'
 import { SendSubscriptionRemindersUseCase } from '../features/notifications/use_cases/index.ts'
 import { SuspendUnverifiedOwnersUseCase } from '../features/subscriptions/use_cases/index.ts'
+import { PurgeExpiredSessionsUseCase } from '../features/users/use_cases/index.ts'
 
 /**
  * Tâches planifiées déclenchées par un ordonnanceur externe.
@@ -78,6 +79,25 @@ export default class CronController {
 
     return ctx.response.ok({
       task: 'stay-statuses',
+      ...result,
+      duration_ms: Date.now() - startedAt,
+    })
+  }
+
+  /**
+   * POST|GET /api/v1/cron/purge-sessions
+   *
+   * Supprime les sessions d'authentification expirées dans Firestore.
+   * Idempotent : purge par lots jusqu'à épuisement.
+   */
+  async purgeSessions(ctx: HttpContext) {
+    const startedAt = Date.now()
+    const result = await new PurgeExpiredSessionsUseCase().execute()
+
+    logger.info({ ...result, duration_ms: Date.now() - startedAt }, 'Cron : sessions expirées')
+
+    return ctx.response.ok({
+      task: 'purge-sessions',
       ...result,
       duration_ms: Date.now() - startedAt,
     })

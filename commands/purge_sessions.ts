@@ -25,19 +25,15 @@ export default class PurgeSessions extends BaseCommand {
   }
 
   async run() {
-    const { default: AuthSession } = await import('#models/auth_session')
+    const { PurgeExpiredSessionsUseCase } =
+      await import('#features/users/use_cases/purge_expired_sessions.use_case')
 
-    // `deleteExpired` traite un lot de 500 (limite d'un batch Firestore) ; on
-    // boucle jusqu'à épuisement pour purger l'arriéré en une seule exécution.
-    let total = 0
-    let deleted: number
-    do {
-      deleted = await AuthSession.deleteExpired()
-      total += deleted
-    } while (deleted > 0)
+    const result = await new PurgeExpiredSessionsUseCase().execute()
 
     this.logger.info(
-      total > 0 ? `${total} session(s) expirée(s) supprimée(s).` : 'Aucune session à purger.'
+      result.deleted > 0
+        ? `${result.deleted} session(s) expirée(s) supprimée(s).`
+        : 'Aucune session à purger.'
     )
   }
 }
