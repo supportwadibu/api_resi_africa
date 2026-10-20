@@ -18,6 +18,7 @@ export const controllers = {
     Stats: () => import('#controllers/admin/stats_controller'),
     Subscriptions: () => import('#controllers/admin/subscriptions_controller'),
     Users: () => import('#controllers/admin/users_controller'),
+    Withdrawals: () => import('#controllers/admin/withdrawals_controller'),
   },
   auth: {
     Auth: () => import('#controllers/auth/auth_controller'),
@@ -54,5 +55,7 @@ export const controllers = {
     Residence: () => import('#controllers/proprio/residence_controller'),
     Subscription: () => import('#controllers/proprio/subscription_controller'),
     SubscriptionPayment: () => import('#controllers/proprio/subscription_payment_controller'),
+    Wallet: () => import('#controllers/proprio/wallet_controller'),
   },
+  WaveWebhook: () => import('#controllers/wave_webhook_controller'),
 }

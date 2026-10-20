@@ -18,7 +18,7 @@ export class SubscriptionRepository {
       is_trial: doc.is_trial,
       status: doc.status,
       amount: Number(doc.amount),
-      plan_tier: doc.is_trial ? 'full' : readPlanTier(doc.plan_tier),
+      plan_tier: doc.is_trial ? 'pro_plus' : readPlanTier(doc.plan_tier),
       start_date: doc.start_date,
       end_date: doc.end_date,
       trial_ends_at: doc.trial_ends_at ?? null,

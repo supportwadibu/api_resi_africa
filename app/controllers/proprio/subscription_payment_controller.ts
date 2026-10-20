@@ -1,5 +1,4 @@
 import { subscriptionCheckoutValidator } from '#validators/subscription/subscription'
-import WaveSubscriptionService, { checkoutIdOf } from '#services/wave_subscription_service'
 
 import type { HttpContext } from '@adonisjs/core/http'
 
@@ -43,39 +42,6 @@ export default class ProprioSubscriptionPaymentController {
       ctx.authUser?.id ?? ''
     )
     return ctx.response.ok({ data })
-  }
-
-  /**
-   * POST /payments/wave/subscriptions/webhook
-   *
-   * Webhook Wave des abonnements, distinct de celui des réservations : le
-   * paiement Wave de l'application propriétaire ne porte que sur l'abonnement.
-   *
-   * Le corps n'est qu'un signal : la confirmation relit la session chez Wave.
-   * Toute session reconnue ou non reçoit un 200, pour que Wave cesse de
-   * rejouer un événement qui ne nous concerne pas.
-   */
-  async waveWebhook(ctx: HttpContext) {
-    const payload = ctx.request.body() as Record<string, unknown>
-    // Corps brut : la signature porte sur les octets reçus, qu'une
-    // re-sérialisation ne reproduit pas.
-    const rawBody = ctx.request.raw() ?? JSON.stringify(payload)
-
-    if (
-      !new WaveSubscriptionService().verifyWebhook(rawBody, ctx.request.header('wave-signature'))
-    ) {
-      return ctx.response.unauthorized({
-        code: 'invalid_signature',
-        message: 'Signature invalide.',
-      })
-    }
-
-    const checkoutId = checkoutIdOf(payload)
-    const payment = checkoutId
-      ? await new ConfirmSubscriptionPaymentUseCase().executeForCheckout(checkoutId)
-      : null
-
-    return ctx.response.ok({ received: true, handled: payment !== null })
   }
 
   /**

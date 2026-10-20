@@ -7,6 +7,16 @@ import type { SubscriptionStatus } from '#utils/enums/subscription_status'
  */
 export type PlanAccess = PlanTier | null
 
+/**
+ * Accès traduit pour les applications antérieures aux paliers actuels, qui ne
+ * connaissent que `full` et `basic` et lisent tout autre code comme un compte
+ * inactif.
+ */
+export function legacyPlanAccess(access: PlanAccess): 'full' | 'basic' | null {
+  if (access === null) return null
+  return access === 'pro_plus' ? 'full' : 'basic'
+}
+
 export interface PlanAccessSubscription {
   status: SubscriptionStatus
   is_trial: boolean
@@ -33,9 +43,9 @@ export function resolvePlanAccess(
   if (subscription.end_date.getTime() <= now.getTime()) return null
 
   // L'essai fait découvrir le forfait complet.
-  if (subscription.status === 'trial') return 'full'
+  if (subscription.status === 'trial') return 'pro_plus'
   if (subscription.status !== 'active') return null
-  if (subscription.is_trial) return 'full'
+  if (subscription.is_trial) return 'pro_plus'
 
   return readPlanTier(subscription.plan_tier)
 }

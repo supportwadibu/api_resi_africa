@@ -38,6 +38,8 @@ export const EXPENSE_CATEGORIES = [
   'cleaning',
   'maintenance',
   'taxes',
+  'commission',
+  'subscription',
   'other',
 ] as const
 

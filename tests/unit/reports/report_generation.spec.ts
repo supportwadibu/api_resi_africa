@@ -21,6 +21,7 @@ test.group('buildReportGenerationDocument', () => {
       owner_id: 'owner-1',
       type: 'financial',
       residence_id: 'residence-1',
+      property_id: null,
       period_from: new Date('2026-03-01T00:00:00.000Z'),
       period_to: new Date('2026-04-01T00:00:00.000Z'),
       file_size: 48213,
@@ -28,7 +29,21 @@ test.group('buildReportGenerationDocument', () => {
     })
   })
 
-  test('conserve `residence_id` à `null` pour un rapport sur tout le parc', ({ assert }) => {
+  test('conserve `property_id` lorsqu’une unité est ciblée', ({ assert }) => {
+    const doc = buildReportGenerationDocument({
+      owner_id: 'owner-1',
+      type: 'financial',
+      residence_id: 'residence-1',
+      property_id: 'property-99',
+      period_from: new Date('2026-03-01T00:00:00.000Z'),
+      period_to: new Date('2026-04-01T00:00:00.000Z'),
+      file_size: 48213,
+    })
+
+    assert.equal(doc.property_id, 'property-99')
+  })
+
+  test('conserve `residence_id` et `property_id` à `null` pour un rapport sur tout le parc', ({ assert }) => {
     const doc = buildReportGenerationDocument({
       owner_id: 'owner-1',
       type: 'performance',
@@ -39,6 +54,7 @@ test.group('buildReportGenerationDocument', () => {
     })
 
     assert.isNull(doc.residence_id)
+    assert.isNull(doc.property_id)
   })
 
   test('horodate au moment de l’appel quand aucun `now` n’est fourni', ({ assert }) => {

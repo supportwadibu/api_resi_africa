@@ -101,6 +101,7 @@ export default class GerantBookingController {
       stay_type: payload.stay_type,
       check_in_at: payload.check_in_at.toJSDate(),
       check_out_at: payload.check_out_at?.toJSDate(),
+      days_count: payload.days_count,
       received_amount: payload.received_amount,
       agreed_unit_price: payload.agreed_unit_price,
       deposit_amount: payload.deposit_amount,
@@ -233,7 +234,7 @@ export default class GerantBookingController {
     const booking = await new CancelOwnerBookingUseCase().execute(
       ctx.params.id,
       ctx.scope.ownerId,
-      { reason: payload.reason }
+      payload
     )
 
     return ctx.response.ok({ data: booking })

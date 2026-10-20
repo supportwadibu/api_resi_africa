@@ -4,6 +4,9 @@ import router from '@adonisjs/core/services/router'
 
 const AuthController = () => import('#controllers/auth/auth_controller')
 const CronController = () => import('#controllers/cron_controller')
+const AdminWithdrawalsController = () => import('#controllers/admin/withdrawals_controller')
+const ProprioWalletController = () => import('#controllers/proprio/wallet_controller')
+const WaveWebhookController = () => import('#controllers/wave_webhook_controller')
 const AdminPlansController = () => import('#controllers/admin/plans_controller')
 const AdminFeedbackController = () => import('#controllers/admin/feedback_controller')
 const AdminStatsController = () => import('#controllers/admin/stats_controller')
@@ -94,6 +97,17 @@ router
           })
           .prefix('feedbacks')
           .as('feedbacks')
+
+        // Retraits des portefeuilles : versés à la main par l'équipe.
+        router
+          .group(() => {
+            router.get('/', [AdminWithdrawalsController, 'index'])
+            router.get(':id', [AdminWithdrawalsController, 'show'])
+            router.patch(':id/paid', [AdminWithdrawalsController, 'markPaid'])
+            router.patch(':id/reject', [AdminWithdrawalsController, 'reject'])
+          })
+          .prefix('withdrawals')
+          .as('withdrawals')
 
         // Notifications push aux propriétaires : groupées ou ciblées.
         router
@@ -187,22 +201,22 @@ router
       .use([middleware.auth(), middleware.role(['admin'])])
 
     /**
-     * Espace du propriétaire, en trois niveaux d'accès.
+     * Espace du propriétaire, par palier : RESI Basic (gratuit), Pro, Pro+.
      *
      * L'accès se décide par groupe et non route par route : une route ajoutée
      * à un groupe hérite de sa règle, sans condition à ne pas oublier. Une
-     * fonction nouvelle se range par défaut dans le groupe `full` — le forfait
-     * 5 000 F couvre les fonctions à venir.
+     * fonction nouvelle se range par défaut dans le groupe `pro_plus` — le
+     * forfait complet couvre les fonctions à venir.
      *
-     * Les groupes `full` qui partagent un préfixe avec un groupe `plan()`
+     * Les groupes qui partagent un préfixe avec le groupe de l'enregistrement
      * (`properties/stats`, `bookings/stats`, le carnet `clients`) sont déclarés
      * **avant** lui : leurs routes littérales doivent précéder `:id`, sinon
      * « stats » serait pris pour un identifiant.
      */
     router
       .group(() => {
-        // Ouvertes sans abonnement actif : ce qu'il faut pour souscrire, déposer
-        // son dossier et joindre le support.
+        // Ouvertes même à un compte suspendu : ce qu'il faut pour souscrire,
+        // déposer son dossier et joindre le support.
         router.get('subscription', [ProprioSubscriptionController, 'show']).as('subscription')
         router
           .post('subscription/checkout', [ProprioSubscriptionPaymentController, 'checkout'])
@@ -231,13 +245,18 @@ router
           .prefix('feedbacks')
           .as('feedbacks')
 
-        // Forfait 5 000 F : statistiques, PDF, carnet et fiches clients,
-        // dépenses, gérants.
+        // RESI Basic : tableau de bord, revenus et taux d'occupation.
         router
           .group(() => {
             router.get('properties/stats', [ProprioPropertyController, 'stats'])
             router.get('bookings/stats', [ProprioBookingController, 'stats'])
+          })
+          .as('dashboard')
+          .use(middleware.plan())
 
+        // RESI Pro : carnet et fiches clients, dépenses, gestion financière.
+        router
+          .group(() => {
             router
               .group(() => {
                 router.get('/', [ProprioClientController, 'index'])
@@ -267,7 +286,13 @@ router
               })
               .prefix('finance')
               .as('finance')
+          })
+          .as('pro')
+          .use(middleware.plan({ tier: 'pro' }))
 
+        // RESI Pro+ : rapports PDF et gérants.
+        router
+          .group(() => {
             router
               .group(() => {
                 router.post('/', [ProprioReportController, 'store'])
@@ -291,12 +316,23 @@ router
               .prefix('managers')
               .as('managers')
           })
-          .as('full')
-          .use(middleware.plan({ tier: 'full' }))
+          .as('pro_plus')
+          .use(middleware.plan({ tier: 'pro_plus' }))
 
-        // Forfait 3 000 F et au-delà : l'enregistrement.
+        // Tous paliers, RESI Basic compris : l'enregistrement et le
+        // portefeuille.
         router
           .group(() => {
+            router
+              .group(() => {
+                router.get('/', [ProprioWalletController, 'index'])
+                router.get(':id/transactions', [ProprioWalletController, 'transactions'])
+                router.post(':id/withdrawals', [ProprioWalletController, 'requestWithdrawal'])
+              })
+              .prefix('wallets')
+              .as('wallets')
+            router.get('withdrawals', [ProprioWalletController, 'withdrawals']).as('withdrawals')
+
             router
               .group(() => {
                 router.get('/', [ProprioPropertyController, 'index'])
@@ -329,6 +365,7 @@ router
               .group(() => {
                 router.get('/', [ProprioBookingController, 'index'])
                 router.post('/', [ProprioBookingController, 'store'])
+                router.patch(':id/cancel', [ProprioBookingController, 'cancel'])
                 router.patch(':id/check-in', [ProprioBookingController, 'checkIn'])
                 router.get(':id/check-out/preview', [ProprioBookingController, 'checkOutPreview'])
                 router.patch(':id/check-out', [ProprioBookingController, 'checkOut'])
@@ -339,7 +376,7 @@ router
               .as('bookings')
 
             // Le client se crée pendant la réservation : recherche et création
-            // seulement. Le carnet et les fiches relèvent du forfait complet.
+            // seulement. Le carnet et les fiches relèvent de RESI Pro.
             router
               .group(() => {
                 router.post('lookup', [ProprioClientController, 'lookup'])
@@ -459,13 +496,13 @@ router
       })
       .prefix('gerant')
       .as('gerant')
-      // L'espace gérant entier relève du forfait 5 000 F, apprécié sur
+      // L'espace gérant entier relève de RESI Pro+, apprécié sur
       // l'abonnement du propriétaire : `plan()` suit donc `scope()`.
       .use([
         middleware.auth(),
         middleware.role(['gerant']),
         middleware.scope(),
-        middleware.plan({ tier: 'full' }),
+        middleware.plan({ tier: 'pro_plus' }),
       ])
 
     router
@@ -510,18 +547,18 @@ router
       .prefix('client')
       .as('client')
 
-    router.post('payments/wave/webhook', [ClientBookingPaymentController, 'waveWebhook'])
+    // Une seule URL à déclarer chez Wave : voir `WaveWebhookController`.
+    router.post('payments/wave/webhook', [WaveWebhookController, 'handle']).as('wave_webhook')
     router
       .get('payments/wave/bookings/:booking_id/return', [
         ClientBookingPaymentController,
         'waveReturn',
       ])
       .as('booking_wave_return')
+    // Ancienne URL des abonnements, gardée pour un webhook Wave déjà déclaré
+    // dessus : elle mène au même traitement.
     router
-      .post('payments/wave/subscriptions/webhook', [
-        ProprioSubscriptionPaymentController,
-        'waveWebhook',
-      ])
+      .post('payments/wave/subscriptions/webhook', [WaveWebhookController, 'handle'])
       .as('subscription_wave_webhook')
     router
       .get('payments/wave/subscriptions/:reference/return', [

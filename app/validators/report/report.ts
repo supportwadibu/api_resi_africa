@@ -19,6 +19,7 @@ export const generateReportValidator = vine.compile(
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
     residence_id: vine.string().trim().minLength(1).optional(),
+    property_id: vine.string().trim().minLength(1).optional(),
     /** Registre de police seulement ; ignorée par les autres rapports. */
     commune: vine.string().trim().maxLength(80).optional(),
   })
@@ -43,6 +44,7 @@ export const generatePoliceReportValidator = vine.compile(
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
     residence_id: vine.string().trim().minLength(1).optional(),
+    property_id: vine.string().trim().minLength(1).optional(),
     /** Registre de police seulement ; ignorée par les autres rapports. */
     commune: vine.string().trim().maxLength(80).optional(),
   })

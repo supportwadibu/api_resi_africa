@@ -1,6 +1,6 @@
 import Booking from '#models/booking'
 import Expense from '#models/expense'
-import Property from '#models/property'
+import Property, { intersectScope } from '#models/property'
 
 import { elapsedWindow } from '#features/bookings/booking_stats'
 
@@ -159,6 +159,54 @@ export function aggregateRefunds(
   }, 0)
 }
 
+/**
+ * Acomptes gardés sur annulation, sous la forme d'un revenu ponctuel.
+ *
+ * Période nulle au jour de l'annulation : `splitRevenueByMonth` en fait une
+ * tranche unique, imputée au mois où la somme a été acquise.
+ */
+export function retainedDepositsAsRevenue(
+  cancelled: { cancelled_at: Date | null; retained_amount?: number }[]
+): RevenueBooking[] {
+  return cancelled
+    .filter((b) => b.cancelled_at && (b.retained_amount ?? 0) > 0)
+    .map((b) => ({
+      start_date: b.cancelled_at!,
+      end_date: b.cancelled_at!,
+      total_amount: b.retained_amount ?? 0,
+    }))
+}
+
+/**
+ * Une dépense compte-t-elle dans `depenses` ?
+ *
+ * La dépense `commission` n'est que le reflet, dans la liste des dépenses, de
+ * la commission portée par la réservation. Le relevé la retranche déjà via
+ * `commissions`, au prorata des jours et au montant à jour : la sommer aussi
+ * dans `depenses` la déduisait deux fois du bénéfice.
+ */
+export function isOperatingExpense(expense: { category: string }): boolean {
+  return expense.category !== 'commission'
+}
+
+/** Total d'un `Expense.summary`, reflets de commission retirés : voir `isOperatingExpense`. */
+export function operatingExpensesTotal(summary: {
+  total: number
+  by_category: Array<{ category: string; amount: number }>
+}): number {
+  return summary.by_category.reduce(
+    (total, bucket) => (isOperatingExpense(bucket) ? total : total - bucket.amount),
+    summary.total
+  )
+}
+
+async function findOperatingExpenses(
+  ...args: Parameters<typeof Expense.findAllForOwner>
+): ReturnType<typeof Expense.findAllForOwner> {
+  const docs = await Expense.findAllForOwner(...args)
+  return docs.filter(isOperatingExpense)
+}
+
 export class FinanceRepository {
   /**
    * Rapproche revenus et charges sur une période.
@@ -170,7 +218,11 @@ export class FinanceRepository {
   async overview(filters: FinanceFilters): Promise<FinanceOverviewDto | null> {
     const range = { from: filters.from, to: filters.to }
 
-    const scopeIds = filters.scope_property_ids
+    const scopeIds = filters.property_id
+      ? filters.scope_property_ids
+        ? intersectScope([filters.property_id], filters.scope_property_ids)
+        : [filters.property_id]
+      : filters.scope_property_ids
     const scope = {
       ...(filters.residence_id ? { residence_id: filters.residence_id } : {}),
       property_ids: scopeIds,
@@ -184,22 +236,37 @@ export class FinanceRepository {
       ? new Set(await Property.findIdsByResidence(filters.residence_id, scopeIds))
       : null
 
-    const [bookings, expenseSummary, propertyStats, residence] = await Promise.all([
-      Booking.findForRevenue(filters.owner_id, range, scope),
-      // `summary` ne sait pas filtrer sur un périmètre : hors résidence, le
-      // total des charges est donc recomposé depuis les dépenses cloisonnées.
-      scopeIds ? Promise.resolve(null) : Expense.summary({ owner_id: filters.owner_id, ...range }),
-      Property.statsByOwner(filters.owner_id, scopeIds),
-      // `findByIdAndOwner` et non `findById` : sans le contrôle de propriété,
-      // un identifiant deviné livrerait le relevé financier d’un autre compte.
-      filters.residence_id
-        ? Residence.findByIdAndOwner(filters.residence_id, filters.owner_id)
-        : Promise.resolve(null),
-    ])
+    const [bookings, retained, expenseSummary, propertyStats, residence, property] =
+      await Promise.all([
+        Booking.findForRevenue(filters.owner_id, range, scope),
+        Booking.findRetainedCancellations(filters.owner_id, range, scope),
+        // `summary` ne sait pas filtrer sur un périmètre : hors résidence, le
+        // total des charges est donc recomposé depuis les dépenses cloisonnées.
+        scopeIds
+          ? Promise.resolve(null)
+          : Expense.summary({ owner_id: filters.owner_id, ...range }),
+        Property.statsByOwner(filters.owner_id, scopeIds),
+        // `findByIdAndOwner` et non `findById` : sans le contrôle de propriété,
+        // un identifiant deviné livrerait le relevé financier d’un autre compte.
+        filters.residence_id
+          ? Residence.findByIdAndOwner(filters.residence_id, filters.owner_id)
+          : Promise.resolve(null),
+        filters.property_id
+          ? Property.findByIdAndOwner(filters.property_id, filters.owner_id)
+          : Promise.resolve(null),
+      ])
 
-    const caBrut = aggregateGrossRevenue(bookings, range)
+    // Acomptes gardés sur annulation : encaissés, ils comptent au chiffre
+    // d'affaires et au graphique, jamais à l'occupation ni au nombre de séjours.
+    const revenueBookings = [...bookings, ...retainedDepositsAsRevenue(retained)]
+    const caBrut = aggregateGrossRevenue(revenueBookings, range)
 
-    const depenses = await this.sumExpenses(filters, range, unitIds, expenseSummary?.total)
+    const depenses = await this.sumExpenses(
+      filters,
+      range,
+      unitIds,
+      expenseSummary ? operatingExpensesTotal(expenseSummary) : undefined
+    )
     const commissions = aggregateCommissions(bookings, range)
 
     // Jours vendus imputés à la fenêtre au prorata du temps, pondérés par type
@@ -214,11 +281,17 @@ export class FinanceRepository {
     const occupancyRange =
       range.from && range.to ? elapsedWindow({ from: range.from, to: range.to }, new Date()) : null
 
-    // Une résidence demandée mais introuvable rendrait un relevé vide
-    // indistinguable d’une résidence sans activité : le use case tranche.
-    if (filters.residence_id && !residence) {
+    // Une résidence ou un logement demandé mais introuvable rendrait un relevé vide
+    // indistinguable d’un bien sans activité : le use case tranche.
+    if ((filters.residence_id && !residence) || (filters.property_id && !property)) {
       return null
     }
+
+    const capacity = filters.property_id
+      ? 1
+      : unitIds
+        ? unitIds.size
+        : exploitedUnits(propertyStats)
 
     return {
       summary: {
@@ -230,20 +303,12 @@ export class FinanceRepository {
         commissions,
         remboursements: aggregateRefunds(bookings, range),
         taux_occupation: occupancyRange
-          ? occupancyRate(
-              bookings,
-              // Restreint à une résidence, la capacité est celle de ses unités.
-              // Garder le parc entier au dénominateur écraserait le taux d’une
-              // résidence de trois studios chez un propriétaire qui en a trente.
-              unitIds ? unitIds.size : exploitedUnits(propertyStats),
-              occupancyRange.from,
-              occupancyRange.to
-            )
+          ? occupancyRate(bookings, capacity, occupancyRange.from, occupancyRange.to)
           : 0,
         reservations: bookings.length,
         moyen_sejour: bookings.length ? totalDays / bookings.length : 0,
       },
-      revenue_points: aggregateRevenuePoints(bookings, range),
+      revenue_points: aggregateRevenuePoints(revenueBookings, range),
     }
   }
 
@@ -262,12 +327,15 @@ export class FinanceRepository {
     unitIds: Set<string> | null,
     summaryTotal?: number
   ): Promise<number> {
+    if (filters.property_id) {
+      const docs = await findOperatingExpenses(filters.owner_id, range, [filters.property_id])
+      return docs
+        .filter((e) => e.property_id === filters.property_id)
+        .reduce((sum, expense) => sum + expense.amount, 0)
+    }
+
     if (filters.residence_id && unitIds) {
-      const docs = await Expense.findAllForOwner(
-        filters.owner_id,
-        range,
-        filters.scope_property_ids
-      )
+      const docs = await findOperatingExpenses(filters.owner_id, range, filters.scope_property_ids)
 
       // Périmètre restreint : les charges **communes** de la résidence en sont
       // exclues. Elles couvrent aussi les logements que l'appelant ne sert pas,
@@ -297,7 +365,7 @@ export class FinanceRepository {
     // ses filtres sont des égalités et ne savent pas porter une liste.
     if (typeof summaryTotal === 'number') return summaryTotal
 
-    const docs = await Expense.findAllForOwner(filters.owner_id, range, filters.scope_property_ids)
+    const docs = await findOperatingExpenses(filters.owner_id, range, filters.scope_property_ids)
     return docs.reduce((sum, expense) => sum + expense.amount, 0)
   }
 

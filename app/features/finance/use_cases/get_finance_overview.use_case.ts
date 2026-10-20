@@ -39,14 +39,18 @@ export class GetFinanceOverviewUseCase {
       from?: Date
       to?: Date
       residence_id?: string
+      property_id?: string
       scope_property_ids?: string[] | null
     } = {}
   ): Promise<FinanceOverviewDto> {
     const overview = await this.repo.overview({ ...filters, owner_id })
 
-    // Une résidence inconnue — ou appartenant à un autre propriétaire — rendrait
-    // un relevé à zéro, indistinguable d'une résidence sans activité.
+    // Une résidence ou un logement inconnu — ou appartenant à un autre propriétaire — rendrait
+    // un relevé à zéro, indistinguable d'un bien sans activité.
     if (!overview) {
+      if (filters.property_id) {
+        throw new DomainError('property_not_found', 'Logement introuvable.', 404)
+      }
       throw new DomainError('residence_not_found', 'Résidence introuvable.', 404)
     }
 

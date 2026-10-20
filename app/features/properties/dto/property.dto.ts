@@ -208,4 +208,8 @@ export interface PropertyPricingInput {
   price_tiers?: PropertyPriceTierInput[] | null
   minimum_stay_days?: number
   maximum_stay_days?: number | null
+  /** Dépassement offert au départ, en minutes. */
+  late_checkout_grace_minutes?: number
+  /** Dépassement facturé en demi-journée, en heures ; au-delà, un jour. */
+  late_checkout_half_day_hours?: number
 }

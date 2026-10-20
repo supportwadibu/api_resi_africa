@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { readPlanTier } from '#features/plans/plan_tier'
+import { readPaidPlanTier } from '#features/plans/plan_tier'
 import Plan, { type PlanRecord } from '#models/plan'
 
 import type {
@@ -19,7 +19,7 @@ export class PlanRepository {
       duration_days: doc.duration_days,
       max_residences: doc.max_residences,
       features: [...(doc.features ?? [])],
-      tier: readPlanTier(doc.tier),
+      tier: readPaidPlanTier(doc.tier),
       is_active: doc.is_active,
       created_at: doc.created_at,
       updated_at: doc.updated_at,

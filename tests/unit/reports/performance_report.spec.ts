@@ -4,6 +4,7 @@ import { renderPerformanceReport } from '#features/reports/renderers/performance
 const context = {
   owner_name: 'Kouassi',
   residence_name: 'Les Cocotiers',
+  property_title: null,
   period: {
     window: { from: new Date('2026-03-01T00:00:00Z'), to: new Date('2026-04-01T00:00:00Z') },
     label: 'Mars 2026',

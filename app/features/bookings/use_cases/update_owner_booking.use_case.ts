@@ -7,6 +7,7 @@ import type { BookingStatus } from '#models/booking'
 import { findOverlappingPeriod, toPeriods } from '../availability.ts'
 import type { BookingDto, UpdateOwnerBookingInput } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
+import { syncReferrerCommissionExpense } from '../referrer_expense.ts'
 import { withReferrerCommission } from '../referrer.ts'
 import { defaultCheckOutFor, type StayType } from '../stay_type.ts'
 import { computeOwnerBookingAmounts, resolveAgreedAmount } from './create_owner_booking.use_case.ts'
@@ -58,7 +59,13 @@ export function buildEditPatch(input: {
   stay_type: StayType
   check_in_at: Date
   check_out_at: Date
-  amounts: { days: number; expected: number; discountPercent: number }
+  amounts: {
+    days: number
+    expected: number
+    discountPercent: number
+    lateCheckout?: boolean
+    lateCheckoutFee?: number
+  }
   received_amount: number | undefined
   /** Prix négocié par unité ; prime sur `received_amount`. */
   agreed_unit_price?: number | null
@@ -66,7 +73,7 @@ export function buildEditPatch(input: {
   message: string | null
 }): Record<string, unknown> {
   const { expected, days, discountPercent } = input.amounts
-  const { received, agreedUnitPrice } = resolveAgreedAmount(input, { days, expected })
+  const { received, agreedUnitPrice, lateCheckoutFee } = resolveAgreedAmount(input, input.amounts)
 
   return {
     property_id: input.property.id,
@@ -91,6 +98,8 @@ export function buildEditPatch(input: {
     // et un séjour remis au tarif ne doit pas garder l'ancien prix négocié
     // pour sa prochaine prolongation.
     agreed_unit_price: agreedUnitPrice,
+    // Réécrit comme les dates : une sortie avancée efface le supplément.
+    late_checkout_fee: lateCheckoutFee,
     total_amount: received,
     // Même règle qu'à la création : l'écart entre attendu et convenu est une
     // remise consentie, jamais négative.
@@ -126,7 +135,13 @@ export class UpdateOwnerBookingUseCase {
     const checkIn = input.check_in_at
     const checkOut = input.check_out_at ?? defaultCheckOutFor(input.stay_type, checkIn)
 
-    const amounts = computeOwnerBookingAmounts(property.pricing, input.stay_type, checkIn, checkOut)
+    const amounts = computeOwnerBookingAmounts(
+      property.pricing,
+      input.stay_type,
+      checkIn,
+      checkOut,
+      input.days_count
+    )
 
     const patch = withReferrerCommission(
       booking,
@@ -187,6 +202,8 @@ export class UpdateOwnerBookingUseCase {
     if (!updated) {
       throw new DomainError('booking_not_found', 'Réservation introuvable.', 404)
     }
+
+    await syncReferrerCommissionExpense(updated)
 
     return BookingRepository.toDto(updated)
   }

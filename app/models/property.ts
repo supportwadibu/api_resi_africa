@@ -2,6 +2,10 @@ import { FieldPath } from 'firebase-admin/firestore'
 
 import { FIRESTORE_IN_LIMIT } from '#features/managers/scope'
 import {
+  DEFAULT_LATE_CHECKOUT_GRACE_MINUTES,
+  DEFAULT_LATE_CHECKOUT_HALF_DAY_HOURS,
+} from '#features/bookings/stay_pricing'
+import {
   collection,
   COLLECTIONS,
   countQuery,
@@ -104,6 +108,13 @@ export interface PropertyPricing {
   price_tiers: PropertyPriceTier[]
   minimum_stay_days: number
   maximum_stay_days: number | null
+  /**
+   * Règle de départ tardif : dépassement offert, en minutes, puis dépassement
+   * facturé en demi-journée, en heures. Absents des biens antérieurs : voir
+   * `resolveLateCheckoutPolicy` pour le repli.
+   */
+  late_checkout_grace_minutes?: number
+  late_checkout_half_day_hours?: number
 }
 
 export interface PropertyVisibility {
@@ -253,6 +264,10 @@ function withDefaults(input: Partial<PropertyDocument>): PropertyDocument {
       price_tiers: normalizePriceTiers(input.pricing?.price_tiers),
       minimum_stay_days: input.pricing?.minimum_stay_days ?? 1,
       maximum_stay_days: input.pricing?.maximum_stay_days ?? null,
+      late_checkout_grace_minutes:
+        input.pricing?.late_checkout_grace_minutes ?? DEFAULT_LATE_CHECKOUT_GRACE_MINUTES,
+      late_checkout_half_day_hours:
+        input.pricing?.late_checkout_half_day_hours ?? DEFAULT_LATE_CHECKOUT_HALF_DAY_HOURS,
     },
     charges_included: input.charges_included ?? false,
     additional_charges: input.additional_charges ?? 0,

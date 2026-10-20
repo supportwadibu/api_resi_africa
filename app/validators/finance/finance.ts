@@ -9,5 +9,7 @@ export const financeOverviewValidator = vine.compile(
     to: vine.date().optional(),
     /** Restreint le relevé à une résidence et à ses unités. */
     residence_id: vine.string().trim().minLength(1).optional(),
+    /** Restreint le relevé à un logement unique. */
+    property_id: vine.string().trim().minLength(1).optional(),
   })
 )

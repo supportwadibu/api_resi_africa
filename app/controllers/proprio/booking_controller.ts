@@ -1,4 +1,5 @@
 import {
+  cancelBookingValidator,
   checkInBookingValidator,
   checkOutBookingValidator,
   checkOutPreviewValidator,
@@ -11,6 +12,7 @@ import {
 import type { HttpContext } from '@adonisjs/core/http'
 
 import {
+  CancelOwnerBookingUseCase,
   CheckInBookingUseCase,
   CheckOutBookingUseCase,
   CreateOwnerBookingUseCase,
@@ -61,6 +63,7 @@ export default class ProprioBookingController {
       stay_type: payload.stay_type,
       check_in_at: payload.check_in_at.toJSDate(),
       check_out_at: payload.check_out_at?.toJSDate(),
+      days_count: payload.days_count,
       received_amount: payload.received_amount,
       agreed_unit_price: payload.agreed_unit_price,
       deposit_amount: payload.deposit_amount,
@@ -97,12 +100,23 @@ export default class ProprioBookingController {
       stay_type: payload.stay_type,
       check_in_at: payload.check_in_at.toJSDate(),
       check_out_at: payload.check_out_at?.toJSDate(),
+      days_count: payload.days_count,
       received_amount: payload.received_amount,
       agreed_unit_price: payload.agreed_unit_price,
       deposit_amount: payload.deposit_amount,
       message: payload.message,
     })
 
+    return ctx.response.ok({ data: booking })
+  }
+
+  /** Annulation, avec le sort de l'acompte s'il en a été versé un. */
+  async cancel(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const payload = await ctx.request.validateUsing(cancelBookingValidator)
+    const booking = await new CancelOwnerBookingUseCase().execute(ctx.params.id, userId, payload)
     return ctx.response.ok({ data: booking })
   }
 

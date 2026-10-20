@@ -19,9 +19,11 @@ function useCase(options: {
   session?: Record<string, unknown> | null
 }) {
   const updates: Array<{ status: string; data: Record<string, unknown> }> = []
+  const credits: Array<Record<string, unknown>> = []
   const confirm = new ConfirmBookingPaymentUseCase(
     {
-      findById: async () => (options.booking === undefined ? { client_id: 'c1' } : options.booking),
+      findById: async () =>
+        options.booking === undefined ? { client_id: 'c1', residence_id: 'r1' } : options.booking,
     } as never,
     {
       findLatestByBooking: async () => (options.payment === undefined ? pending : options.payment),
@@ -32,9 +34,10 @@ function useCase(options: {
         return { ...pending, status }
       },
     } as never,
-    { getCheckoutSession: async () => options.session ?? null } as never
+    { getCheckoutSession: async () => options.session ?? null } as never,
+    { execute: async (input: Record<string, unknown>) => void credits.push(input) } as never
   )
-  return { confirm, updates }
+  return { confirm, updates, credits }
 }
 
 const paid = {
@@ -55,6 +58,22 @@ test.group('ConfirmBookingPaymentUseCase', () => {
     assert.equal(payment.status, 'success')
     assert.equal(updates[0].status, 'success')
     assert.equal(updates[0].data.provider_transaction_id, 'T-1')
+  })
+
+  test('un paiement réussi crédite le portefeuille de la résidence', async ({ assert }) => {
+    const { confirm, credits } = useCase({ session: paid })
+    await confirm.execute('b1', 'c1')
+
+    assert.lengthOf(credits, 1)
+    assert.equal(credits[0].residence_id, 'r1')
+    assert.equal(credits[0].amount, 80000)
+    assert.equal(credits[0].booking_payment_id, 'BOOKING-b1-uuid')
+  })
+
+  test('un paiement en échec ne crédite rien', async ({ assert }) => {
+    const { confirm, credits } = useCase({ session: { ...paid, amount: '1000' } })
+    await confirm.execute('b1', 'c1')
+    assert.lengthOf(credits, 0)
   })
 
   test('montant divergent : échec, jamais succès', async ({ assert }) => {

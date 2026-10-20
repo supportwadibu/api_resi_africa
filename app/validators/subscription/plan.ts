@@ -1,13 +1,15 @@
 import vine from '@vinejs/vine'
 
-import { PLAN_TIERS } from '#features/plans/plan_tier'
+import { PAID_PLAN_TIERS } from '#features/plans/plan_tier'
 
 const name = () => vine.string().trim().minLength(5).maxLength(80)
 const description = () => vine.string().trim().maxLength(1000)
 const price = () => vine.number().positive()
 const durationDays = () => vine.number().positive().withoutDecimals()
 const maxResidences = () => vine.number().positive().withoutDecimals()
-const tier = () => vine.enum(PLAN_TIERS)
+// Paliers vendus seulement : le palier gratuit n'a pas de plan, il reste
+// quand rien n'est payé.
+const tier = () => vine.enum(PAID_PLAN_TIERS)
 const features = () => vine.array(vine.string().trim().minLength(1).maxLength(80)).maxLength(50)
 
 /**

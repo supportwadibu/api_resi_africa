@@ -9,9 +9,15 @@ import type { ActorScope } from '#features/managers/scope'
 import type { PropertyPricing } from '#models/property'
 
 import { findOverlappingPeriod, toPeriods } from '../availability.ts'
-import { countStayDays, resolveDiscountPercent } from '../stay_pricing.ts'
+import {
+  lateCheckoutFeeFor,
+  resolveBilledStay,
+  resolveDiscountPercent,
+  resolveLateCheckoutPolicy,
+} from '../stay_pricing.ts'
 import { defaultCheckOutFor, resolveStayTypePrice, type StayType } from '../stay_type.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
+import { syncReferrerCommissionExpense } from '../referrer_expense.ts'
 
 import type { BookingDto, CreateOwnerBookingInput } from '../dto/booking.dto.ts'
 
@@ -35,8 +41,9 @@ export function computeOwnerBookingAmounts(
   pricing: PropertyPricing,
   stayType: StayType,
   checkIn: Date,
-  checkOut: Date
-): { days: number; expected: number; discountPercent: number } {
+  checkOut: Date,
+  explicitDays?: number | null
+): OwnerBookingAmounts {
   if (checkOut.getTime() <= checkIn.getTime()) {
     throw new DomainError(
       'invalid_stay_dates',
@@ -50,25 +57,60 @@ export function computeOwnerBookingAmounts(
   if (stayType !== 'full_day') {
     // Une demi-journée ou un passage se facture à l'unité ; `days_count` vaut
     // 1 pour rester lisible par Finance et les écrans existants.
-    return { days: 1, expected: unitPrice, discountPercent: 0 }
+    return {
+      days: 1,
+      expected: unitPrice,
+      discountPercent: 0,
+      lateCheckout: false,
+      lateCheckoutFee: 0,
+    }
   }
 
-  const days = Math.max(1, countStayDays(checkIn, checkOut))
+  // Jours entiers et départ tardif selon la règle du bien. Un nombre de jours
+  // choisi au comptoir (Option 1) remplace les jours entiers : voir
+  // `resolveBilledStay`.
+  const { days, lateCheckout } = resolveBilledStay(
+    checkIn,
+    checkOut,
+    resolveLateCheckoutPolicy(pricing),
+    explicitDays
+  )
 
   const minimum = pricing.minimum_stay_days ?? 1
   if (days < minimum) {
     throw new DomainError('minimum_stay_not_reached', `Séjour minimum de ${minimum} jour(s).`, 422)
   }
 
+  const maximum = pricing.maximum_stay_days
+  if (maximum !== null && maximum !== undefined && days > maximum) {
+    throw new DomainError('maximum_stay_exceeded', `Séjour maximum de ${maximum} jour(s).`, 422)
+  }
+
   const discountPercent = resolveDiscountPercent(days, pricing.price_tiers)
+  // Au tarif plein, comme en ligne : la remise de durée ne porte que sur les
+  // jours.
+  const lateCheckoutFee = lateCheckout ? lateCheckoutFeeFor(unitPrice) : 0
 
   // Arrondi au franc, comme `calculateStayPrice` : le FCFA n'a pas de
   // subdivision en circulation.
   return {
     days,
     discountPercent,
-    expected: Math.round(days * unitPrice * (1 - discountPercent / 100)),
+    expected: Math.round(days * unitPrice * (1 - discountPercent / 100)) + lateCheckoutFee,
+    lateCheckout,
+    lateCheckoutFee,
   }
+}
+
+export interface OwnerBookingAmounts {
+  days: number
+  /** Montant de la grille, remise de durée et supplément de départ tardif compris. */
+  expected: number
+  discountPercent: number
+  /** Le dépassement des jours facturés se paie en demi-journée. */
+  lateCheckout: boolean
+  /** Supplément au tarif de la grille ; 0 sans départ tardif. */
+  lateCheckoutFee: number
 }
 
 /**
@@ -83,18 +125,30 @@ export function computeOwnerBookingAmounts(
  *
  * Un total seul vient d'un appareil antérieur au prix unitaire : il est repris
  * tel quel, sans prix unitaire à figer.
+ *
+ * Le départ tardif suit le prix en vigueur : une demi-journée au prix négocié
+ * quand il y en a un, au tarif de la grille sinon.
  */
 export function resolveAgreedAmount(
   input: { agreed_unit_price?: number | null; received_amount?: number },
-  amounts: { days: number; expected: number }
-): { received: number; agreedUnitPrice: number | null } {
+  amounts: { days: number; expected: number; lateCheckout?: boolean; lateCheckoutFee?: number }
+): { received: number; agreedUnitPrice: number | null; lateCheckoutFee: number } {
   const unit = input.agreed_unit_price
   if (typeof unit === 'number' && Number.isFinite(unit)) {
+    const fee = amounts.lateCheckout ? lateCheckoutFeeFor(unit) : 0
     // Arrondi au franc : le FCFA n'a pas de subdivision en circulation.
-    return { received: Math.round(unit * amounts.days), agreedUnitPrice: unit }
+    return {
+      received: Math.round(unit * amounts.days) + fee,
+      agreedUnitPrice: unit,
+      lateCheckoutFee: fee,
+    }
   }
 
-  return { received: input.received_amount ?? amounts.expected, agreedUnitPrice: null }
+  return {
+    received: input.received_amount ?? amounts.expected,
+    agreedUnitPrice: null,
+    lateCheckoutFee: amounts.lateCheckoutFee ?? 0,
+  }
 }
 
 /**
@@ -155,13 +209,15 @@ export class CreateOwnerBookingUseCase {
     const checkIn = input.check_in_at
     const checkOut = input.check_out_at ?? defaultCheckOutFor(input.stay_type, checkIn)
 
-    const { days, expected, discountPercent } = computeOwnerBookingAmounts(
+    const amounts = computeOwnerBookingAmounts(
       property.pricing,
       input.stay_type,
       checkIn,
-      checkOut
+      checkOut,
+      input.days_count
     )
-    const { received, agreedUnitPrice } = resolveAgreedAmount(input, { days, expected })
+    const { days, expected, discountPercent } = amounts
+    const { received, agreedUnitPrice, lateCheckoutFee } = resolveAgreedAmount(input, amounts)
 
     // Le chevauchement est vérifié *dans* la transaction d'écriture : hors
     // transaction, deux saisies concurrentes sur le même bien et la même nuit
@@ -186,6 +242,7 @@ export class CreateOwnerBookingUseCase {
         expected_amount: expected,
         received_amount: received,
         agreed_unit_price: agreedUnitPrice,
+        late_checkout_fee: lateCheckoutFee,
         deposit_amount: input.deposit_amount ?? 0,
         message: input.message ?? null,
         client_request_id: input.client_request_id ?? null,
@@ -213,6 +270,8 @@ export class CreateOwnerBookingUseCase {
       }
       throw error
     }
+
+    await syncReferrerCommissionExpense(created)
 
     return BookingRepository.toDto(created)
   }

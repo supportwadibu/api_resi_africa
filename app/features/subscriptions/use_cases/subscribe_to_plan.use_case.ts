@@ -1,4 +1,6 @@
 /* eslint-disable prettier/prettier */
+import { planTierLabel } from '#features/plans/plan_tier'
+import Expense from '#models/expense'
 import { DomainError } from '#utils/domain_error'
 import { SubscriptionStatusEnum } from '#utils/enums/subscription_status'
 
@@ -61,7 +63,7 @@ export class SubscribeToPlanUseCase {
     const now = new Date()
     const end = new Date(now.getTime() + plan.duration_days * 24 * 60 * 60 * 1000)
 
-    return this.subscriptionRepo.create({
+    const subscription = await this.subscriptionRepo.create({
       user_id: input.user_id,
       plan_id: plan.id,
       is_trial: false,
@@ -75,6 +77,21 @@ export class SubscribeToPlanUseCase {
       payment_reference: input.payment_reference ?? null,
       auto_renew: input.auto_renew ?? false,
     })
+
+    if (plan.price > 0) {
+      const tier = planTierLabel(plan.tier)
+      await Expense.create({
+        owner_id: input.user_id,
+        property_id: null,
+        residence_id: null,
+        category: 'subscription',
+        amount: plan.price,
+        spent_at: now,
+        note: `Abonnement ${tier}`,
+      })
+    }
+
+    return subscription
   }
 }
 

@@ -35,7 +35,7 @@ test.group('ResolvePlanAccessUseCase — essai garanti', () => {
   test('un propriétaire jamais abonné reçoit son essai et l’accès complet', async ({ assert }) => {
     const { resolve, started } = useCase({})
 
-    assert.equal(await resolve.execute('owner-1', NOW), 'full')
+    assert.equal(await resolve.execute('owner-1', NOW), 'pro_plus')
     assert.deepEqual(started, ['owner-1'])
   })
 
@@ -45,14 +45,14 @@ test.group('ResolvePlanAccessUseCase — essai garanti', () => {
       everSubscribed: true,
     })
 
-    assert.equal(await resolve.execute('owner-1', NOW), 'full')
+    assert.equal(await resolve.execute('owner-1', NOW), 'pro_plus')
     assert.deepEqual(started, [])
   })
 
-  test('un essai échu ne se rouvre pas : il faut souscrire', async ({ assert }) => {
+  test('un essai échu ne se rouvre pas : le compte retombe sur RESI Basic', async ({ assert }) => {
     const { resolve, started } = useCase({ everSubscribed: true })
 
-    assert.isNull(await resolve.execute('owner-1', NOW))
+    assert.equal(await resolve.execute('owner-1', NOW), 'free')
     assert.deepEqual(started, [])
   })
 
