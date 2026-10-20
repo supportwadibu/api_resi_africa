@@ -28,6 +28,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   cleaning: 'Ménage',
   maintenance: 'Entretien',
   taxes: 'Taxes',
+  commission: 'Commission apporteur',
+  subscription: 'Abonnement',
   other: 'Autre',
 }
 

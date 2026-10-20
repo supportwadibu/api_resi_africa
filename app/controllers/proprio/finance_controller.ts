@@ -23,6 +23,7 @@ export default class ProprioFinanceController {
       from: payload.from?.toJSDate(),
       to: payload.to?.toJSDate(),
       residence_id: payload.residence_id,
+      property_id: payload.property_id,
     })
     return ctx.response.ok({ data: overview })
   }

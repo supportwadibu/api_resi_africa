@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 
 import type { StayType } from '#features/bookings/stay_type'
 import type { Referrer } from '#features/bookings/referrer'
+import type { DepositAction } from '#features/bookings/cancellation'
 import { buildReferrerFields } from '#features/bookings/referrer'
 import type { ActorScope } from '#features/managers/scope'
 import { FIRESTORE_IN_LIMIT, filterByScope, isWithinScope } from '#features/managers/scope'
@@ -143,6 +144,11 @@ export interface BookingDocument {
    * retombe alors sur `received_amount ÷ days_count`.
    */
   agreed_unit_price?: number | null
+  /**
+   * Supplément de départ tardif — une demi-journée —, déjà compris dans les
+   * montants. Absent de l'historique et des séjours sans dépassement facturé.
+   */
+  late_checkout_fee?: number
   deposit_amount?: number
 
   client_request_id?: string | null
@@ -164,6 +170,19 @@ export interface BookingDocument {
   cancelled_at: Date | null
   completed_at: Date | null
   cancellation_reason: string | null
+  /**
+   * Sort de l'acompte à l'annulation, `null` sans acompte. Absents de
+   * l'historique et des réservations non annulées, comme les deux montants
+   * suivants.
+   */
+  cancellation_deposit_action?: DepositAction | null
+  /**
+   * Acompte gardé par le propriétaire. Reste un revenu bien que la réservation
+   * soit annulée : Finance le compte au jour de l'annulation.
+   */
+  retained_amount?: number
+  /** Acompte rendu au client à l'annulation. Informatif. */
+  cancellation_refunded_amount?: number
 
   /**
    * Séjour clos par la tâche planifiée, et non par le propriétaire.
@@ -270,6 +289,7 @@ export interface OwnerBookingInput {
   received_amount: number
   /** Prix négocié par unité, `null` au tarif. */
   agreed_unit_price?: number | null
+  late_checkout_fee?: number
   deposit_amount: number
   message: string | null
   client_request_id: string | null
@@ -309,6 +329,7 @@ export function buildOwnerBookingPayload(input: OwnerBookingInput, now: Date): B
     expected_amount: input.expected_amount,
     received_amount: input.received_amount,
     agreed_unit_price: input.agreed_unit_price ?? null,
+    late_checkout_fee: input.late_checkout_fee ?? 0,
     deposit_amount: input.deposit_amount,
     promo_code: null,
     message: input.message,
@@ -371,6 +392,7 @@ const Booking = {
     daily_price: number
     duration_discount_percent: number
     subtotal_amount: number
+    late_checkout_fee?: number
     discount_amount: number
     total_amount: number
     promo_code?: string | null
@@ -400,6 +422,7 @@ const Booking = {
       daily_price: input.daily_price,
       duration_discount_percent: input.duration_discount_percent,
       subtotal_amount: input.subtotal_amount,
+      late_checkout_fee: input.late_checkout_fee ?? 0,
       discount_amount: input.discount_amount,
       total_amount: input.total_amount,
       promo_code: input.promo_code ?? null,
@@ -699,6 +722,37 @@ const Booking = {
       if (range.to && start > range.to.getTime()) return false
       if (range.from && end < range.from.getTime()) return false
 
+      return true
+    })
+  },
+
+  /**
+   * Réservations annulées dont le propriétaire a gardé l'acompte, annulées dans
+   * la fenêtre.
+   *
+   * Pendant de `findForRevenue`, qui écarte toute annulation : l'acompte gardé
+   * reste un encaissement, mais aucun séjour n'a eu lieu — il compte dans le
+   * chiffre d'affaires, jamais dans l'occupation. Rattaché au jour de
+   * l'annulation, quand la somme est acquise.
+   */
+  async findRetainedCancellations(
+    ownerId: string,
+    range: { from?: Date; to?: Date } = {},
+    scope: { residence_id?: string; property_ids?: string[] | null } = {}
+  ): Promise<BookingRecord[]> {
+    const snapshot = await bookings()
+      .where('owner_id', '==', ownerId)
+      .where('status', '==', 'cancelled')
+      .get()
+
+    return toDocs<BookingDocument>(snapshot.docs).filter((doc) => {
+      if ((doc.retained_amount ?? 0) <= 0 || !doc.cancelled_at) return false
+      if (!matchesRevenueScope(doc, scope.property_ids)) return false
+      if (scope.residence_id && doc.residence_id !== scope.residence_id) return false
+
+      const at = doc.cancelled_at.getTime()
+      if (range.from && at < range.from.getTime()) return false
+      if (range.to && at >= range.to.getTime()) return false
       return true
     })
   },

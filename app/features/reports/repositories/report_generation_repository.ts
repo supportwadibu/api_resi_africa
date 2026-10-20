@@ -6,6 +6,7 @@ export interface RecordReportGenerationInput {
   owner_id: string
   type: ReportType
   residence_id: string | null
+  property_id?: string | null
   period_from: Date
   period_to: Date
   file_size: number
@@ -20,7 +21,11 @@ export function buildReportGenerationDocument(
   input: RecordReportGenerationInput,
   now: Date = new Date()
 ): ReportGenerationDocument {
-  return { ...input, created_at: now }
+  return {
+    ...input,
+    property_id: input.property_id ?? null,
+    created_at: now,
+  }
 }
 
 export class ReportGenerationRepository {

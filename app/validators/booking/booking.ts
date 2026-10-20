@@ -2,6 +2,7 @@ import vine from '@vinejs/vine'
 
 import { BOOKING_STATUSES } from '#models/booking'
 import { STAY_TYPES } from '#features/bookings/stay_type'
+import { DEPOSIT_ACTIONS } from '#features/bookings/cancellation'
 
 export const createBookingValidator = vine.compile(
   vine.object({
@@ -32,6 +33,7 @@ export const listBookingsValidator = vine.compile(
 export const cancelBookingValidator = vine.compile(
   vine.object({
     reason: vine.string().trim().maxLength(500).optional(),
+    deposit_action: vine.enum(DEPOSIT_ACTIONS).optional(),
   })
 )
 
@@ -48,6 +50,8 @@ export const createOwnerBookingValidator = vine.compile(
     stay_type: vine.enum(STAY_TYPES),
     check_in_at: vine.date({ formats: ['iso8601'] }),
     check_out_at: vine.date({ formats: ['iso8601'] }).optional(),
+    /** Durée en jours choisie explicitement au comptoir (Option 1). */
+    days_count: vine.number().positive().withoutDecimals().optional(),
     received_amount: vine.number().min(0).optional(),
     /**
      * Prix négocié par unité du type de séjour. Prime sur `received_amount` :
@@ -98,6 +102,8 @@ export const updateOwnerBookingValidator = vine.compile(
     stay_type: vine.enum(STAY_TYPES),
     check_in_at: vine.date({ formats: ['iso8601'] }),
     check_out_at: vine.date({ formats: ['iso8601'] }).optional(),
+    /** Durée en jours choisie explicitement au comptoir (Option 1). */
+    days_count: vine.number().positive().withoutDecimals().optional(),
     /** Prix convenu du séjour. À défaut, le montant attendu s'applique. */
     received_amount: vine.number().min(0).optional(),
     /** Prix négocié par unité, même règle qu'à la création. */

@@ -199,9 +199,10 @@ export class ExpenseRepository {
    */
   async findAllForOwner(
     owner_id: string,
-    range: { from?: Date; to?: Date } = {}
+    range: { from?: Date; to?: Date } = {},
+    scopePropertyIds?: string[] | null
   ): Promise<ExpenseDto[]> {
-    const docs = await Expense.findAllForOwner(owner_id, range)
+    const docs = await Expense.findAllForOwner(owner_id, range, scopePropertyIds)
     return docs.map((doc) => ExpenseRepository.toDto(doc))
   }
 

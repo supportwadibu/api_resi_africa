@@ -46,6 +46,9 @@ export const COLLECTIONS = {
   deviceTokens: 'device_tokens',
   notificationCampaigns: 'notification_campaigns',
   notificationDispatches: 'notification_dispatches',
+  wallets: 'wallets',
+  walletTransactions: 'wallet_transactions',
+  withdrawalRequests: 'withdrawal_requests',
 } as const
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS]

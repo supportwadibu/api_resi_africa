@@ -8,7 +8,7 @@ import { SUBSCRIPTION_STATUSES } from '#utils/enums/subscription_status'
 import PaymentHistory from '#models/payment_history'
 import Plan from '#models/plan'
 import Subscription from '#models/subscription'
-import { readPlanTier } from '#features/plans/plan_tier'
+import { readPaidPlanTier } from '#features/plans/plan_tier'
 
 import type { StatsBooking } from '#features/bookings/booking_stats'
 import type { PlatformStatsDto } from '../dto/platform_stats.dto.ts'
@@ -58,7 +58,7 @@ export class PlatformStatsRepository {
         .map((s) => ({
           amount: Number(s.amount),
           end_date: s.end_date,
-          plan_tier: readPlanTier(s.plan_tier),
+          plan_tier: readPaidPlanTier(s.plan_tier),
           duration_days: (s.plan_id ? durations.get(s.plan_id) : undefined) ?? 30,
         })),
       trials: trials.map((s) => ({ end_date: s.end_date })),

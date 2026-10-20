@@ -3,6 +3,7 @@ import { test } from '@japa/runner'
 import {
   buildExtensionPatch,
   extendedAgreedAmount,
+  extendedLateCheckoutFee,
 } from '#features/bookings/use_cases/extend_owner_booking.use_case'
 import { resolveAgreedAmount } from '#features/bookings/use_cases/create_owner_booking.use_case'
 import { splitRevenueByMonth } from '#features/finance/revenue_split'
@@ -159,16 +160,40 @@ test.group('resolveAgreedAmount', () => {
       { agreed_unit_price: 15000, received_amount: 15000 },
       { days: 2, expected: 40000 }
     )
-    assert.deepEqual(result, { received: 30000, agreedUnitPrice: 15000 })
+    assert.deepEqual(result, { received: 30000, agreedUnitPrice: 15000, lateCheckoutFee: 0 })
   })
 
   test('un total seul, envoyé par un appareil plus ancien, est repris tel quel', ({ assert }) => {
     const result = resolveAgreedAmount({ received_amount: 35000 }, { days: 2, expected: 40000 })
-    assert.deepEqual(result, { received: 35000, agreedUnitPrice: null })
+    assert.deepEqual(result, { received: 35000, agreedUnitPrice: null, lateCheckoutFee: 0 })
   })
 
   test('sans prix convenu, le montant attendu s’applique', ({ assert }) => {
     const result = resolveAgreedAmount({}, { days: 2, expected: 40000 })
-    assert.deepEqual(result, { received: 40000, agreedUnitPrice: null })
+    assert.deepEqual(result, { received: 40000, agreedUnitPrice: null, lateCheckoutFee: 0 })
+  })
+
+  test('le départ tardif se paie au prix négocié', ({ assert }) => {
+    const result = resolveAgreedAmount(
+      { agreed_unit_price: 15000 },
+      { days: 1, expected: 30000, lateCheckout: true, lateCheckoutFee: 10000 }
+    )
+    assert.deepEqual(result, { received: 22500, agreedUnitPrice: 15000, lateCheckoutFee: 7500 })
+  })
+})
+
+test.group('extendedLateCheckoutFee', () => {
+  test('suit le tarif convenu, comme les jours ajoutés', ({ assert }) => {
+    const current = { days: 1, expected: 20000, received: 15000, agreedUnitPrice: 15000 }
+    assert.equal(extendedLateCheckoutFee(current, { lateCheckout: true }), 7500)
+    assert.equal(extendedLateCheckoutFee(current, { lateCheckout: false }), 0)
+  })
+
+  test('au tarif de la grille sans négociation', ({ assert }) => {
+    const current = { days: 1, expected: 20000, received: 20000 }
+    assert.equal(
+      extendedLateCheckoutFee(current, { lateCheckout: true, lateCheckoutFee: 10000 }),
+      10000
+    )
   })
 })

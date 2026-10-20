@@ -1,6 +1,7 @@
 import logger from '@adonisjs/core/services/logger'
 
 import BookingRepository from '#features/bookings/repositories/booking_repository'
+import { CreditBookingPaymentUseCase } from '#features/wallets/use_cases/index'
 import { isPaymentConsistent } from '#features/subscriptions/subscription_checkout'
 import WaveSubscriptionService from '#services/wave_subscription_service'
 import { DomainError } from '#utils/domain_error'
@@ -29,7 +30,8 @@ export class ConfirmBookingPaymentUseCase {
     private wave: Pick<
       WaveSubscriptionService,
       'getCheckoutSession'
-    > = new WaveSubscriptionService()
+    > = new WaveSubscriptionService(),
+    private credit: Pick<CreditBookingPaymentUseCase, 'execute'> = new CreditBookingPaymentUseCase()
   ) {}
 
   async execute(bookingId: string, clientId: string): Promise<BookingPaymentDto> {
@@ -91,12 +93,24 @@ export class ConfirmBookingPaymentUseCase {
         )
       }
 
-      return (
+      const paid =
         (await this.paymentRepo.updateStatus(payment.id, 'success', {
           provider_transaction_id: session.transaction_id,
           paid_at: now,
         })) ?? payment
-      )
+
+      // L'argent est chez RESI : il entre au portefeuille de la résidence,
+      // d'où le propriétaire le retire. Idempotent, comme la confirmation.
+      const booking = await this.bookingRepo.findById(payment.booking_id)
+      await this.credit.execute({
+        owner_id: payment.owner_id,
+        residence_id: booking?.residence_id ?? null,
+        booking_id: payment.booking_id,
+        booking_payment_id: payment.id,
+        amount: payment.amount,
+      })
+
+      return paid
     }
 
     if (session.payment_status === 'cancelled') {

@@ -2,10 +2,12 @@ import Booking from '#models/booking'
 import { DomainError } from '#utils/domain_error'
 
 import type { BookingDto, CancelBookingInput } from '../dto/booking.dto.ts'
+import { buildCancellationPatch } from '../cancellation.ts'
+import { syncReferrerCommissionExpense } from '../referrer_expense.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 
 /**
- * Annule une réservation du côté du propriétaire.
+ * Annule une réservation du côté du propriétaire ou de son gérant.
  *
  * Distinct de `CancelBookingUseCase`, qui sert le flux en ligne : celui-ci est
  * cadré sur `client_id` — le client annule *sa* réservation — et ne peut donc
@@ -14,9 +16,7 @@ import BookingRepository from '../repositories/booking_repository.ts'
  * `client_id` d'une réservation comptoir désigne une fiche du carnet, pas un
  * compte connecté.
  *
- * Un séjour déjà clôturé n'est pas annulable : son revenu est constaté, et le
- * revenir dessus réécrirait un mois clos. Le correctif est un avoir, pas une
- * annulation rétroactive — même arbitrage que `buildCheckOutPatch`.
+ * Règles d'annulation et sort de l'acompte : voir `buildCancellationPatch`.
  */
 export class CancelOwnerBookingUseCase {
   async execute(id: string, ownerId: string, input: CancelBookingInput = {}): Promise<BookingDto> {
@@ -25,26 +25,12 @@ export class CancelOwnerBookingUseCase {
       throw new DomainError('booking_not_found', 'Réservation introuvable.', 404)
     }
 
-    if (booking.status === 'cancelled') {
-      throw new DomainError('booking_already_cancelled', 'Réservation déjà annulée.', 409)
-    }
-
-    if (booking.status === 'completed') {
-      throw new DomainError(
-        'booking_already_completed',
-        'Séjour déjà clôturé : il ne peut plus être annulé.',
-        409
-      )
-    }
-
     const updated = await Booking.findOneAndUpdate(
       id,
+      { ...buildCancellationPatch(booking, input) },
       {
-        status: 'cancelled',
-        cancelled_at: new Date(),
-        cancellation_reason: input.reason ?? null,
-      },
-      { owner_id: ownerId }
+        owner_id: ownerId,
+      }
     )
 
     if (!updated) {
@@ -54,6 +40,8 @@ export class CancelOwnerBookingUseCase {
     // Le bien redevient disponible : une réservation annulée ne doit pas
     // continuer de bloquer le calendrier.
     await new BookingRepository().markPropertyAsAvailable(booking.property_id)
+    // Une commission ne survit pas à l'annulation : son reflet est retiré.
+    await syncReferrerCommissionExpense(updated)
 
     return BookingRepository.toDto(updated)
   }

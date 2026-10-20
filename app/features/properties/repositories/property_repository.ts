@@ -1,4 +1,8 @@
 import { SCOPE_READ_LIMIT } from '#features/managers/scope'
+import {
+  DEFAULT_LATE_CHECKOUT_GRACE_MINUTES,
+  DEFAULT_LATE_CHECKOUT_HALF_DAY_HOURS,
+} from '#features/bookings/stay_pricing'
 import { COLLECTIONS, getByIds } from '#firebase/firestore'
 import Property, { type PropertyDocument, type PropertyRecord } from '#models/property'
 
@@ -46,6 +50,12 @@ export class PropertyRepository {
         price_tiers: doc.pricing?.price_tiers ?? [],
         minimum_stay_days: doc.pricing?.minimum_stay_days ?? 1,
         maximum_stay_days: doc.pricing?.maximum_stay_days ?? null,
+        // Absents des biens antérieurs au départ tardif : la règle par défaut
+        // est celle que la facturation leur applique.
+        late_checkout_grace_minutes:
+          doc.pricing?.late_checkout_grace_minutes ?? DEFAULT_LATE_CHECKOUT_GRACE_MINUTES,
+        late_checkout_half_day_hours:
+          doc.pricing?.late_checkout_half_day_hours ?? DEFAULT_LATE_CHECKOUT_HALF_DAY_HOURS,
       },
       charges_included: doc.charges_included,
       additional_charges: doc.additional_charges,

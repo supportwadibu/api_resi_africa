@@ -1,6 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 
 import OwnerRepository from '../../features/owners/repositories/owner_repository.ts'
+import { legacyPlanAccess } from '../../features/subscriptions/plan_access.ts'
 import {
   GetCurrentSubscriptionUseCase,
   ResolvePlanAccessUseCase,
@@ -51,10 +52,16 @@ export default class ProprioSubscriptionController {
         /** Le propriétaire peut-il exploiter ses annonces ? */
         can_operate: planAccess !== null && owner?.owner_status !== 'suspended',
         /**
-         * Palier ouvert : `full` (5 000 F), `basic` (3 000 F), ou `null` pour
-         * un compte inactif, qui doit souscrire un forfait.
+         * Palier ouvert, dans le vocabulaire des applications déjà installées :
+         * `full`, `basic`, ou `null` pour un compte inactif. Elles ne
+         * connaissent pas les paliers actuels, et liraient `pro_plus` comme un
+         * compte inactif — tous leurs utilisateurs seraient bloqués. RESI Basic
+         * y devient `basic` : l'API refuse ce qu'il n'ouvre pas, et l'ancienne
+         * application suit ses refus.
          */
-        plan_access: planAccess,
+        plan_access: legacyPlanAccess(planAccess),
+        /** Palier ouvert : `free`, `pro`, `pro_plus`, ou `null` pour un compte inactif. */
+        plan_tier: planAccess,
         /** Dossier déposé, en attente de décision d'un administrateur. */
         awaiting_validation: owner?.owner_status === 'pending',
         /**

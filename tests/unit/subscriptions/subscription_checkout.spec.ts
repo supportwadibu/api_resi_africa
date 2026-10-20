@@ -14,7 +14,7 @@ const inDays = (days: number) => new Date(NOW.getTime() + days * DAY_MS)
 const PAYMENT = {
   user_id: 'owner-1',
   plan_id: 'plan-full',
-  plan_tier: 'full' as const,
+  plan_tier: 'pro_plus' as const,
   duration_days: 30,
   amount: 5000,
   transaction_reference: 'SUB-owner-1-abc',
@@ -22,14 +22,14 @@ const PAYMENT = {
 
 test.group('checkoutRefusal', () => {
   test('sans abonnement, pendant un essai ou après échéance : accepté', ({ assert }) => {
-    assert.isNull(checkoutRefusal(null, 'basic', NOW))
+    assert.isNull(checkoutRefusal(null, 'pro', NOW))
     assert.isNull(
-      checkoutRefusal({ status: 'trial', is_trial: true, end_date: inDays(10) }, 'basic', NOW)
+      checkoutRefusal({ status: 'trial', is_trial: true, end_date: inDays(10) }, 'pro', NOW)
     )
     assert.isNull(
       checkoutRefusal(
-        { status: 'active', is_trial: false, plan_tier: 'full', end_date: inDays(-1) },
-        'basic',
+        { status: 'active', is_trial: false, plan_tier: 'pro_plus', end_date: inDays(-1) },
+        'pro',
         NOW
       )
     )
@@ -37,8 +37,8 @@ test.group('checkoutRefusal', () => {
 
   test('abonnement payant loin de son échéance : refusé', ({ assert }) => {
     const refusal = checkoutRefusal(
-      { status: 'active', is_trial: false, plan_tier: 'full', end_date: inDays(20) },
-      'full',
+      { status: 'active', is_trial: false, plan_tier: 'pro_plus', end_date: inDays(20) },
+      'pro_plus',
       NOW
     )
 
@@ -52,10 +52,10 @@ test.group('checkoutRefusal', () => {
         {
           status: 'active',
           is_trial: false,
-          plan_tier: 'basic',
+          plan_tier: 'pro',
           end_date: inDays(RENEWAL_WINDOW_DAYS),
         },
-        'basic',
+        'pro',
         NOW
       )
     )
@@ -65,8 +65,8 @@ test.group('checkoutRefusal', () => {
     assert,
   }) => {
     const refusal = checkoutRefusal(
-      { status: 'active', is_trial: false, plan_tier: 'basic', end_date: inDays(3) },
-      'full',
+      { status: 'active', is_trial: false, plan_tier: 'pro', end_date: inDays(3) },
+      'pro_plus',
       NOW
     )
 
@@ -75,7 +75,7 @@ test.group('checkoutRefusal', () => {
 
   test("l'historique sans palier se renouvelle en forfait complet", ({ assert }) => {
     assert.isNull(
-      checkoutRefusal({ status: 'active', is_trial: false, end_date: inDays(2) }, 'full', NOW)
+      checkoutRefusal({ status: 'active', is_trial: false, end_date: inDays(2) }, 'pro_plus', NOW)
     )
   })
 })
@@ -87,7 +87,7 @@ test.group('buildPaidSubscription', () => {
     assert.isNull(close)
     assert.equal(subscription.status, 'active')
     assert.isFalse(subscription.is_trial)
-    assert.equal(subscription.plan_tier, 'full')
+    assert.equal(subscription.plan_tier, 'pro_plus')
     assert.equal(subscription.amount, 5000)
     assert.equal(subscription.payment_reference, PAYMENT.transaction_reference)
     assert.deepEqual(subscription.end_date, inDays(30))
@@ -107,7 +107,13 @@ test.group('buildPaidSubscription', () => {
   test('un renouvellement anticipé reporte les jours restants', ({ assert }) => {
     const { subscription, close } = buildPaidSubscription(
       PAYMENT,
-      { _id: 'sub-1', status: 'active', is_trial: false, plan_tier: 'full', end_date: inDays(4) },
+      {
+        _id: 'sub-1',
+        status: 'active',
+        is_trial: false,
+        plan_tier: 'pro_plus',
+        end_date: inDays(4),
+      },
       NOW
     )
 

@@ -49,21 +49,21 @@ test.group('buildSubscriptionRevenue — récurrent et prévision', () => {
     {
       amount: 5000,
       end_date: new Date('2026-10-10T10:00:00Z'),
-      plan_tier: 'full' as const,
+      plan_tier: 'pro_plus' as const,
       duration_days: 30,
     },
     // Mensuel à 3 000 F, échéance le 28 septembre.
     {
       amount: 3000,
       end_date: new Date('2026-09-28T10:00:00Z'),
-      plan_tier: 'basic' as const,
+      plan_tier: 'pro' as const,
       duration_days: 30,
     },
     // Échu : ne compte plus.
     {
       amount: 5000,
       end_date: new Date('2026-09-01T10:00:00Z'),
-      plan_tier: 'full' as const,
+      plan_tier: 'pro_plus' as const,
       duration_days: 30,
     },
   ]
@@ -74,8 +74,8 @@ test.group('buildSubscriptionRevenue — récurrent et prévision', () => {
     assert.equal(revenue.recurring.paying_subscribers, 2)
     assert.equal(revenue.recurring.mrr, 8000)
     assert.deepEqual(revenue.recurring.by_tier, {
-      basic: { subscribers: 1, mrr: 3000 },
-      full: { subscribers: 1, mrr: 5000 },
+      pro: { subscribers: 1, mrr: 3000 },
+      pro_plus: { subscribers: 1, mrr: 5000 },
     })
   })
 
@@ -85,7 +85,7 @@ test.group('buildSubscriptionRevenue — récurrent et prévision', () => {
         {
           amount: 15000,
           end_date: new Date('2026-12-01T00:00:00Z'),
-          plan_tier: 'full',
+          plan_tier: 'pro_plus',
           duration_days: 90,
         },
       ],

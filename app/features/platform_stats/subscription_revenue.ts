@@ -1,5 +1,5 @@
 import { growthPercent, monthWindow } from '#features/bookings/booking_stats'
-import type { PlanTier } from '#features/plans/plan_tier'
+import type { PaidPlanTier } from '#features/plans/plan_tier'
 
 import { monthKey } from './revenue_series.ts'
 
@@ -18,7 +18,7 @@ export interface EarnedPayment {
 export interface PaidSubscription {
   amount: number
   end_date: Date
-  plan_tier: PlanTier
+  plan_tier: PaidPlanTier
   duration_days: number
 }
 
@@ -55,7 +55,7 @@ export interface SubscriptionRevenueDto {
   recurring: {
     mrr: number
     paying_subscribers: number
-    by_tier: Record<PlanTier, { subscribers: number; mrr: number }>
+    by_tier: Record<PaidPlanTier, { subscribers: number; mrr: number }>
   }
 
   /**
@@ -133,16 +133,16 @@ export function buildSubscriptionRevenue(input: {
   // ── Récurrent ─────────────────────────────────────────────────────────────
   const live = input.paidSubscriptions.filter((s) => s.end_date.getTime() > now.getTime())
   const byTier: SubscriptionRevenueDto['recurring']['by_tier'] = {
-    basic: { subscribers: 0, mrr: 0 },
-    full: { subscribers: 0, mrr: 0 },
+    pro: { subscribers: 0, mrr: 0 },
+    pro_plus: { subscribers: 0, mrr: 0 },
   }
   for (const subscription of live) {
     const tier = byTier[subscription.plan_tier]
     tier.subscribers += 1
     tier.mrr += monthly(subscription.amount, subscription.duration_days)
   }
-  byTier.basic.mrr = Math.round(byTier.basic.mrr)
-  byTier.full.mrr = Math.round(byTier.full.mrr)
+  byTier.pro.mrr = Math.round(byTier.pro.mrr)
+  byTier.pro_plus.mrr = Math.round(byTier.pro_plus.mrr)
 
   // ── Prévision ─────────────────────────────────────────────────────────────
   const forecastSeries: MonthAmount[] = []
@@ -178,7 +178,7 @@ export function buildSubscriptionRevenue(input: {
       series: earnedSeries,
     },
     recurring: {
-      mrr: byTier.basic.mrr + byTier.full.mrr,
+      mrr: byTier.pro.mrr + byTier.pro_plus.mrr,
       paying_subscribers: live.length,
       by_tier: byTier,
     },

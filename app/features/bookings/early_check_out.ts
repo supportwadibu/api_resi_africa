@@ -32,7 +32,7 @@ export interface EarlyCheckOutBooking {
 
 export interface EarlyCheckOutOptions {
   option: 'prorata' | 'with_penalty' | 'full_amount'
-  penalty_amount?: number  // Requis si option === 'with_penalty'
+  penalty_amount?: number // Requis si option === 'with_penalty'
 }
 
 export interface EarlyCheckOutQuote {
@@ -153,18 +153,18 @@ export function quoteEarlyCheckOut(
     options: {
       prorata: {
         amount: prorataAmount,
-        refund: prorataRefund
+        refund: prorataRefund,
       },
       with_penalty: {
         amount: withPenaltyAmount,
         penalty: defaultPenalty,
-        refund: withPenaltyRefund
+        refund: withPenaltyRefund,
       },
       full_amount: {
         amount: fullAmount,
-        refund: fullRefund
-      }
-    }
+        refund: fullRefund,
+      },
+    },
   }
 }
 
@@ -199,9 +199,9 @@ export function quoteEarlyCheckOutWithOptions(
         with_penalty: {
           amount: withPenaltyAmount,
           penalty: penalty,
-          refund: withPenaltyRefund
-        }
-      }
+          refund: withPenaltyRefund,
+        },
+      },
     }
   }
 

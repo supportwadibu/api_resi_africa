@@ -1,7 +1,10 @@
 export interface FinanceSummaryDto {
   /** Chiffre d'affaires brut : somme encaissée sur les réservations. */
   ca_brut: number
-  /** Dépenses engagées sur la même période. */
+  /**
+   * Dépenses engagées sur la même période, hors commissions d'apporteur :
+   * celles-ci sont dans `commissions`, et ne sont retranchées qu'une fois.
+   */
   depenses: number
   /**
    * Bénéfice net : `ca_brut − depenses − commissions`. Peut être négatif si
@@ -45,6 +48,10 @@ export interface FinanceFilters {
    * qu’ici.
    */
   residence_id?: string
+  /**
+   * Restreint le relevé à un logement unique.
+   */
+  property_id?: string
   /**
    * Logements du périmètre de l'appelant. `null` ou absent = aucune
    * restriction — le propriétaire. Alimenté par le middleware `scope()`.

@@ -8,7 +8,7 @@ import {
   type WithId,
 } from '#firebase/firestore'
 
-import type { PlanTier } from '#features/plans/plan_tier'
+import type { PaidPlanTier } from '#features/plans/plan_tier'
 
 export interface PlanDocument {
   name: string
@@ -26,7 +26,7 @@ export interface PlanDocument {
    * Palier ouvert par le plan. Optionnel en lecture : les plans créés avant
    * les paliers n'en portent pas et valent `full` (voir `readPlanTier`).
    */
-  tier?: PlanTier
+  tier?: PaidPlanTier
   is_active: boolean
   created_at: Date
   updated_at: Date
@@ -63,7 +63,7 @@ const Plan = {
     duration_days: number
     max_residences: number
     features?: string[]
-    tier: PlanTier
+    tier: PaidPlanTier
     is_active?: boolean
   }): Promise<PlanRecord> {
     const now = new Date()

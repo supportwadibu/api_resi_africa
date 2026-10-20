@@ -11,6 +11,7 @@ import {
 } from '../early_check_out.ts'
 import { withReferrerCommission } from '../referrer.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
+import { syncReferrerCommissionExpense } from '../referrer_expense.ts'
 
 /**
  * Champs écrits par la clôture.
@@ -163,12 +164,13 @@ export class CheckOutBookingUseCase {
     )
 
     if (input.full_stay === false) {
-      const quote = input.early_checkout_option && input.early_checkout_option !== 'prorata'
-        ? quoteEarlyCheckOutWithOptions(booking, input.actual_check_out_at ?? now, now, {
-          option: input.early_checkout_option,
-          penalty_amount: input.penalty_amount
-        })
-        : quoteEarlyCheckOut(booking, input.actual_check_out_at ?? now, now)
+      const quote =
+        input.early_checkout_option && input.early_checkout_option !== 'prorata'
+          ? quoteEarlyCheckOutWithOptions(booking, input.actual_check_out_at ?? now, now, {
+              option: input.early_checkout_option,
+              penalty_amount: input.penalty_amount,
+            })
+          : quoteEarlyCheckOut(booking, input.actual_check_out_at ?? now, now)
 
       // Un séjour écourté réduit le montant retenu, et la commission avec lui.
       patch = withReferrerCommission(
@@ -191,6 +193,8 @@ export class CheckOutBookingUseCase {
     if (!updated) {
       throw new DomainError('booking_not_found', 'Réservation introuvable.', 404)
     }
+
+    await syncReferrerCommissionExpense(updated)
 
     return BookingRepository.toDto(updated)
   }

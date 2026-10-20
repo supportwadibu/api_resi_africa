@@ -1,5 +1,3 @@
-import crypto from 'node:crypto'
-
 import env from '#start/env'
 
 export interface WaveCheckoutSessionInput {
@@ -20,7 +18,6 @@ export interface WaveCheckoutSessionOutput {
 export class WavePaymentService {
   private baseUrl = env.get('WAVE_BASE_URL') ?? 'https://api.wave.com'
   private apiKey = env.get('WAVE_API_KEY')
-  private webhookSecret = env.get('WAVE_WEBHOOK_SECRET')
 
   async createCheckoutSession(input: WaveCheckoutSessionInput): Promise<WaveCheckoutSessionOutput> {
     if (!this.apiKey) {
@@ -57,18 +54,6 @@ export class WavePaymentService {
     }
 
     return { id, paymentUrl, raw }
-  }
-
-  verifyWebhookSignature(rawBody: string, signature: string | undefined): boolean {
-    if (!this.webhookSecret) return true
-    if (!signature) return false
-
-    const expected = crypto.createHmac('sha256', this.webhookSecret).update(rawBody).digest('hex')
-    const normalizedSignature = signature.replace(/^sha256=/, '')
-
-    if (expected.length !== normalizedSignature.length) return false
-
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(normalizedSignature))
   }
 }
 

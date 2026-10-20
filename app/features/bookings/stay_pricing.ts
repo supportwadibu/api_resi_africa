@@ -2,6 +2,8 @@ import { DomainError } from '#utils/domain_error'
 
 import type { PropertyPriceTier, PropertyPricing } from '#models/property'
 
+import { HALF_DAY_RATIO } from './stay_type.ts'
+
 /**
  * Tarification d'un séjour : prix par jour, remisé selon la durée.
  *
@@ -23,18 +25,101 @@ export interface StayPrice {
   dailyPrice: number
   /** Remise appliquée, en pourcentage. `0` si aucun palier n'est atteint. */
   discountPercent: number
-  /** Montant dû après remise de durée, avant code promo. */
+  /** Montant dû après remise de durée, avant code promo. Supplément de départ tardif compris. */
   subtotal: number
+  /** Supplément de départ tardif, déjà compris dans `subtotal` ; 0 sans dépassement facturé. */
+  lateCheckoutFee: number
 }
 
 /**
  * Jours d'occupation entre deux instants, arrondis au jour entamé supérieur.
  *
  * `Math.ceil` : une sortie à 14h le lendemain d'une entrée à 12h dépasse la
- * journée due et en entame une seconde.
+ * journée due et en entame une seconde. Sert au départ anticipé ; la
+ * facturation d'un séjour passe par `resolveBilledStay`, qui tolère un léger
+ * dépassement.
  */
 export function countStayDays(startDate: Date, endDate: Date): number {
   return Math.ceil((endDate.getTime() - startDate.getTime()) / MILLISECONDS_PER_DAY)
+}
+
+/** Tolérance par défaut d'un départ tardif, en minutes. */
+export const DEFAULT_LATE_CHECKOUT_GRACE_MINUTES = 60
+/** Dépassement maximal facturé en demi-journée, en heures ; au-delà, un jour. */
+export const DEFAULT_LATE_CHECKOUT_HALF_DAY_HOURS = 6
+
+export interface LateCheckoutPolicy {
+  graceMinutes: number
+  halfDayHours: number
+}
+
+/**
+ * Règle de départ tardif d'un bien.
+ *
+ * Les biens enregistrés avant cette règle n'en portent pas : ils prennent les
+ * valeurs par défaut, si bien qu'un dépassement d'une minute ne fait plus
+ * payer une journée entière sur aucun bien.
+ */
+export function resolveLateCheckoutPolicy(pricing: {
+  late_checkout_grace_minutes?: number | null
+  late_checkout_half_day_hours?: number | null
+}): LateCheckoutPolicy {
+  return {
+    graceMinutes: pricing.late_checkout_grace_minutes ?? DEFAULT_LATE_CHECKOUT_GRACE_MINUTES,
+    halfDayHours: pricing.late_checkout_half_day_hours ?? DEFAULT_LATE_CHECKOUT_HALF_DAY_HOURS,
+  }
+}
+
+export interface BilledStay {
+  /** Jours facturés, au minimum un. */
+  days: number
+  /** Le dépassement des jours entiers se facture en demi-journée. */
+  lateCheckout: boolean
+}
+
+/**
+ * Jours facturés d'un séjour complet, et départ tardif éventuel.
+ *
+ * Les jours entiers écoulés sont dus ; le reste — le dépassement — se lit sur
+ * la règle du bien :
+ * - jusqu'à la tolérance, il est offert ;
+ * - jusqu'à `halfDayHours`, il se facture en demi-journée ;
+ * - au-delà, il entame un jour de plus.
+ *
+ * Lundi 12h → mardi 16h : un jour, quatre heures de dépassement — un jour et
+ * une demi-journée, là où le jour entamé en faisait payer deux.
+ *
+ * Un nombre de jours choisi au comptoir (`explicitDays`) remplace les jours
+ * entiers : le dépassement se mesure alors au-delà de ces jours. Au-delà de la
+ * demi-journée, le choix du propriétaire prime et aucun jour n'est ajouté —
+ * il a fixé la durée en connaissance des heures.
+ */
+export function resolveBilledStay(
+  checkIn: Date,
+  checkOut: Date,
+  policy: LateCheckoutPolicy,
+  explicitDays?: number | null
+): BilledStay {
+  const elapsed = Math.max(0, checkOut.getTime() - checkIn.getTime())
+  const explicit =
+    typeof explicitDays === 'number' && Number.isFinite(explicitDays) && explicitDays >= 1
+      ? Math.round(explicitDays)
+      : null
+
+  const base = explicit ?? Math.max(1, Math.floor(elapsed / MILLISECONDS_PER_DAY))
+  const overrun = elapsed - base * MILLISECONDS_PER_DAY
+
+  if (overrun <= policy.graceMinutes * 60 * 1000) return { days: base, lateCheckout: false }
+  if (overrun <= policy.halfDayHours * 60 * 60 * 1000) return { days: base, lateCheckout: true }
+  if (explicit !== null) return { days: base, lateCheckout: false }
+
+  return { days: base + 1, lateCheckout: false }
+}
+
+/** Supplément d'un départ tardif : une demi-journée au prix unitaire en vigueur. */
+export function lateCheckoutFeeFor(unitPrice: number): number {
+  // Arrondi au franc : le FCFA n'a pas de subdivision en circulation.
+  return Math.round(unitPrice * HALF_DAY_RATIO)
 }
 
 /**
@@ -70,15 +155,19 @@ export function calculateStayPrice(
   startDate: Date,
   endDate: Date
 ): StayPrice {
-  const days = countStayDays(startDate, endDate)
-
-  if (days < 1) {
+  if (endDate.getTime() <= startDate.getTime()) {
     throw new DomainError(
       'invalid_booking_dates',
       'La date de fin doit être après la date de début.',
       422
     )
   }
+
+  const { days, lateCheckout } = resolveBilledStay(
+    startDate,
+    endDate,
+    resolveLateCheckoutPolicy(pricing)
+  )
 
   const minimumStayDays = pricing.minimum_stay_days ?? 1
   const maximumStayDays = pricing.maximum_stay_days ?? null
@@ -105,9 +194,12 @@ export function calculateStayPrice(
 
   // Arrondi au franc : le FCFA n'a pas de subdivision en circulation, et un
   // sous-total à virgule se propagerait jusqu'au montant encaissé.
-  const subtotal = Math.round(fullPrice * (1 - discountPercent / 100))
+  // Le supplément suit le tarif plein : la remise de durée récompense des
+  // jours réservés, pas des heures de dépassement.
+  const lateCheckoutFee = lateCheckout ? lateCheckoutFeeFor(dailyPrice) : 0
+  const subtotal = Math.round(fullPrice * (1 - discountPercent / 100)) + lateCheckoutFee
 
-  return { days, dailyPrice, discountPercent, subtotal }
+  return { days, dailyPrice, discountPercent, subtotal, lateCheckoutFee }
 }
 
 /**
@@ -146,7 +238,9 @@ export function assertExtensionBounds(
 
   const maximum = pricing.maximum_stay_days
   if (maximum !== null && maximum !== undefined) {
-    const days = countStayDays(startDate, newEndDate)
+    // Même décompte que la facturation : une tolérance de départ ne doit pas
+    // faire refuser une prolongation que le prix compterait en jours entiers.
+    const { days } = resolveBilledStay(startDate, newEndDate, resolveLateCheckoutPolicy(pricing))
     if (days > maximum) {
       throw new DomainError('maximum_stay_exceeded', `Séjour maximum de ${maximum} jour(s).`, 422)
     }

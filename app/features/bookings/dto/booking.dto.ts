@@ -8,6 +8,7 @@ import type { BookingStatus } from '#models/booking'
 
 import type { StayType } from '../stay_type.ts'
 import type { Referrer } from '../referrer.ts'
+import type { DepositAction } from '../cancellation.ts'
 
 export type { BookingStatus }
 
@@ -39,6 +40,12 @@ export interface BookingDto {
   cancelled_at: Date | null
   completed_at: Date | null
   cancellation_reason: string | null
+  /** Sort de l'acompte à l'annulation ; `null` hors annulation ou sans acompte. */
+  cancellation_deposit_action: DepositAction | null
+  /** Acompte gardé à l'annulation, compté en revenu ; 0 sinon. */
+  retained_amount: number
+  /** Acompte rendu à l'annulation ; 0 sinon. */
+  cancellation_refunded_amount: number
   created_at: Date
   updated_at: Date
   /**
@@ -76,6 +83,8 @@ export interface BookingDto {
   received_amount?: number
   /** Prix négocié par unité du type de séjour ; `null` au tarif ou sur l'historique. */
   agreed_unit_price?: number | null
+  /** Supplément de départ tardif, déjà compris dans les montants ; 0 sans dépassement. */
+  late_checkout_fee: number
   deposit_amount?: number
   sync_status?: 'synced' | 'pending' | 'conflict'
   /** Apporteur d'affaire, `null` sans apporteur. */
@@ -105,6 +114,8 @@ export interface CreateOwnerBookingInput {
   received_amount?: number
   /** Prix négocié par unité. Prime sur `received_amount`. */
   agreed_unit_price?: number
+  /** Durée facturée explicite choisie au comptoir. À défaut, calculée depuis check_in et check_out. */
+  days_count?: number
   deposit_amount?: number
   message?: string
   /** Immédiat : la réservation naît `in_progress`. */
@@ -142,6 +153,8 @@ export interface UpdateOwnerBookingInput {
   check_in_at: Date
   /** À défaut, dérivée du type de séjour. */
   check_out_at?: Date
+  /** Durée facturée explicite choisie au comptoir. À défaut, calculée depuis check_in et check_out. */
+  days_count?: number
   /** Prix convenu du séjour. À défaut, le montant attendu s'applique. */
   received_amount?: number
   /** Prix négocié par unité. Prime sur `received_amount`. */
@@ -175,6 +188,8 @@ export interface CreateCalculatedBookingInput extends CreateBookingInput {
   daily_price: number
   duration_discount_percent: number
   subtotal_amount: number
+  /** Compris dans `subtotal_amount`. */
+  late_checkout_fee: number
   discount_amount: number
   total_amount: number
   promo_code_id?: string | null
@@ -191,6 +206,8 @@ export interface UpdateCalculatedBookingInput extends UpdateBookingInput {
   daily_price: number
   duration_discount_percent: number
   subtotal_amount: number
+  /** Compris dans `subtotal_amount`. */
+  late_checkout_fee: number
   discount_amount: number
   total_amount: number
 }
@@ -242,6 +259,8 @@ export type { EarlyCheckOutQuote as EarlyCheckOutQuoteDto } from '../early_check
 
 export interface CancelBookingInput {
   reason?: string
+  /** Exigé quand un acompte a été versé : voir `buildCancellationPatch`. */
+  deposit_action?: DepositAction
 }
 
 /**

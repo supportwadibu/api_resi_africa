@@ -4,6 +4,7 @@ import { renderFinancialReport } from '#features/reports/renderers/financial_rep
 const context = {
   owner_name: 'Kouassi',
   residence_name: null,
+  property_title: null,
   period: {
     window: { from: new Date('2026-03-01T00:00:00Z'), to: new Date('2026-04-01T00:00:00Z') },
     label: 'Mars 2026',
@@ -52,6 +53,20 @@ test.group('renderFinancialReport', () => {
     assert.include(html, 'Électricité')
     assert.include(html, 'Ménage')
     assert.notInclude(html, 'electricity')
+  })
+
+  test('traduit les abonnements et commissions', ({ assert }) => {
+    const customData = {
+      ...data,
+      expenses_by_category: [
+        { category: 'subscription', amount: 15000 },
+        { category: 'commission', amount: 25000 },
+      ],
+    }
+    const html = renderFinancialReport(customData, context)
+
+    assert.include(html, 'Abonnement')
+    assert.include(html, 'Commission apporteur')
   })
 
   test('calcule la part de chaque catégorie', ({ assert }) => {

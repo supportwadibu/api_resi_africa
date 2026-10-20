@@ -1,12 +1,9 @@
-import WavePaymentService from '#services/wave_payment_service'
-
 import type { HttpContext } from '@adonisjs/core/http'
 
 import {
   ConfirmBookingPaymentUseCase,
   InitializeBookingPaymentUseCase,
 } from '../../features/booking_payments/use_cases/index.ts'
-import { extractCheckoutId } from '../../features/booking_payments/wave_webhook.ts'
 
 export default class ClientBookingPaymentController {
   async initializeWave(ctx: HttpContext) {
@@ -54,27 +51,5 @@ export default class ClientBookingPaymentController {
           `<h1 style="font-size:1.25rem">${message}</h1>` +
           `<p>Vous pouvez revenir dans l'application RESI.</p></body></html>`
       )
-  }
-
-  async waveWebhook(ctx: HttpContext) {
-    const payload = ctx.request.body() as Record<string, unknown>
-    // Corps brut : la signature porte sur les octets reçus, qu'une
-    // re-sérialisation ne reproduit pas.
-    const rawBody = ctx.request.raw() ?? JSON.stringify(payload)
-    const signature = ctx.request.header('wave-signature') ?? ctx.request.header('x-wave-signature')
-
-    if (!new WavePaymentService().verifyWebhookSignature(rawBody, signature)) {
-      return ctx.response.unauthorized({
-        code: 'invalid_signature',
-        message: 'Signature invalide.',
-      })
-    }
-
-    // Le corps ne désigne que la session : son issue est relue chez Wave, avec
-    // le contrôle du montant. Toute session, reconnue ou non, reçoit un 200,
-    // pour que Wave cesse de rejouer un événement qui ne nous concerne pas.
-    const checkoutId = extractCheckoutId(payload)
-    if (checkoutId) await new ConfirmBookingPaymentUseCase().executeForCheckout(checkoutId)
-    return ctx.response.ok({ received: true })
   }
 }

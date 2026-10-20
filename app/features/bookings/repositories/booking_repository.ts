@@ -50,6 +50,10 @@ export class BookingRepository {
       cancelled_at: doc.cancelled_at ?? null,
       completed_at: doc.completed_at ?? null,
       cancellation_reason: doc.cancellation_reason ?? null,
+      // Absents de l'historique et de toute réservation non annulée.
+      cancellation_deposit_action: doc.cancellation_deposit_action ?? null,
+      retained_amount: doc.retained_amount ?? 0,
+      cancellation_refunded_amount: doc.cancellation_refunded_amount ?? 0,
       created_at: doc.created_at,
       updated_at: doc.updated_at,
       // Les réservations antérieures ne portent pas ces champs : le repli les
@@ -75,6 +79,8 @@ export class BookingRepository {
       // Absent de l'historique : le prix unitaire n'était pas conservé, seul
       // le total convenu l'était.
       agreed_unit_price: doc.agreed_unit_price ?? null,
+      // Absent de l'historique : aucun départ tardif n'était facturé à part.
+      late_checkout_fee: doc.late_checkout_fee ?? 0,
       deposit_amount: doc.deposit_amount ?? 0,
       sync_status: doc.sync_status ?? 'synced',
       // Absents de l'historique et des séjours menés à terme.
@@ -158,6 +164,7 @@ export class BookingRepository {
       daily_price: input.daily_price,
       duration_discount_percent: input.duration_discount_percent,
       subtotal_amount: input.subtotal_amount,
+      late_checkout_fee: input.late_checkout_fee,
       discount_amount: input.discount_amount,
       total_amount: input.total_amount,
       promo_code: input.promo_code ?? null,
@@ -277,7 +284,7 @@ export class BookingRepository {
   async findByPeriod(
     owner_id: string,
     range: { from?: Date; to?: Date } = {},
-    scope: { residence_id?: string } = {}
+    scope: { residence_id?: string; property_ids?: string[] | null } = {}
   ): Promise<BookingDto[]> {
     const docs = await Booking.findForRevenue(owner_id, range, scope)
     return docs.map((doc) => BookingRepository.toDto(doc))

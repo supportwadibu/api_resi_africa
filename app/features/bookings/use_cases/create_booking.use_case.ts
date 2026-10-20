@@ -42,6 +42,7 @@ export class CreateBookingUseCase {
         daily_price: price.dailyPrice,
         duration_discount_percent: price.discountPercent,
         subtotal_amount: price.subtotal,
+        late_checkout_fee: price.lateCheckoutFee,
         discount_amount: promo?.discount ?? 0,
         total_amount: price.subtotal - (promo?.discount ?? 0),
         promo_code: promo?.code ?? undefined,

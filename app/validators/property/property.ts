@@ -93,6 +93,10 @@ const pricingSchema = vine.object({
   price_tiers: priceTiersSchema,
   minimum_stay_days: vine.number().min(1).withoutDecimals().optional(),
   maximum_stay_days: vine.number().min(1).withoutDecimals().optional(),
+  // Bornes : une tolérance de plus d'une demi-journée, ou une demi-journée
+  // qui couvrirait le jour entier, ne seraient plus un départ tardif.
+  late_checkout_grace_minutes: vine.number().min(0).max(720).withoutDecimals().optional(),
+  late_checkout_half_day_hours: vine.number().min(0).max(23).withoutDecimals().optional(),
 })
 
 /**

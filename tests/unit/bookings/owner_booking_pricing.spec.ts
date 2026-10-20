@@ -113,4 +113,78 @@ test.group('computeOwnerBookingAmounts', () => {
     )
     assert.equal(result.expected, 10000)
   })
+
+  test('une sortie à 15h le lendemain reste 1 jour choisi, plus une demi-journée de départ tardif', ({
+    assert,
+  }) => {
+    // 12h10 à 15h00 le lendemain : 2h50 au-delà du jour choisi, plus que
+    // l'heure de tolérance — une demi-journée, et non un second jour.
+    const result = computeOwnerBookingAmounts(
+      pricing,
+      'full_day',
+      new Date('2026-10-18T12:10:00Z'),
+      new Date('2026-10-19T15:00:00Z'),
+      1
+    )
+    assert.equal(result.days, 1)
+    assert.isTrue(result.lateCheckout)
+    assert.equal(result.lateCheckoutFee, 10000)
+    assert.equal(result.expected, 30000)
+  })
+
+  test('un choix explicite de deux jours facture deux journées', ({ assert }) => {
+    const result = computeOwnerBookingAmounts(
+      pricing,
+      'full_day',
+      new Date('2026-10-18T12:10:00Z'),
+      new Date('2026-10-20T12:30:00Z'),
+      2
+    )
+    assert.equal(result.days, 2)
+    assert.isFalse(result.lateCheckout)
+    assert.equal(result.expected, 40000)
+  })
+
+  test('sans choix explicite, un dépassement dans la tolérance est offert', ({ assert }) => {
+    const result = computeOwnerBookingAmounts(
+      pricing,
+      'full_day',
+      new Date('2026-10-18T12:00:00Z'),
+      new Date('2026-10-19T12:45:00Z')
+    )
+    assert.equal(result.days, 1)
+    assert.equal(result.expected, 20000)
+  })
+
+  test('la règle du bien remplace les valeurs par défaut', ({ assert }) => {
+    const strict: PropertyPricing = {
+      ...pricing,
+      late_checkout_grace_minutes: 0,
+      late_checkout_half_day_hours: 0,
+    }
+    // Sans tolérance ni demi-journée, tout dépassement entame un jour.
+    const result = computeOwnerBookingAmounts(
+      strict,
+      'full_day',
+      new Date('2026-10-18T12:00:00Z'),
+      new Date('2026-10-19T12:30:00Z')
+    )
+    assert.equal(result.days, 2)
+    assert.equal(result.expected, 40000)
+  })
+
+  test('un choix explicite inférieur au minimum de séjour est refusé', ({ assert }) => {
+    const strict: PropertyPricing = { ...pricing, minimum_stay_days: 2 }
+    assert.throws(
+      () =>
+        computeOwnerBookingAmounts(
+          strict,
+          'full_day',
+          new Date('2026-10-18T12:00:00Z'),
+          new Date('2026-10-19T15:00:00Z'),
+          1
+        ),
+      /Séjour minimum de 2 jour\(s\)/
+    )
+  })
 })

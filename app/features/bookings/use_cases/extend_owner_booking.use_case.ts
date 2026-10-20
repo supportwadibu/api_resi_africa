@@ -5,8 +5,10 @@ import { DomainError } from '#utils/domain_error'
 import { findExtensionConflict, toPeriods } from '../availability.ts'
 import type { BookingDto } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
+import { syncReferrerCommissionExpense } from '../referrer_expense.ts'
 import { computeOwnerBookingAmounts } from './create_owner_booking.use_case.ts'
 import { withReferrerCommission } from '../referrer.ts'
+import { lateCheckoutFeeFor } from '../stay_pricing.ts'
 
 /**
  * Champs écrits par la prolongation d'un séjour comptoir.
@@ -25,12 +27,16 @@ export function buildExtensionPatch(
   days: number,
   expected: number,
   received: number,
-  discountPercent = 0
+  discountPercent = 0,
+  lateCheckoutFee = 0
 ): Record<string, unknown> {
   return {
     end_date: checkOut,
     check_out_at: checkOut,
     days_count: days,
+    // La nouvelle sortie a son propre dépassement : celui de l'ancienne ne
+    // tient plus.
+    late_checkout_fee: lateCheckoutFee,
     // Le séjour rallongé peut franchir un palier : le taux suit la nouvelle
     // durée, comme le montant attendu calculé dessus.
     duration_discount_percent: discountPercent,
@@ -63,19 +69,46 @@ export function buildExtensionPatch(
  * que la prolongation peut franchir profite alors au client, comme en ligne.
  */
 export function extendedAgreedAmount(
-  current: { days: number; expected: number; received: number; agreedUnitPrice?: number | null },
-  extended: { days: number; expected: number }
+  current: AgreedStay,
+  extended: { days: number; expected: number; lateCheckout?: boolean }
 ): number {
-  const unit = current.agreedUnitPrice
-  if (typeof unit === 'number' && Number.isFinite(unit)) {
-    return Math.round(unit * extended.days)
-  }
-
-  const negotiated = current.received !== current.expected
-  if (!negotiated || current.days <= 0) return extended.expected
+  const rate = agreedDailyRate(current)
+  if (rate === null) return extended.expected
 
   // Arrondi au franc : le FCFA n'a pas de subdivision en circulation.
-  return Math.round((current.received / current.days) * extended.days)
+  return Math.round(rate * extended.days) + extendedLateCheckoutFee(current, extended)
+}
+
+/**
+ * Supplément de départ tardif d'un séjour prolongé : une demi-journée au tarif
+ * convenu s'il y en a un, au tarif de la grille sinon — le même tarif que les
+ * jours ajoutés.
+ */
+export function extendedLateCheckoutFee(
+  current: AgreedStay,
+  extended: { lateCheckout?: boolean; lateCheckoutFee?: number }
+): number {
+  if (!extended.lateCheckout) return 0
+  const rate = agreedDailyRate(current)
+  return rate === null ? (extended.lateCheckoutFee ?? 0) : lateCheckoutFeeFor(rate)
+}
+
+interface AgreedStay {
+  days: number
+  expected: number
+  received: number
+  agreedUnitPrice?: number | null
+}
+
+/** Tarif journalier négocié, `null` pour un séjour au tarif de la grille. */
+function agreedDailyRate(current: AgreedStay): number | null {
+  const unit = current.agreedUnitPrice
+  if (typeof unit === 'number' && Number.isFinite(unit)) return unit
+
+  const negotiated = current.received !== current.expected
+  if (!negotiated || current.days <= 0) return null
+
+  return current.received / current.days
 }
 
 /**
@@ -136,12 +169,13 @@ export class ExtendOwnerBookingUseCase {
       throw new DomainError('property_not_found', 'Bien introuvable.', 404)
     }
 
-    const { days, expected, discountPercent } = computeOwnerBookingAmounts(
+    const amounts = computeOwnerBookingAmounts(
       property.pricing,
       stayType,
       checkIn,
       input.check_out_at
     )
+    const { days, expected, discountPercent } = amounts
 
     // À défaut de montant renégocié, le prix suit le tarif convenu à la
     // réservation : laisser `received_amount` à sa valeur d'origine
@@ -151,19 +185,21 @@ export class ExtendOwnerBookingUseCase {
     // Replis sur l'historique : les réservations antérieures à la saisie
     // comptoir ne portent ni `expected_amount` ni `received_amount`, et leur
     // `total_amount` vaut les deux.
+    //
+    // Le supplément de départ tardif en cours est retiré des montants : il
+    // tarifait l'ancienne sortie, et le diviser par les jours gonflerait le
+    // tarif journalier de la prolongation.
+    const currentFee = booking.late_checkout_fee ?? 0
     const currentReceived = booking.received_amount ?? booking.total_amount
-    const received =
-      input.received_amount ??
-      extendedAgreedAmount(
-        {
-          days: booking.days_count ?? booking.nights_count ?? 0,
-          expected: booking.expected_amount ?? currentReceived,
-          received: currentReceived,
-          // Absent de l'historique : le repli sur le quotient s'applique.
-          agreedUnitPrice: booking.agreed_unit_price ?? null,
-        },
-        { days, expected }
-      )
+    const current = {
+      days: booking.days_count ?? booking.nights_count ?? 0,
+      expected: (booking.expected_amount ?? currentReceived) - currentFee,
+      received: currentReceived - currentFee,
+      // Absent de l'historique : le repli sur le quotient s'applique.
+      agreedUnitPrice: booking.agreed_unit_price ?? null,
+    }
+    const received = input.received_amount ?? extendedAgreedAmount(current, amounts)
+    const lateCheckoutFee = extendedLateCheckoutFee(current, amounts)
 
     let updated
     try {
@@ -171,7 +207,14 @@ export class ExtendOwnerBookingUseCase {
         id,
         withReferrerCommission(
           booking,
-          buildExtensionPatch(input.check_out_at, days, expected, received, discountPercent)
+          buildExtensionPatch(
+            input.check_out_at,
+            days,
+            expected,
+            received,
+            discountPercent,
+            lateCheckoutFee
+          )
         ),
         { owner_id: ownerId },
         (active) =>
@@ -191,6 +234,8 @@ export class ExtendOwnerBookingUseCase {
     if (!updated) {
       throw new DomainError('booking_not_found', 'Réservation introuvable.', 404)
     }
+
+    await syncReferrerCommissionExpense(updated)
 
     return BookingRepository.toDto(updated)
   }

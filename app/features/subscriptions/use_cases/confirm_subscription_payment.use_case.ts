@@ -1,5 +1,7 @@
 import logger from '@adonisjs/core/services/logger'
 
+import { planTierLabel, readPlanTier } from '#features/plans/plan_tier'
+import Expense from '#models/expense'
 import WaveSubscriptionService from '#services/wave_subscription_service'
 import { DomainError } from '#utils/domain_error'
 
@@ -88,6 +90,11 @@ export class ConfirmSubscriptionPaymentUseCase {
           ),
         { provider_transaction_id: session.transaction_id }
       )
+
+      if (result?.activated) {
+        await this.recordSubscriptionExpense(payment, now)
+      }
+
       return SubscriptionPaymentRepository.toDto(result?.payment ?? payment)
     }
 
@@ -111,6 +118,34 @@ export class ConfirmSubscriptionPaymentUseCase {
         502
       )
     }
+  }
+
+  /**
+   * Enregistre le paiement d'abonnement comme dépense du propriétaire.
+   *
+   * Idempotent via `createOnce` : le `client_request_id` est dérivé de la
+   * référence de paiement, si bien que le webhook et le retour du
+   * propriétaire, qui confirment au même instant, ne créent qu'une ligne.
+   *
+   * Ni `property_id` ni `residence_id` : l'abonnement est un coût
+   * plateforme, non imputable à un bien ou une résidence.
+   */
+  private async recordSubscriptionExpense(
+    payment: SubscriptionPaymentRecord,
+    spentAt: Date
+  ): Promise<void> {
+    const tier = planTierLabel(readPlanTier(payment.plan_tier))
+
+    await Expense.createOnce({
+      owner_id: payment.user_id,
+      property_id: null,
+      residence_id: null,
+      category: 'subscription',
+      amount: Number(payment.amount),
+      spent_at: spentAt,
+      note: `Abonnement ${tier}`,
+      client_request_id: `subscription:${payment._id}`,
+    })
   }
 }
 

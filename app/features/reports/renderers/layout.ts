@@ -220,6 +220,11 @@ const STYLE = `
  * propriétaire, jamais une absence de donnée à masquer.
  */
 function residenceLabel(context: ReportContext): string {
+  if (context.property_title) {
+    return context.residence_name
+      ? `${context.residence_name} — ${context.property_title}`
+      : context.property_title
+  }
   return context.residence_name ?? 'Toutes mes résidences'
 }
 

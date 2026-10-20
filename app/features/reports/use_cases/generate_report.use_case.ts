@@ -184,9 +184,20 @@ export class GenerateReportUseCase {
       throw new DomainError('residence_not_found', 'Résidence introuvable.', 404)
     }
 
+    // Même garde que pour la résidence : un logement inconnu ou appartenant à
+    // un autre propriétaire doit lever 404 avant toute lecture de données.
+    const property = input.property_id
+      ? await this.propertyRepo.findById(input.property_id)
+      : null
+
+    if (input.property_id && (!property || property.owner_id !== owner_id)) {
+      throw new DomainError('property_not_found', 'Logement introuvable.', 404)
+    }
+
     const context: ReportContext = {
       owner_name: owner.full_name,
       residence_name: residence?.name ?? null,
+      property_title: property?.title ?? null,
       period,
       generated_at: now,
     }
@@ -250,6 +261,7 @@ export class GenerateReportUseCase {
         owner_id,
         type: input.type,
         residence_id: input.residence_id ?? null,
+        property_id: input.property_id ?? null,
         // Bornes de la fenêtre de calcul — celles qui ont effectivement servi
         // à composer le rapport, pas les dates affichables `from_date`/
         // `to_date` du DTO, dont la borne de fin est inclusive quand celle-ci
@@ -301,8 +313,9 @@ export class GenerateReportUseCase {
         from: window.from,
         to: window.to,
         residence_id: input.residence_id,
+        property_id: input.property_id,
       }),
-      this.expensesByCategory(owner_id, input.residence_id, window),
+      this.expensesByCategory(owner_id, input.residence_id, input.property_id, window),
     ])
 
     const data: FinancialReportData = {
@@ -329,13 +342,20 @@ export class GenerateReportUseCase {
   private async expensesByCategory(
     owner_id: string,
     residence_id: string | undefined,
+    property_id: string | undefined,
     window: { from: Date; to: Date }
   ): Promise<FinancialReportData['expenses_by_category']> {
-    const expenses = await this.expenseRepo.findAllForOwner(owner_id, window)
+    const expenses = await this.expenseRepo.findAllForOwner(
+      owner_id,
+      window,
+      property_id ? [property_id] : null
+    )
 
-    const scoped = residence_id
-      ? await this.filterByResidence(expenses, owner_id, residence_id)
-      : expenses
+    const scoped = property_id
+      ? expenses.filter((e) => e.property_id === property_id)
+      : residence_id
+        ? await this.filterByResidence(expenses, owner_id, residence_id)
+        : expenses
 
     const merged = new Map<string, number>()
     for (const expense of scoped) {
@@ -373,10 +393,13 @@ export class GenerateReportUseCase {
     window: { from: Date; to: Date },
     context: ReportContext
   ): Promise<string> {
-    const residenceScope = input.residence_id ? { residence_id: input.residence_id } : {}
+    const bookingScope = {
+      ...(input.residence_id ? { residence_id: input.residence_id } : {}),
+      ...(input.property_id ? { property_ids: [input.property_id] } : {}),
+    }
 
     const [bookings, properties] = await Promise.all([
-      this.bookingRepo.findByPeriod(owner_id, window, residenceScope),
+      this.bookingRepo.findByPeriod(owner_id, window, bookingScope),
       this.propertyRepo.paginate({
         owner_id,
         residence_id: input.residence_id,
@@ -394,9 +417,11 @@ export class GenerateReportUseCase {
     //   statut) : une résidence de dix unités reste une résidence de dix
     //   unités, et l'occupation comparée d'un mois à l'autre doit se lire sur
     //   un dénominateur qui ne bouge pas.
-    const exploitedProperties = input.residence_id
-      ? properties.data
-      : properties.data.filter((property) => property.status !== 'inactive')
+    const exploitedProperties = input.property_id
+      ? properties.data.filter((property) => property.id === input.property_id)
+      : input.residence_id
+        ? properties.data
+        : properties.data.filter((property) => property.status !== 'inactive')
 
     // Fenêtre **coupée à aujourd'hui**, au numérateur comme au dénominateur —
     // exactement comme `FinanceRepository.overview` : le rapport doit
@@ -467,8 +492,11 @@ export class GenerateReportUseCase {
     window: { from: Date; to: Date },
     context: ReportContext
   ): Promise<string> {
-    const residenceScope = input.residence_id ? { residence_id: input.residence_id } : {}
-    const bookings = await this.bookingRepo.findByPeriod(owner_id, window, residenceScope)
+    const bookingScope = {
+      ...(input.residence_id ? { residence_id: input.residence_id } : {}),
+      ...(input.property_id ? { property_ids: [input.property_id] } : {}),
+    }
+    const bookings = await this.bookingRepo.findByPeriod(owner_id, window, bookingScope)
 
     if (bookings.length === 0) {
       return renderReservationsReport([], context)
@@ -542,11 +570,14 @@ export class GenerateReportUseCase {
     context: ReportContext,
     commune: string | null
   ): Promise<{ html: string; footer: string }> {
-    const residenceScope = input.residence_id ? { residence_id: input.residence_id } : {}
+    const bookingScope = {
+      ...(input.residence_id ? { residence_id: input.residence_id } : {}),
+      ...(input.property_id ? { property_ids: [input.property_id] } : {}),
+    }
     const bookings = await this.bookingRepo.findByPeriod(
       owner_id,
       context.period.window,
-      residenceScope
+      bookingScope
     )
 
     const offlineIds = bookings.filter((b) => b.source === 'offline').map((b) => b.client_id)
@@ -557,10 +588,17 @@ export class GenerateReportUseCase {
       this.userRepo.findSummaries([...new Set(onlineIds)]),
     ])
 
+    // L'en-tête identifie l'établissement : le titre du logement quand on
+    // cible une unité, la résidence si elle est choisie, le nom du
+    // propriétaire sinon.
+    const hotel = context.property_title
+      ? (context.residence_name
+          ? `${context.residence_name} — ${context.property_title}`
+          : context.property_title)
+      : context.residence_name ?? context.owner_name
+
     const header = {
-      // Sans résidence choisie, l'établissement est celui du propriétaire :
-      // son nom est le seul que le registre puisse porter sans inventer.
-      hotel: context.residence_name ?? context.owner_name,
+      hotel,
       commune: commune && commune.trim() ? commune.trim() : null,
       from_date: context.period.from_date,
       to_date: context.period.to_date,

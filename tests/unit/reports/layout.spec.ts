@@ -11,6 +11,7 @@ import {
 const context = {
   owner_name: 'Kouassi & Fils',
   residence_name: 'Résidence Les Cocotiers',
+  property_title: null,
   period: {
     window: { from: new Date('2026-03-01T00:00:00Z'), to: new Date('2026-04-01T00:00:00Z') },
     label: 'Mars 2026',
@@ -112,6 +113,20 @@ test.group('reportFooterText', () => {
     assert.equal(
       reportFooterText({ ...context, residence_name: null }),
       'RESI · Toutes mes résidences · Mars 2026'
+    )
+  })
+
+  test('porte le nom de la résidence et du logement quand une unité est ciblée', ({ assert }) => {
+    assert.equal(
+      reportFooterText({ ...context, property_title: 'Villa Palmier' }),
+      'RESI · Résidence Les Cocotiers — Villa Palmier · Mars 2026'
+    )
+  })
+
+  test('porte uniquement le logement quand la résidence est absente', ({ assert }) => {
+    assert.equal(
+      reportFooterText({ ...context, residence_name: null, property_title: 'Studio Plateau' }),
+      'RESI · Studio Plateau · Mars 2026'
     )
   })
 

@@ -17,6 +17,8 @@ export interface ReportGenerationDocument {
   type: ReportType
   /** `null` : rapport portant sur l'ensemble du parc, pas une résidence précise. */
   residence_id: string | null
+  /** `null` : rapport non restreint à un logement unique. */
+  property_id?: string | null
   period_from: Date
   period_to: Date
   /** Octets du PDF produit, pour suivre le poids moyen d'un rapport. */

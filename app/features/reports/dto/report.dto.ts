@@ -19,6 +19,8 @@ export interface GenerateReportInput {
   to?: string
   /** Absent : toutes les résidences du propriétaire. */
   residence_id?: string
+  /** Absent : tous les logements de la résidence (ou du parc). */
+  property_id?: string
   /**
    * Commune imprimée en tête du registre de police, saisie à l'édition :
    * aucune donnée ne la porte. Absente, la ville de la résidence sert de repli.
@@ -34,6 +36,8 @@ export interface ReportContext {
   owner_name: string
   /** Nom de la résidence, ou `null` pour l'ensemble du parc. */
   residence_name: string | null
+  /** Titre du logement, ou `null` quand le rapport porte sur plusieurs. */
+  property_title?: string | null
   period: ResolvedPeriod
   /** Instant d'édition, imprimé en page de garde. */
   generated_at: Date
