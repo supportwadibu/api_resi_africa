@@ -135,8 +135,20 @@ export class InitializeBookingPaymentUseCase {
     // inconnue, ou échue sans que Wave l'ait encore basculée : elle est fermée
     // chez Wave par précaution, et close ici.
     if (settled?.status === 'pending') {
-      await this.wave.expireCheckoutSession(pending.provider_checkout_id).catch(() => false)
-      await this.paymentRepo.updateStatus(pending.id, 'expired', { expired_at: new Date() })
+      const closed = await this.wave
+        .expireCheckoutSession(pending.provider_checkout_id)
+        .catch(() => false)
+
+      // Fermeture refusée : la session a pu être payée entre la lecture et la
+      // fermeture (409). La marquer expirée perdrait ce paiement — le webhook
+      // trouverait un paiement clos et ne créditerait rien. L'issue est relue.
+      const after = closed ? settled : await this.confirmation.executeForBooking(bookingId)
+      if (after?.status === 'success') {
+        throw new DomainError('booking_already_paid', 'Cette réservation est déjà payée.', 409)
+      }
+      if (after?.status === 'pending') {
+        await this.paymentRepo.updateStatus(pending.id, 'expired', { expired_at: new Date() })
+      }
     }
 
     return null

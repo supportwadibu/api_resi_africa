@@ -1,4 +1,5 @@
 /* eslint-disable prettier/prettier */
+import { ClosePendingBookingPaymentUseCase } from '#features/booking_payments/use_cases/close_pending_booking_payment.use_case'
 import { RefundBookingPaymentUseCase } from '#features/booking_payments/use_cases/refund_booking_payment.use_case'
 import { DomainError } from '#utils/domain_error'
 
@@ -16,7 +17,8 @@ import BookingRepository from '../repositories/booking_repository.ts'
 export class CancelBookingUseCase {
   constructor(
     private repo: BookingRepository = new BookingRepository(),
-    private refunds: RefundBookingPaymentUseCase = new RefundBookingPaymentUseCase()
+    private refunds: RefundBookingPaymentUseCase = new RefundBookingPaymentUseCase(),
+    private pendingPayments: ClosePendingBookingPaymentUseCase = new ClosePendingBookingPaymentUseCase()
   ) {}
 
   async execute(
@@ -28,6 +30,9 @@ export class CancelBookingUseCase {
     if (!current || current.client_id !== client_id || current.status !== 'confirmed') {
       throw new DomainError('booking_not_found', 'Réservation introuvable.', 404)
     }
+
+    // Avant de chercher le paiement encaissé : voir `CancelOwnerBookingUseCase`.
+    await this.pendingPayments.execute(id)
 
     const payment = await this.refunds.findPaid(id)
     const refunded = payment

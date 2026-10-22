@@ -27,4 +27,24 @@ export default class ProprioFinanceController {
     })
     return ctx.response.ok({ data: overview })
   }
+
+  /**
+   * Revenus et taux d'occupation de la période, sans charges ni bénéfice :
+   * le tableau de bord de RESI Basic. `residence_id` et `property_id` sont
+   * ignorés — le suivi par résidence relève de RESI Pro.
+   */
+  async performance(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const payload = await ctx.request.validateUsing(financeOverviewValidator, {
+      data: ctx.request.qs(),
+    })
+
+    const performance = await new GetFinanceOverviewUseCase().executePerformance(userId, {
+      from: payload.from?.toJSDate(),
+      to: payload.to?.toJSDate(),
+    })
+    return ctx.response.ok({ data: performance })
+  }
 }

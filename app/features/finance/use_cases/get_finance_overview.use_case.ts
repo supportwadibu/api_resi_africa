@@ -1,6 +1,7 @@
 import { DomainError } from '#utils/domain_error'
 
 import { buildManagerOverview } from '../manager_overview.ts'
+import { toPerformanceOverview, type PerformanceOverviewDto } from '../performance_overview.ts'
 
 import type { FinanceOverviewDto } from '../dto/finance.dto.ts'
 import type { ManagerOverviewDto } from '../manager_overview.ts'
@@ -55,6 +56,20 @@ export class GetFinanceOverviewUseCase {
     }
 
     return overview
+  }
+
+  /**
+   * Relevé de RESI Basic : revenus et occupation du parc entier.
+   *
+   * Ni résidence ni logement : le suivi des performances de chaque résidence
+   * relève de RESI Pro. Le relevé complet est calculé puis réduit, plutôt
+   * qu'un second calcul : les deux écrans doivent annoncer le même CA.
+   */
+  async executePerformance(
+    owner_id: string,
+    range: { from?: Date; to?: Date } = {}
+  ): Promise<PerformanceOverviewDto> {
+    return toPerformanceOverview(await this.execute(owner_id, range))
   }
 }
 

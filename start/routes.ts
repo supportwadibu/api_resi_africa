@@ -250,6 +250,9 @@ router
           .group(() => {
             router.get('properties/stats', [ProprioPropertyController, 'stats'])
             router.get('bookings/stats', [ProprioBookingController, 'stats'])
+            // Revenus et occupation d'une période, sans charges : le relevé
+            // complet, `finance/overview`, relève de RESI Pro.
+            router.get('finance/performance', [ProprioFinanceController, 'performance'])
           })
           .as('dashboard')
           .use(middleware.plan())

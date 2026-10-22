@@ -1,3 +1,4 @@
+import { ClosePendingBookingPaymentUseCase } from '#features/booking_payments/use_cases/close_pending_booking_payment.use_case'
 import { RefundBookingPaymentUseCase } from '#features/booking_payments/use_cases/refund_booking_payment.use_case'
 import Booking from '#models/booking'
 import { DomainError } from '#utils/domain_error'
@@ -23,13 +24,21 @@ import BookingRepository from '../repositories/booking_repository.ts'
  * active et le propriétaire peut réessayer.
  */
 export class CancelOwnerBookingUseCase {
-  constructor(private refunds: RefundBookingPaymentUseCase = new RefundBookingPaymentUseCase()) {}
+  constructor(
+    private refunds: RefundBookingPaymentUseCase = new RefundBookingPaymentUseCase(),
+    private pendingPayments: ClosePendingBookingPaymentUseCase = new ClosePendingBookingPaymentUseCase()
+  ) {}
 
   async execute(id: string, ownerId: string, input: CancelBookingInput = {}): Promise<BookingDto> {
     const booking = await Booking.findById(id)
     if (!booking || booking.owner_id !== ownerId) {
       throw new DomainError('booking_not_found', 'Réservation introuvable.', 404)
     }
+
+    // Avant de chercher le paiement encaissé : une session restée ouverte
+    // laisserait le client payer après l'annulation, et une session payée à
+    // l'instant doit être vue pour que son sort soit décidé ici.
+    await this.pendingPayments.execute(id)
 
     const onlinePayment = await this.refunds.findPaid(id)
     const patch = buildCancellationPatch(

@@ -22,9 +22,12 @@ export class ConfirmBookingPaymentUseCase {
     private bookingRepo: Pick<BookingRepository, 'findById'> = new BookingRepository(),
     private paymentRepo: Pick<
       BookingPaymentRepository,
-      'findLatestByBooking' | 'findByProviderCheckoutId' | 'updateStatus'
+      'findLatestByBooking' | 'findByProviderCheckoutId' | 'findSucceededByBooking' | 'updateStatus'
     > = new BookingPaymentRepository(),
-    private wave: Pick<WaveClient, 'getCheckoutSession'> = new WaveClient(),
+    private wave: Pick<
+      WaveClient,
+      'getCheckoutSession' | 'refundCheckoutSession'
+    > = new WaveClient(),
     private credit: Pick<CreditBookingPaymentUseCase, 'execute'> = new CreditBookingPaymentUseCase()
   ) {}
 
@@ -87,6 +90,11 @@ export class ConfirmBookingPaymentUseCase {
         )
       }
 
+      const booking = await this.bookingRepo.findById(payment.booking_id)
+
+      const unwanted = await this.unwantedPaymentReason(payment, booking)
+      if (unwanted) return this.giveBack(payment, session.transaction_id, unwanted, now)
+
       const paid =
         (await this.paymentRepo.updateStatus(payment.id, 'success', {
           provider_transaction_id: session.transaction_id,
@@ -95,7 +103,6 @@ export class ConfirmBookingPaymentUseCase {
 
       // L'argent est chez RESI : il entre au portefeuille de la résidence,
       // d'où le propriétaire le retire. Idempotent, comme la confirmation.
-      const booking = await this.bookingRepo.findById(payment.booking_id)
       await this.credit.execute({
         owner_id: payment.owner_id,
         residence_id: booking?.residence_id ?? null,
@@ -147,6 +154,63 @@ export class ConfirmBookingPaymentUseCase {
 
     // `open` / `processing` : le client n'a pas encore payé.
     return payment
+  }
+
+  /**
+   * Un paiement réussi que la réservation n'attend plus, et pourquoi.
+   *
+   * - `booking_cancelled` : payé sur une session restée ouverte après
+   *   l'annulation. L'annulation ferme la session, mais le client peut payer
+   *   entre la lecture et la fermeture.
+   * - `duplicate_payment` : un autre paiement de la même réservation a déjà
+   *   réussi — deux sessions ouvertes par un double appui, payées toutes deux.
+   *
+   * Le paiement lui-même n'est pas un doublon : deux confirmations simultanées
+   * du même paiement le voient toutes deux, l'une l'ayant déjà marqué réussi.
+   */
+  private async unwantedPaymentReason(
+    payment: BookingPaymentDto,
+    booking: { status?: string } | null
+  ): Promise<'booking_cancelled' | 'duplicate_payment' | null> {
+    if (booking?.status === 'cancelled') return 'booking_cancelled'
+
+    const succeeded = await this.paymentRepo.findSucceededByBooking(payment.booking_id)
+    if (succeeded && succeeded.id !== payment.id) return 'duplicate_payment'
+
+    return null
+  }
+
+  /**
+   * Rend au client, par Wave, un paiement que la réservation n'attend plus.
+   *
+   * Rien n'est crédité au portefeuille, et rien n'en est donc débité. Si Wave
+   * refuse, rien n'est écrit et l'erreur remonte : le paiement reste en attente,
+   * le webhook répond en erreur, et Wave le rejoue jusqu'à trois jours — chaque
+   * rejeu retente le remboursement. Rejouer est sans risque, Wave ne rembourse
+   * jamais deux fois une session.
+   */
+  private async giveBack(
+    payment: BookingPaymentDto,
+    transactionId: string | null,
+    reason: 'booking_cancelled' | 'duplicate_payment',
+    now: Date
+  ): Promise<BookingPaymentDto> {
+    try {
+      await this.wave.refundCheckoutSession(payment.provider_checkout_id!)
+    } catch (error) {
+      logger.error({ err: error, payment: payment.id, reason }, 'Remboursement Wave impossible')
+      throw toPaymentDomainError(error)
+    }
+
+    logger.warn({ payment: payment.id, booking: payment.booking_id, reason }, 'Paiement rendu')
+    return (
+      (await this.paymentRepo.updateStatus(payment.id, 'refunded', {
+        provider_transaction_id: transactionId,
+        paid_at: now,
+        refunded_at: now,
+        failure_reason: reason,
+      })) ?? payment
+    )
   }
 
   private async readSession(checkoutId: string) {

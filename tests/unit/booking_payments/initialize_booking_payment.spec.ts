@@ -31,11 +31,16 @@ function useCase(options: {
   pending?: Record<string, unknown> | null
   session?: Record<string, unknown> | null
   settled?: Record<string, unknown> | null
+  /** Wave refuse de fermer la session (409 : payée à l'instant). */
+  expireRefused?: boolean
+  /** Issue constatée après un refus de fermeture. */
+  settledAfterRefusal?: Record<string, unknown> | null
 }) {
   const created: Array<Record<string, unknown>> = []
   const statuses: string[] = []
   let checkouts = 0
   let expired = 0
+  let confirmations = 0
 
   const init = new InitializeBookingPaymentUseCase(
     { findById: async () => booking } as never,
@@ -59,10 +64,13 @@ function useCase(options: {
       getCheckoutSession: async () => options.session ?? null,
       expireCheckoutSession: async () => {
         expired++
-        return true
+        return !options.expireRefused
       },
     } as never,
-    { executeForBooking: async () => options.settled ?? null } as never
+    {
+      executeForBooking: async () =>
+        confirmations++ === 0 ? (options.settled ?? null) : (options.settledAfterRefusal ?? null),
+    } as never
   )
 
   return {
@@ -102,6 +110,23 @@ test.group('InitializeBookingPaymentUseCase', () => {
     assert.equal(expired(), 1)
     assert.deepEqual(statuses, ['expired'])
     assert.equal(checkouts(), 1)
+  })
+
+  test('fermeture refusée car payée à l’instant : constatée, jamais close', async ({ assert }) => {
+    // Wave répond 409 à la fermeture d'une session payée entre la lecture et
+    // la fermeture. La marquer expirée perdrait un paiement réel : le webhook
+    // trouverait un paiement clos et ne créditerait rien.
+    const { init, statuses, checkouts } = useCase({
+      pending,
+      session: { ...openSession, when_expires: new Date(Date.now() - 60 * 1000) },
+      settled: { status: 'pending' },
+      expireRefused: true,
+      settledAfterRefusal: { status: 'success' },
+    })
+
+    await assert.rejects(() => init.execute('b1', 'c1'), 'Cette réservation est déjà payée.')
+    assert.notInclude(statuses, 'expired')
+    assert.equal(checkouts(), 0)
   })
 
   test('payée entre-temps : constatée, jamais repayée', async ({ assert }) => {
