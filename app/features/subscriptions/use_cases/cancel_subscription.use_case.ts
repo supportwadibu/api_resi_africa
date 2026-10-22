@@ -2,10 +2,7 @@
 import { DomainError } from '#utils/domain_error'
 import { SubscriptionStatusEnum } from '#utils/enums/subscription_status'
 
-import type {
-  CancelSubscriptionInput,
-  SubscriptionDto,
-} from '../dto/subscription.dto.ts'
+import type { CancelSubscriptionInput, SubscriptionDto } from '../dto/subscription.dto.ts'
 import SubscriptionRepository from '../repositories/subscription_repository.ts'
 
 /**
@@ -21,11 +18,7 @@ export class CancelSubscriptionUseCase {
       throw new DomainError('subscription_not_found', 'Souscription introuvable.', 404)
     }
     if (current.status === 'expired' || current.status === 'cancelled') {
-      throw new DomainError(
-        'subscription_not_active',
-        "La souscription n'est plus active.",
-        409
-      )
+      throw new DomainError('subscription_not_active', "La souscription n'est plus active.", 409)
     }
 
     const updated = await this.repo.updateStatus(

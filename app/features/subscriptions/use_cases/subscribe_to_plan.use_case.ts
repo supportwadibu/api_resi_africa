@@ -5,10 +5,7 @@ import { DomainError } from '#utils/domain_error'
 import { SubscriptionStatusEnum } from '#utils/enums/subscription_status'
 
 import PlanRepository from '../../plans/repositories/plan_repository.ts'
-import type {
-  SubscribeToPlanInput,
-  SubscriptionDto,
-} from '../dto/subscription.dto.ts'
+import type { SubscribeToPlanInput, SubscriptionDto } from '../dto/subscription.dto.ts'
 import SubscriptionRepository from '../repositories/subscription_repository.ts'
 
 /**

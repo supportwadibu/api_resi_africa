@@ -223,8 +223,12 @@ test.group('buildEarlyCheckOutPatch', () => {
     const quote = quoteEarlyCheckOut(booking, departure, departure)
 
     const patch = buildEarlyCheckOutPatch(
-      booking, quote, quote.options.with_penalty.amount, departure,
-      'with_penalty', quote.options.with_penalty.penalty
+      booking,
+      quote,
+      quote.options.with_penalty.amount,
+      departure,
+      'with_penalty',
+      quote.options.with_penalty.penalty
     )
 
     assert.equal(patch.early_checkout_option, 'with_penalty')
