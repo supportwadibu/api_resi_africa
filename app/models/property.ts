@@ -466,14 +466,17 @@ export interface OwnerPropertyStats {
 /**
  * Les agrégats serveur doivent-ils céder la place à un comptage en mémoire ?
  *
- * Vrai pour les deux listes que Firestore ne sait pas passer à `in` : la liste
- * vide et celle de plus de 30 entrées. Faux sans périmètre, ce qui laisse le
- * chemin du propriétaire strictement inchangé — cinq agrégats serveur, aucun
- * document rapatrié.
+ * Vrai pour tout périmètre, quelle que soit sa taille. Firestore refuse la
+ * somme de `metadata.views_count` sur un filtre `documentId() in` — erreur
+ * INVALID_ARGUMENT, qu'aucun index ne lève — si bien que le relevé d'un
+ * logement seul, ou d'un gérant de moins de 31 logements, échouait en 500. Un
+ * périmètre compte peu de logements : les relire coûte moins que six agrégats.
+ *
+ * Faux sans périmètre, ce qui laisse le chemin du propriétaire strictement
+ * inchangé — six agrégats serveur, aucun document rapatrié.
  */
 export function needsInMemoryStats(scopePropertyIds?: string[] | null): boolean {
-  if (!Array.isArray(scopePropertyIds)) return false
-  return scopePropertyIds.length === 0 || scopePropertyIds.length > FIRESTORE_IN_LIMIT
+  return Array.isArray(scopePropertyIds)
 }
 
 /**
@@ -757,30 +760,32 @@ const Property = {
     ownerId: string,
     scopePropertyIds?: string[] | null
   ): Promise<OwnerPropertyStats> {
-    let base = properties().where(
+    const base = properties().where(
       'owner_id',
       '==',
       ownerId
     ) as FirebaseFirestore.Query<PropertyDocument>
 
-    // Les deux listes que `in` refuse — vide, ou de plus de 30 — imposent de
-    // rapatrier les documents et de recompter : un agrégat serveur ne sait pas
-    // filtrer ce que la requête n'exprime pas.
+    // Tout périmètre se recompte en mémoire : voir `needsInMemoryStats`.
     if (needsInMemoryStats(scopePropertyIds)) {
       if (scopePropertyIds!.length === 0) {
         return { total: 0, published: 0, rented: 0, draft: 0, inactive: 0, total_views: 0 }
       }
 
-      const snapshot = await base.get()
+      // Dans la limite de `in`, seuls les logements du périmètre sont lus — une
+      // lecture simple, que Firestore accepte là où il refuse l'agrégat.
+      // Au-delà, le parc entier, filtré après lecture. Le filtre en mémoire
+      // reste dans les deux cas : il ne retire rien quand Firestore a filtré.
+      const query =
+        scopePropertyIds!.length <= FIRESTORE_IN_LIMIT
+          ? base.where(FieldPath.documentId(), 'in', scopePropertyIds)
+          : base
+      const snapshot = await query.get()
       const scoped = toDocs<PropertyDocument>(snapshot.docs).filter((doc) =>
         scopePropertyIds!.includes(doc._id)
       )
 
       return computeStatsInMemory(scoped)
-    }
-
-    if (scopePropertyIds) {
-      base = base.where(FieldPath.documentId(), 'in', scopePropertyIds)
     }
 
     const [total, published, rented, draft, inactive, totalViews] = await Promise.all([

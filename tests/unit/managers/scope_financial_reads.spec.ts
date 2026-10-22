@@ -130,7 +130,7 @@ test.group('Property.statsByOwner : périmètre', () => {
     assert.equal(computeStatsInMemory([ancien]).total_views, 0)
   })
 
-  test('les bornes de l’opérateur `in` décident du mode de calcul', ({ assert }) => {
+  test('tout périmètre se compte en mémoire', ({ assert }) => {
     const ids = (size: number) => Array.from({ length: size }, (_, i) => `unit-${i}`)
 
     // Sans périmètre, les agrégats serveur restent employés : le chemin du
@@ -138,8 +138,11 @@ test.group('Property.statsByOwner : périmètre', () => {
     assert.isFalse(needsInMemoryStats(null))
     assert.isFalse(needsInMemoryStats(undefined))
 
-    assert.isFalse(needsInMemoryStats(ids(1)))
-    assert.isFalse(needsInMemoryStats(ids(FIRESTORE_IN_LIMIT)))
+    // Même dans la limite de `in` : Firestore refuse la somme de
+    // `metadata.views_count` sur un filtre `documentId() in` (INVALID_ARGUMENT,
+    // aucun index ne peut la servir). C'était la panne du relevé d'un logement.
+    assert.isTrue(needsInMemoryStats(ids(1)))
+    assert.isTrue(needsInMemoryStats(ids(FIRESTORE_IN_LIMIT)))
     assert.isTrue(needsInMemoryStats(ids(FIRESTORE_IN_LIMIT + 1)))
     assert.isTrue(needsInMemoryStats([]))
   })
