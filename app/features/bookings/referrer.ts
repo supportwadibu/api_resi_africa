@@ -16,6 +16,12 @@ export interface Referrer {
 /**
  * Taux appliqué aux nouvelles réservations. Figé sur chaque réservation à sa
  * création : le changer ne réécrit pas les commissions déjà dues.
+ *
+ * La commission elle-même est figée à l'enregistrement, sur le montant
+ * convenu ce jour-là : un départ anticipé, une prolongation ou une
+ * modification ne la touchent pas. L'apporteur a amené un séjour de cinq jours
+ * à 50 000 F, il touche 5 000 F même si le client part au bout de trois. Seule
+ * l'annulation la retire (voir `mirroredCommissionAmount`).
  */
 export const REFERRER_COMMISSION_RATE = 0.1
 
@@ -42,26 +48,5 @@ export function buildReferrerFields(
     referrer: { name, phone: phone ? normalizePhone(phone) : null },
     referrer_commission_rate: REFERRER_COMMISSION_RATE,
     referrer_commission_amount: computeReferrerCommission(totalAmount, REFERRER_COMMISSION_RATE),
-  }
-}
-
-/**
- * Réaligne la commission sur un montant de séjour qui change.
- *
- * La commission suit ce que le client a réellement payé : une prolongation
- * l'augmente, un départ anticipé la réduit. Le taux reste celui figé à la
- * création. Le patch est rendu inchangé si la réservation n'a pas d'apporteur
- * ou si le montant ne bouge pas.
- */
-export function withReferrerCommission<T extends Record<string, unknown>>(
-  booking: { referrer?: Referrer | null; referrer_commission_rate?: number },
-  patch: T
-): T & { referrer_commission_amount?: number } {
-  const rate = booking.referrer_commission_rate
-  if (!booking.referrer || !rate || typeof patch.total_amount !== 'number') return patch
-
-  return {
-    ...patch,
-    referrer_commission_amount: computeReferrerCommission(patch.total_amount, rate),
   }
 }

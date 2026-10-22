@@ -106,8 +106,8 @@ test.group('renderFinancialReport', () => {
       context
     )
 
-    assert.include(withCommissions, 'Commissions apporteurs')
-    assert.notInclude(renderFinancialReport(data, context), 'Commissions apporteurs')
+    assert.include(withCommissions, 'Dont commissions apporteurs')
+    assert.notInclude(renderFinancialReport(data, context), 'commissions apporteurs')
   })
 
   test('porte la note sur la non-répartition des charges communes', ({ assert }) => {

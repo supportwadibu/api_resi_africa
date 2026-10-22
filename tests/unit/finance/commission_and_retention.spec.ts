@@ -2,20 +2,26 @@ import { test } from '@japa/runner'
 
 import {
   aggregateGrossRevenue,
-  isOperatingExpense,
-  operatingExpensesTotal,
+  expenseTotals,
+  expenseTotalsFromSummary,
   retainedDepositsAsRevenue,
 } from '#features/finance/repositories/finance_repository'
 
-test.group('isOperatingExpense', () => {
-  test('écarte le reflet de commission, déjà compté dans `commissions`', ({ assert }) => {
-    assert.isFalse(isOperatingExpense({ category: 'commission' }))
-    assert.isTrue(isOperatingExpense({ category: 'subscription' }))
-    assert.isTrue(isOperatingExpense({ category: 'electricity' }))
+test.group('expenseTotals', () => {
+  test('la commission est une dépense comme les autres', ({ assert }) => {
+    const totals = expenseTotals([
+      { category: 'electricity', amount: 15000 },
+      { category: 'commission', amount: 5000 },
+      { category: 'subscription', amount: 3000 },
+    ])
+
+    // Comptée une seule fois, dans `depenses` ; `commissions` n'en est que le
+    // détail.
+    assert.deepEqual(totals, { depenses: 23000, commissions: 5000 })
   })
 
-  test('retire les commissions du total agrégé', ({ assert }) => {
-    const total = operatingExpensesTotal({
+  test('même règle sur le total agrégé', ({ assert }) => {
+    const totals = expenseTotalsFromSummary({
       total: 23000,
       by_category: [
         { category: 'electricity', amount: 15000 },
@@ -24,9 +30,37 @@ test.group('isOperatingExpense', () => {
       ],
     })
 
-    // Un séjour de 50 000 F avec 5 000 F de commission : les 5 000 F ne sont
-    // retranchés qu'une fois, via `commissions`.
-    assert.equal(total, 18000)
+    assert.deepEqual(totals, { depenses: 23000, commissions: 5000 })
+  })
+
+  test('sans apporteur, aucune commission', ({ assert }) => {
+    assert.deepEqual(expenseTotals([{ category: 'water', amount: 2000 }]), {
+      depenses: 2000,
+      commissions: 0,
+    })
+  })
+
+  test('départ anticipé : la commission de l’enregistrement reste due', ({ assert }) => {
+    // 5 jours à 10 000 F enregistrés, 5 000 F de commission. Le client part au
+    // bout de 3 jours : le séjour ne rapporte plus que 30 000 F, mais la
+    // commission, figée à l'enregistrement, reste 5 000 F.
+    const september = {
+      from: new Date('2026-09-01T00:00:00Z'),
+      to: new Date('2026-10-01T00:00:00Z'),
+    }
+    const caBrut = aggregateGrossRevenue(
+      [
+        {
+          start_date: new Date('2026-09-10T12:00:00Z'),
+          end_date: new Date('2026-09-13T12:00:00Z'),
+          total_amount: 30000,
+        },
+      ],
+      september
+    )
+    const { depenses } = expenseTotals([{ category: 'commission', amount: 5000 }])
+
+    assert.equal(caBrut - depenses, 25000)
   })
 })
 

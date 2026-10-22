@@ -9,8 +9,8 @@ import {
   elapsedWindow,
   growthPercent,
   monthWindow,
-  netRevenueForMonth,
   occupancyForWindow,
+  revenueForMonth,
 } from '../booking_stats.ts'
 
 import type {
@@ -339,10 +339,11 @@ export class BookingRepository {
       Property.statsByOwner(owner_id, scope_property_ids),
     ])
 
-    // Net des commissions d'apporteurs : c'est ce qui revient au propriétaire,
-    // et le chiffre que Finance retient pour son bénéfice.
-    const currentRevenue = netRevenueForMonth(bookings, current)
-    const previousRevenue = netRevenueForMonth(bookings, previous)
+    // Revenu brut, le `ca_brut` de Finance. La commission d'apporteur n'en est
+    // plus retranchée au prorata des jours : c'est une dépense, déduite à
+    // l'enregistrement de la réservation, que seul le bénéfice net reflète.
+    const currentRevenue = revenueForMonth(bookings, current)
+    const previousRevenue = revenueForMonth(bookings, previous)
 
     return {
       // Sur les jours écoulés, et non le mois entier : c'est la convention de

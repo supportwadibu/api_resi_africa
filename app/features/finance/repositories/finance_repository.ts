@@ -8,7 +8,7 @@ import Residence from '#models/residence'
 
 import { exploitedUnits, occupancyRate, sumOccupiedDays } from '../occupancy.ts'
 import { splitRevenueByMonth } from '../revenue_split.ts'
-import { sumResidenceExpenses } from '../residence_scope.ts'
+import { belongsToResidence } from '../residence_scope.ts'
 
 import type { FinanceFilters, FinanceOverviewDto, RevenuePointDto } from '../dto/finance.dto.ts'
 import type { ActorScope } from '#features/managers/scope'
@@ -110,32 +110,6 @@ export function aggregateGrossRevenue(
 }
 
 /**
- * Commissions d'apporteurs imputables à la fenêtre.
- *
- * Réparties au prorata des jours, exactement comme le chiffre d'affaires dont
- * elles sont une part : un séjour à cheval sur deux mois n'impute à chacun que
- * la commission de ses jours, et `benefice_net` retranche des montants pris
- * sur la même assiette que `ca_brut`.
- *
- * Les réservations antérieures aux apporteurs n'en portent pas : zéro.
- */
-export function aggregateCommissions(
-  bookings: { start_date: Date; end_date: Date; referrer_commission_amount?: number }[],
-  range: { from?: Date; to?: Date }
-): number {
-  return aggregateGrossRevenue(
-    bookings
-      .filter((b) => (b.referrer_commission_amount ?? 0) > 0)
-      .map((b) => ({
-        start_date: b.start_date,
-        end_date: b.end_date,
-        total_amount: b.referrer_commission_amount ?? 0,
-      })),
-    range
-  )
-}
-
-/**
  * Sommes rendues aux clients sur la fenêtre, rattachées au jour du départ.
  *
  * Le jour du départ et non la période du séjour : c'est à ce moment que
@@ -177,34 +151,48 @@ export function retainedDepositsAsRevenue(
     }))
 }
 
-/**
- * Une dépense compte-t-elle dans `depenses` ?
- *
- * La dépense `commission` n'est que le reflet, dans la liste des dépenses, de
- * la commission portée par la réservation. Le relevé la retranche déjà via
- * `commissions`, au prorata des jours et au montant à jour : la sommer aussi
- * dans `depenses` la déduisait deux fois du bénéfice.
- */
-export function isOperatingExpense(expense: { category: string }): boolean {
-  return expense.category !== 'commission'
+/** Charges de la fenêtre, et la part qu'y prennent les commissions d'apporteur. */
+export interface ExpenseTotals {
+  /** Toutes les charges, commissions comprises. */
+  depenses: number
+  /** Détail : la part de `depenses` due aux apporteurs. */
+  commissions: number
 }
 
-/** Total d'un `Expense.summary`, reflets de commission retirés : voir `isOperatingExpense`. */
-export function operatingExpensesTotal(summary: {
-  total: number
-  by_category: Array<{ category: string; amount: number }>
-}): number {
-  return summary.by_category.reduce(
-    (total, bucket) => (isOperatingExpense(bucket) ? total : total - bucket.amount),
-    summary.total
+/**
+ * Totalise des dépenses, commission d'apporteur comprise.
+ *
+ * La commission est une charge du propriétaire, déduite une fois pour toutes à
+ * l'enregistrement de la réservation : la dépense `commission` porte la date
+ * de l'enregistrement et le montant figé ce jour-là. Elle entre donc dans
+ * `depenses` comme n'importe quelle charge. Elle était auparavant écartée ici
+ * et retranchée à part, au prorata des jours du séjour et recalculée au départ
+ * anticipé — ce que le propriétaire ne pratique pas : l'apporteur touche les
+ * 10 % du montant enregistré, quoi qu'il advienne du séjour, hors annulation.
+ */
+export function expenseTotals(
+  expenses: readonly { category: string; amount: number }[]
+): ExpenseTotals {
+  return expenses.reduce(
+    (totals, expense) => ({
+      depenses: totals.depenses + expense.amount,
+      commissions: totals.commissions + (expense.category === 'commission' ? expense.amount : 0),
+    }),
+    { depenses: 0, commissions: 0 }
   )
 }
 
-async function findOperatingExpenses(
-  ...args: Parameters<typeof Expense.findAllForOwner>
-): ReturnType<typeof Expense.findAllForOwner> {
-  const docs = await Expense.findAllForOwner(...args)
-  return docs.filter(isOperatingExpense)
+/** Même calcul que `expenseTotals`, sur le total agrégé d'`Expense.summary`. */
+export function expenseTotalsFromSummary(summary: {
+  total: number
+  by_category: Array<{ category: string; amount: number }>
+}): ExpenseTotals {
+  return {
+    depenses: summary.total,
+    commissions: summary.by_category
+      .filter((bucket) => bucket.category === 'commission')
+      .reduce((sum, bucket) => sum + bucket.amount, 0),
+  }
 }
 
 export class FinanceRepository {
@@ -261,13 +249,12 @@ export class FinanceRepository {
     const revenueBookings = [...bookings, ...retainedDepositsAsRevenue(retained)]
     const caBrut = aggregateGrossRevenue(revenueBookings, range)
 
-    const depenses = await this.sumExpenses(
+    const { depenses, commissions } = await this.sumExpenses(
       filters,
       range,
       unitIds,
-      expenseSummary ? operatingExpensesTotal(expenseSummary) : undefined
+      expenseSummary ? expenseTotalsFromSummary(expenseSummary) : undefined
     )
-    const commissions = aggregateCommissions(bookings, range)
 
     // Jours vendus imputés à la fenêtre au prorata du temps, pondérés par type
     // de séjour : voir `occupancy.ts`. `totalDays` garde la fenêtre entière :
@@ -298,8 +285,9 @@ export class FinanceRepository {
         ca_brut: caBrut,
         depenses,
         // Peut être négatif : un mois de travaux sans réservation est une perte,
-        // et la masquer à zéro tromperait le propriétaire.
-        benefice_net: caBrut - depenses - commissions,
+        // et la masquer à zéro tromperait le propriétaire. Les commissions sont
+        // dans `depenses` : les retrancher encore les compterait deux fois.
+        benefice_net: caBrut - depenses,
         commissions,
         remboursements: aggregateRefunds(bookings, range),
         taux_occupation: occupancyRange
@@ -325,17 +313,19 @@ export class FinanceRepository {
     filters: FinanceFilters,
     range: { from?: Date; to?: Date },
     unitIds: Set<string> | null,
-    summaryTotal?: number
-  ): Promise<number> {
+    summaryTotals?: ExpenseTotals
+  ): Promise<ExpenseTotals> {
     if (filters.property_id) {
-      const docs = await findOperatingExpenses(filters.owner_id, range, [filters.property_id])
-      return docs
-        .filter((e) => e.property_id === filters.property_id)
-        .reduce((sum, expense) => sum + expense.amount, 0)
+      const docs = await Expense.findAllForOwner(filters.owner_id, range, [filters.property_id])
+      return expenseTotals(docs.filter((e) => e.property_id === filters.property_id))
     }
 
     if (filters.residence_id && unitIds) {
-      const docs = await findOperatingExpenses(filters.owner_id, range, filters.scope_property_ids)
+      const docs = await Expense.findAllForOwner(
+        filters.owner_id,
+        range,
+        filters.scope_property_ids
+      )
 
       // Périmètre restreint : les charges **communes** de la résidence en sont
       // exclues. Elles couvrent aussi les logements que l'appelant ne sert pas,
@@ -348,25 +338,27 @@ export class FinanceRepository {
       // directement les unités dit la règle au lieu de la laisser dépendre d'un
       // filtre situé ailleurs.
       if (filters.scope_property_ids) {
-        return docs.reduce(
-          (sum, expense) =>
-            expense.property_id && unitIds.has(expense.property_id) ? sum + expense.amount : sum,
-          0
+        return expenseTotals(
+          docs.filter((expense) => expense.property_id && unitIds.has(expense.property_id))
         )
       }
 
       // Le propriétaire, lui, porte les deux : ses charges communes **et**
       // celles de ses unités — deux champs distincts, qui ne se rencontrent
       // qu'ici.
-      return sumResidenceExpenses(docs, filters.residence_id, unitIds)
+      const residenceId = filters.residence_id
+      return expenseTotals(
+        docs.filter((expense) => belongsToResidence(expense, residenceId, unitIds))
+      )
     }
 
     // Hors résidence mais sous périmètre, `summary` n'a pas pu être employé :
     // ses filtres sont des égalités et ne savent pas porter une liste.
-    if (typeof summaryTotal === 'number') return summaryTotal
+    if (summaryTotals) return summaryTotals
 
-    const docs = await findOperatingExpenses(filters.owner_id, range, filters.scope_property_ids)
-    return docs.reduce((sum, expense) => sum + expense.amount, 0)
+    return expenseTotals(
+      await Expense.findAllForOwner(filters.owner_id, range, filters.scope_property_ids)
+    )
   }
 
   /**
