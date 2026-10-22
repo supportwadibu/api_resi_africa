@@ -8,7 +8,15 @@ import {
   type WithId,
 } from '#firebase/firestore'
 
-const BOOKING_PAYMENT_STATUSES = ['pending', 'success', 'failed', 'cancelled', 'expired'] as const
+// `refunded` : payé puis rendu au client par Wave, à l'annulation de la réservation.
+const BOOKING_PAYMENT_STATUSES = [
+  'pending',
+  'success',
+  'failed',
+  'cancelled',
+  'expired',
+  'refunded',
+] as const
 const BOOKING_PAYMENT_PROVIDERS = ['wave'] as const
 
 export type BookingPaymentStatus = (typeof BOOKING_PAYMENT_STATUSES)[number]
@@ -36,6 +44,8 @@ export interface BookingPaymentDocument {
   paid_at: Date | null
   cancelled_at: Date | null
   expired_at: Date | null
+  /** Absent de l'historique et de tout paiement non remboursé. */
+  refunded_at?: Date | null
 
   metadata: Record<string, unknown>
   provider_payload: Record<string, unknown>

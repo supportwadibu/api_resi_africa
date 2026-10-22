@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 
 import { test } from '@japa/runner'
 
-import { checkoutIdOf, verifyWaveSignature } from '#services/wave_subscription_service'
+import { checkoutIdOf, verifyWaveSignature } from '#services/wave_client'
 
 const SECRET = 'wave_sn_WHS_test'
 const BODY = '{"id":"EV_1","type":"checkout.session.completed","data":{"id":"cos-1"}}'

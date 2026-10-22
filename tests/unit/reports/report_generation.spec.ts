@@ -43,7 +43,9 @@ test.group('buildReportGenerationDocument', () => {
     assert.equal(doc.property_id, 'property-99')
   })
 
-  test('conserve `residence_id` et `property_id` à `null` pour un rapport sur tout le parc', ({ assert }) => {
+  test('conserve `residence_id` et `property_id` à `null` pour un rapport sur tout le parc', ({
+    assert,
+  }) => {
     const doc = buildReportGenerationDocument({
       owner_id: 'owner-1',
       type: 'performance',

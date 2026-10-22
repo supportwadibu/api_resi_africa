@@ -3,7 +3,7 @@ import logger from '@adonisjs/core/services/logger'
 import BookingRepository from '#features/bookings/repositories/booking_repository'
 import { CreditBookingPaymentUseCase } from '#features/wallets/use_cases/index'
 import { isPaymentConsistent } from '#features/subscriptions/subscription_checkout'
-import WaveSubscriptionService from '#services/wave_subscription_service'
+import WaveClient, { isSessionPayable, toPaymentDomainError } from '#services/wave_client'
 import { DomainError } from '#utils/domain_error'
 
 import type { BookingPaymentDto } from '../dto/booking_payment.dto.ts'
@@ -16,9 +16,6 @@ import BookingPaymentRepository from '../repositories/booking_payment_repository
  * Appelé par l'app client à son retour au premier plan et par la page de
  * retour de Wave. La session est **relue chez Wave**, seule source qui fasse
  * foi : rien de ce que le client envoie n'est cru.
- *
- * `WaveSubscriptionService` sert ici malgré son nom : sa lecture de session
- * est générique et utilise la même clé `WAVE_API_KEY`.
  */
 export class ConfirmBookingPaymentUseCase {
   constructor(
@@ -27,10 +24,7 @@ export class ConfirmBookingPaymentUseCase {
       BookingPaymentRepository,
       'findLatestByBooking' | 'findByProviderCheckoutId' | 'updateStatus'
     > = new BookingPaymentRepository(),
-    private wave: Pick<
-      WaveSubscriptionService,
-      'getCheckoutSession'
-    > = new WaveSubscriptionService(),
+    private wave: Pick<WaveClient, 'getCheckoutSession'> = new WaveClient(),
     private credit: Pick<CreditBookingPaymentUseCase, 'execute'> = new CreditBookingPaymentUseCase()
   ) {}
 
@@ -113,16 +107,41 @@ export class ConfirmBookingPaymentUseCase {
       return paid
     }
 
-    if (session.payment_status === 'cancelled') {
+    // Raison du dernier refus — fonds insuffisants, compte bloqué —, gardée
+    // pour dire au client pourquoi son paiement n'est pas passé.
+    const failureReason = session.last_payment_error?.code ?? null
+
+    // Échue chez Wave, ou ouverte mais au-delà de son `when_expires` : Wave
+    // ne bascule pas toujours le statut à l'heure dite.
+    const lapsed =
+      session.checkout_status === 'expired' ||
+      (session.checkout_status === 'open' && !isSessionPayable(session, now))
+
+    if (lapsed) {
       return (
-        (await this.paymentRepo.updateStatus(payment.id, 'cancelled', { cancelled_at: now })) ??
-        payment
+        (await this.paymentRepo.updateStatus(payment.id, 'expired', {
+          expired_at: now,
+          failure_reason: failureReason,
+        })) ?? payment
       )
     }
 
-    if (session.checkout_status === 'expired') {
+    if (session.payment_status === 'cancelled') {
+      // Session close sur un refus : le paiement est perdu. Encore ouverte,
+      // le client peut réessayer sur la même session — le paiement reste en
+      // attente, et une tentative réussie ensuite sera constatée.
+      if (session.checkout_status === 'complete') {
+        return (
+          (await this.paymentRepo.updateStatus(payment.id, 'cancelled', {
+            cancelled_at: now,
+            failure_reason: failureReason,
+          })) ?? payment
+        )
+      }
       return (
-        (await this.paymentRepo.updateStatus(payment.id, 'expired', { expired_at: now })) ?? payment
+        (await this.paymentRepo.updateStatus(payment.id, 'pending', {
+          failure_reason: failureReason,
+        })) ?? payment
       )
     }
 
@@ -135,11 +154,7 @@ export class ConfirmBookingPaymentUseCase {
       return await this.wave.getCheckoutSession(checkoutId)
     } catch (error) {
       logger.error({ err: error, checkoutId }, 'Lecture de la session Wave impossible')
-      throw new DomainError(
-        'payment_provider_unavailable',
-        'Wave est momentanément injoignable. Réessayez dans un instant.',
-        502
-      )
+      throw toPaymentDomainError(error)
     }
   }
 }

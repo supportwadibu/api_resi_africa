@@ -40,7 +40,14 @@ export interface WalletDocument {
 
 export type WalletRecord = WithId<WalletDocument>
 
-export const WALLET_TRANSACTION_TYPES = ['credit', 'withdrawal', 'withdrawal_reversal'] as const
+export const WALLET_TRANSACTION_TYPES = [
+  'credit',
+  'withdrawal',
+  'withdrawal_reversal',
+  // Paiement rendu au client par Wave à l'annulation : RESI a rendu l'argent,
+  // le propriétaire ne le lui doit plus.
+  'refund',
+] as const
 export type WalletTransactionType = (typeof WALLET_TRANSACTION_TYPES)[number]
 
 export interface WalletTransactionDocument {
@@ -172,6 +179,67 @@ const Wallet = {
           residence_id: input.residence_id,
           type: 'credit',
           amount: input.amount,
+          balance_after: balance,
+          booking_id: input.booking_id,
+          booking_payment_id: input.booking_payment_id,
+          withdrawal_id: null,
+          created_at: now,
+        } satisfies WalletTransactionDocument) as unknown as WalletTransactionDocument
+      )
+      return true
+    })
+  },
+
+  /**
+   * Débite le portefeuille d'un paiement remboursé au client.
+   *
+   * Idempotent, comme le crédit : la ligne porte l'identifiant du paiement.
+   *
+   * Le solde peut devenir négatif : le propriétaire a pu retirer l'argent
+   * avant l'annulation, et le client doit être remboursé quand même. Le solde
+   * négatif est une dette, soldée par les prochains paiements — aucun retrait
+   * n'est possible d'ici là.
+   */
+  async debitRefund(input: {
+    wallet_id: string
+    owner_id: string
+    residence_id: string | null
+    booking_id: string
+    booking_payment_id: string
+    amount: number
+  }): Promise<boolean> {
+    const walletRef = wallets().doc(input.wallet_id)
+    const lineRef = walletTransactions().doc(`refund_${input.booking_payment_id}`)
+
+    return transaction(async (tx) => {
+      const [walletSnap, lineSnap] = await Promise.all([tx.get(walletRef), tx.get(lineRef)])
+      if (lineSnap.exists) return false
+
+      const now = new Date()
+      const current =
+        toDoc<WalletDocument>(walletSnap) ?? emptyWallet(input.owner_id, input.residence_id, now)
+      const balance = current.balance - input.amount
+
+      tx.set(
+        walletRef,
+        toPayload({
+          owner_id: current.owner_id,
+          residence_id: current.residence_id,
+          balance,
+          total_credited: current.total_credited,
+          total_withdrawn: current.total_withdrawn,
+          created_at: current.created_at,
+          updated_at: now,
+        }) as unknown as WalletDocument
+      )
+      tx.set(
+        lineRef,
+        toPayload({
+          wallet_id: input.wallet_id,
+          owner_id: input.owner_id,
+          residence_id: input.residence_id,
+          type: 'refund',
+          amount: -input.amount,
           balance_after: balance,
           booking_id: input.booking_id,
           booking_payment_id: input.booking_payment_id,

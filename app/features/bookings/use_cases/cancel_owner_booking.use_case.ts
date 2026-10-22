@@ -1,3 +1,4 @@
+import { RefundBookingPaymentUseCase } from '#features/booking_payments/use_cases/refund_booking_payment.use_case'
 import Booking from '#models/booking'
 import { DomainError } from '#utils/domain_error'
 
@@ -16,22 +17,35 @@ import BookingRepository from '../repositories/booking_repository.ts'
  * `client_id` d'une réservation comptoir désigne une fiche du carnet, pas un
  * compte connecté.
  *
- * Règles d'annulation et sort de l'acompte : voir `buildCancellationPatch`.
+ * Règles d'annulation et sort de ce qui a été payé : voir
+ * `buildCancellationPatch`. Un paiement en ligne remboursé l'est par Wave,
+ * **avant** l'écriture de l'annulation : si Wave refuse, la réservation reste
+ * active et le propriétaire peut réessayer.
  */
 export class CancelOwnerBookingUseCase {
+  constructor(private refunds: RefundBookingPaymentUseCase = new RefundBookingPaymentUseCase()) {}
+
   async execute(id: string, ownerId: string, input: CancelBookingInput = {}): Promise<BookingDto> {
     const booking = await Booking.findById(id)
     if (!booking || booking.owner_id !== ownerId) {
       throw new DomainError('booking_not_found', 'Réservation introuvable.', 404)
     }
 
-    const updated = await Booking.findOneAndUpdate(
-      id,
-      { ...buildCancellationPatch(booking, input) },
-      {
-        owner_id: ownerId,
-      }
+    const onlinePayment = await this.refunds.findPaid(id)
+    const patch = buildCancellationPatch(
+      { ...booking, online_paid_amount: onlinePayment?.amount ?? 0 },
+      input
     )
+
+    if (onlinePayment && patch.cancellation_deposit_action === 'refund') {
+      await this.refunds.execute(onlinePayment, {
+        id: booking._id,
+        owner_id: booking.owner_id,
+        residence_id: booking.residence_id ?? null,
+      })
+    }
+
+    const updated = await Booking.findOneAndUpdate(id, { ...patch }, { owner_id: ownerId })
 
     if (!updated) {
       throw new DomainError('booking_not_found', 'Réservation introuvable.', 404)

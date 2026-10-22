@@ -1,4 +1,4 @@
-import WaveSubscriptionService from '#services/wave_subscription_service'
+import WaveClient from '#services/wave_client'
 
 import type { HttpContext } from '@adonisjs/core/http'
 
@@ -26,9 +26,7 @@ export default class WaveWebhookController {
     // re-sérialisation ne reproduit pas.
     const rawBody = ctx.request.raw() ?? JSON.stringify(payload)
 
-    if (
-      !new WaveSubscriptionService().verifyWebhook(rawBody, ctx.request.header('wave-signature'))
-    ) {
+    if (!new WaveClient().verifyWebhook(rawBody, ctx.request.header('wave-signature'))) {
       return ctx.response.unauthorized({
         code: 'invalid_signature',
         message: 'Signature invalide.',

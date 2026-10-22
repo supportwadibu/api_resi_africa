@@ -2,10 +2,7 @@
 import { DomainError } from '#utils/domain_error'
 import { TRIAL_DURATION_DAYS } from '#utils/enums/subscription_status'
 
-import type {
-  StartTrialInput,
-  SubscriptionDto,
-} from '../dto/subscription.dto.ts'
+import type { StartTrialInput, SubscriptionDto } from '../dto/subscription.dto.ts'
 import SubscriptionRepository from '../repositories/subscription_repository.ts'
 
 /**

@@ -1,8 +1,5 @@
 /* eslint-disable prettier/prettier */
-import type {
-  ListSubscriptionsInput,
-  ListSubscriptionsOutput,
-} from '../dto/subscription.dto.ts'
+import type { ListSubscriptionsInput, ListSubscriptionsOutput } from '../dto/subscription.dto.ts'
 import SubscriptionRepository from '../repositories/subscription_repository.ts'
 
 /**

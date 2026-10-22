@@ -186,9 +186,7 @@ export class GenerateReportUseCase {
 
     // Même garde que pour la résidence : un logement inconnu ou appartenant à
     // un autre propriétaire doit lever 404 avant toute lecture de données.
-    const property = input.property_id
-      ? await this.propertyRepo.findById(input.property_id)
-      : null
+    const property = input.property_id ? await this.propertyRepo.findById(input.property_id) : null
 
     if (input.property_id && (!property || property.owner_id !== owner_id)) {
       throw new DomainError('property_not_found', 'Logement introuvable.', 404)
@@ -592,10 +590,10 @@ export class GenerateReportUseCase {
     // cible une unité, la résidence si elle est choisie, le nom du
     // propriétaire sinon.
     const hotel = context.property_title
-      ? (context.residence_name
-          ? `${context.residence_name} — ${context.property_title}`
-          : context.property_title)
-      : context.residence_name ?? context.owner_name
+      ? context.residence_name
+        ? `${context.residence_name} — ${context.property_title}`
+        : context.property_title
+      : (context.residence_name ?? context.owner_name)
 
     const header = {
       hotel,

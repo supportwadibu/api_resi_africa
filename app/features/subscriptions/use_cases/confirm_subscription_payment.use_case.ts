@@ -2,7 +2,7 @@ import logger from '@adonisjs/core/services/logger'
 
 import { planTierLabel, readPlanTier } from '#features/plans/plan_tier'
 import Expense from '#models/expense'
-import WaveSubscriptionService from '#services/wave_subscription_service'
+import WaveClient, { isSessionPayable, toPaymentDomainError } from '#services/wave_client'
 import { DomainError } from '#utils/domain_error'
 
 import type { SubscriptionPaymentDto } from '../dto/subscription_payment.dto.ts'
@@ -25,7 +25,7 @@ import { buildPaidSubscription, isPaymentConsistent } from '../subscription_chec
 export class ConfirmSubscriptionPaymentUseCase {
   constructor(
     private paymentRepo: SubscriptionPaymentRepository = new SubscriptionPaymentRepository(),
-    private wave: WaveSubscriptionService = new WaveSubscriptionService()
+    private wave: Pick<WaveClient, 'getCheckoutSession'> = new WaveClient()
   ) {}
 
   /** Confirmation demandée par le propriétaire : le paiement doit être le sien. */
@@ -98,8 +98,15 @@ export class ConfirmSubscriptionPaymentUseCase {
       return SubscriptionPaymentRepository.toDto(result?.payment ?? payment)
     }
 
-    if (session.checkout_status === 'expired' || session.payment_status === 'cancelled') {
-      const closed = await this.paymentRepo.closePending(payment._id, 'expired', null)
+    // Seule une session close clôt le paiement. Une tentative refusée
+    // (`payment_status: cancelled`) sur une session encore ouverte peut être
+    // suivie d'une tentative réussie : la clore ici la ferait ignorer.
+    if (session.checkout_status !== 'open' || !isSessionPayable(session)) {
+      const closed = await this.paymentRepo.closePending(
+        payment._id,
+        'expired',
+        session.last_payment_error?.code ?? null
+      )
       return SubscriptionPaymentRepository.toDto(closed ?? payment)
     }
 
@@ -111,12 +118,7 @@ export class ConfirmSubscriptionPaymentUseCase {
     try {
       return await this.wave.getCheckoutSession(checkoutId)
     } catch (error) {
-      logger.error({ err: error, checkoutId }, 'Lecture de la session Wave impossible')
-      throw new DomainError(
-        'payment_provider_unavailable',
-        'Wave est momentanément injoignable. Réessayez dans un instant.',
-        502
-      )
+      throw toPaymentDomainError(error)
     }
   }
 
