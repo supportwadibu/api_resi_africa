@@ -23,6 +23,7 @@ export class BookingPaymentRepository {
       paid_at: doc.paid_at ?? null,
       cancelled_at: doc.cancelled_at ?? null,
       expired_at: doc.expired_at ?? null,
+      refunded_at: doc.refunded_at ?? null,
       metadata: doc.metadata ?? {},
       provider_payload: doc.provider_payload ?? {},
       created_at: doc.created_at,
@@ -58,6 +59,17 @@ export class BookingPaymentRepository {
 
     const latest = all.sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0]
     return BookingPaymentRepository.toDto(latest)
+  }
+
+  /**
+   * Paiement en ligne encaissé d'une réservation, `null` s'il n'y en a pas.
+   *
+   * Un seul peut réussir : l'initialisation refuse d'ouvrir une session sur
+   * une réservation déjà payée.
+   */
+  async findSucceededByBooking(bookingId: string): Promise<BookingPaymentDto | null> {
+    const succeeded = await BookingPayment.findByBooking(bookingId, 'success')
+    return succeeded[0] ? BookingPaymentRepository.toDto(succeeded[0]) : null
   }
 
   async create(input: {

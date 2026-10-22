@@ -1,4 +1,10 @@
-export type BookingPaymentStatus = 'pending' | 'success' | 'failed' | 'cancelled' | 'expired'
+export type BookingPaymentStatus =
+  | 'pending'
+  | 'success'
+  | 'failed'
+  | 'cancelled'
+  | 'expired'
+  | 'refunded'
 export type BookingPaymentProvider = 'wave'
 
 export interface BookingPaymentDto {
@@ -20,6 +26,7 @@ export interface BookingPaymentDto {
   paid_at: Date | null
   cancelled_at: Date | null
   expired_at: Date | null
+  refunded_at: Date | null
   metadata: Record<string, unknown>
   provider_payload: Record<string, unknown>
   created_at: Date

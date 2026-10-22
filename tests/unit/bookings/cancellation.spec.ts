@@ -18,7 +18,7 @@ test.group('buildCancellationPatch', () => {
   test("exige le sort de l'acompte quand il en a été versé un", ({ assert }) => {
     assert.throws(
       () => buildCancellationPatch({ status: 'confirmed', deposit_amount: 10000 }, {}, NOW),
-      /acompte/
+      /déjà payé/
     )
   })
 
@@ -44,6 +44,21 @@ test.group('buildCancellationPatch', () => {
 
     assert.equal(patch.retained_amount, 0)
     assert.equal(patch.cancellation_refunded_amount, 10000)
+  })
+
+  test('un paiement en ligne compte avec l’acompte', ({ assert }) => {
+    assert.throws(
+      () => buildCancellationPatch({ status: 'confirmed', online_paid_amount: 80000 }, {}, NOW),
+      /déjà payé/
+    )
+
+    const patch = buildCancellationPatch(
+      { status: 'confirmed', deposit_amount: 10000, online_paid_amount: 80000 },
+      { deposit_action: 'refund' },
+      NOW
+    )
+    assert.equal(patch.cancellation_refunded_amount, 90000)
+    assert.equal(patch.retained_amount, 0)
   })
 
   test('refuse un séjour clôturé ou déjà annulé', ({ assert }) => {

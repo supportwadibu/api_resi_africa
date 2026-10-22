@@ -1,10 +1,12 @@
 import { DomainError } from '#utils/domain_error'
 
 /**
- * Sort de l'acompte d'une réservation annulée.
+ * Sort de ce que le client a déjà versé, à l'annulation : acompte au comptoir
+ * et paiement en ligne.
  *
  * `keep` : le propriétaire le garde — dédommagement d'une annulation tardive ;
- * la somme reste un revenu. `refund` : il le rend au client.
+ * la somme reste un revenu. `refund` : il le rend au client — le paiement en
+ * ligne par Wave, l'acompte de la main à la main.
  */
 export const DEPOSIT_ACTIONS = ['keep', 'refund'] as const
 export type DepositAction = (typeof DEPOSIT_ACTIONS)[number]
@@ -30,7 +32,7 @@ export interface CancellationPatch {
  * revenir dessus réécrirait un mois clos — le correctif est un avoir.
  */
 export function buildCancellationPatch(
-  booking: { status: string; deposit_amount?: number },
+  booking: { status: string; deposit_amount?: number; online_paid_amount?: number },
   input: { reason?: string | null; deposit_action?: DepositAction | null },
   now: Date = new Date()
 ): CancellationPatch {
@@ -47,13 +49,13 @@ export function buildCancellationPatch(
   }
 
   // Absent de l'historique : aucun acompte n'y était saisi.
-  const deposit = booking.deposit_amount ?? 0
-  const action = deposit > 0 ? (input.deposit_action ?? null) : null
+  const paid = (booking.deposit_amount ?? 0) + (booking.online_paid_amount ?? 0)
+  const action = paid > 0 ? (input.deposit_action ?? null) : null
 
-  if (deposit > 0 && !action) {
+  if (paid > 0 && !action) {
     throw new DomainError(
       'deposit_action_required',
-      "Un acompte a été versé : indiquez s'il est gardé ou remboursé.",
+      'Le client a déjà payé : indiquez si la somme est gardée ou remboursée.',
       422
     )
   }
@@ -63,7 +65,7 @@ export function buildCancellationPatch(
     cancelled_at: now,
     cancellation_reason: input.reason ?? null,
     cancellation_deposit_action: action,
-    retained_amount: action === 'keep' ? deposit : 0,
-    cancellation_refunded_amount: action === 'refund' ? deposit : 0,
+    retained_amount: action === 'keep' ? paid : 0,
+    cancellation_refunded_amount: action === 'refund' ? paid : 0,
   }
 }
