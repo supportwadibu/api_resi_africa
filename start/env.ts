@@ -112,6 +112,9 @@ export default await Env.create(new URL('../', import.meta.url), {
   WAVE_API_KEY: Env.schema.string.optional(),
   WAVE_BASE_URL: Env.schema.string.optional(),
   WAVE_WEBHOOK_SECRET: Env.schema.string.optional(),
+  // Secret de signature des requêtes (`wave_sn_AKS_…`), seulement si la clé
+  // API a été créée avec la signature activée.
+  WAVE_API_SIGNING_SECRET: Env.schema.string.optional(),
   WAVE_CURRENCY: Env.schema.string.optional(),
 
   // OTP / Auth rate limiting

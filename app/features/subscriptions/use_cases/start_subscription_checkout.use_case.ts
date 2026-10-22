@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 
 import logger from '@adonisjs/core/services/logger'
 
-import WaveSubscriptionService from '#services/wave_subscription_service'
+import WaveClient, { toPaymentDomainError } from '#services/wave_client'
 import env from '#start/env'
 import { DomainError } from '#utils/domain_error'
 
@@ -26,7 +26,10 @@ export class StartSubscriptionCheckoutUseCase {
     private planRepo: PlanRepository = new PlanRepository(),
     private subscriptionRepo: SubscriptionRepository = new SubscriptionRepository(),
     private paymentRepo: SubscriptionPaymentRepository = new SubscriptionPaymentRepository(),
-    private wave: WaveSubscriptionService = new WaveSubscriptionService(),
+    private wave: Pick<
+      WaveClient,
+      'createCheckoutSession' | 'expireCheckoutSession'
+    > = new WaveClient(),
     private confirmation: ConfirmSubscriptionPaymentUseCase = new ConfirmSubscriptionPaymentUseCase()
   ) {}
 
@@ -63,13 +66,11 @@ export class StartSubscriptionCheckoutUseCase {
       })
     } catch (error) {
       logger.error({ err: error, userId: input.user_id }, 'Création de la session Wave impossible')
-      throw new DomainError(
-        'payment_provider_unavailable',
-        'Le paiement Wave est momentanément indisponible. Réessayez dans un instant.',
-        502
-      )
+      throw toPaymentDomainError(error)
     }
 
+    // Garanti non nul par le client : une session sans lien est refusée.
+    const paymentUrl = checkout.wave_launch_url!
     const payment = await this.paymentRepo.createPending({
       user_id: input.user_id,
       reference,
@@ -79,12 +80,12 @@ export class StartSubscriptionCheckoutUseCase {
       amount,
       currency,
       provider_checkout_id: checkout.id,
-      payment_url: checkout.paymentUrl,
+      payment_url: paymentUrl,
     })
 
     return {
       payment: SubscriptionPaymentRepository.toDto(payment),
-      payment_url: checkout.paymentUrl,
+      payment_url: paymentUrl,
     }
   }
 
@@ -108,7 +109,13 @@ export class StartSubscriptionCheckoutUseCase {
       }
       if (settled.status !== 'pending' || !pending.provider_checkout_id) continue
 
-      if (await this.wave.expireCheckoutSession(pending.provider_checkout_id)) {
+      let expired = false
+      try {
+        expired = await this.wave.expireCheckoutSession(pending.provider_checkout_id)
+      } catch (error) {
+        throw toPaymentDomainError(error)
+      }
+      if (expired) {
         await this.paymentRepo.closePending(pending._id, 'expired', 'superseded')
       }
     }
