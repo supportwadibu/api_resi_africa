@@ -37,6 +37,15 @@ export class BookingPaymentRepository {
    * Le tri par date se fait en mémoire : trier côté Firestore imposerait un
    * index composite pour une liste qui compte rarement plus d'un élément.
    */
+  /**
+   * Tous les paiements en attente d'une réservation. Un double appui peut en
+   * avoir ouvert deux : l'annulation doit fermer chacun.
+   */
+  async findAllPendingByBooking(bookingId: string): Promise<BookingPaymentDto[]> {
+    const pending = await BookingPayment.findByBooking(bookingId, 'pending')
+    return pending.map((doc) => BookingPaymentRepository.toDto(doc))
+  }
+
   async findPendingByBooking(bookingId: string): Promise<BookingPaymentDto | null> {
     const pending = await BookingPayment.findByBooking(bookingId, 'pending')
     if (pending.length === 0) return null

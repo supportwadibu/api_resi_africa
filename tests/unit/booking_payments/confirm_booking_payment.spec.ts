@@ -14,30 +14,43 @@ const pending = {
 }
 
 function useCase(options: {
-  booking?: { client_id: string } | null
+  booking?: { client_id: string; status?: string } | null
   payment?: Record<string, unknown> | null
   session?: Record<string, unknown> | null
+  /** Autre paiement déjà réussi pour la même réservation. */
+  otherPaid?: Record<string, unknown> | null
+  refundFails?: boolean
 }) {
   const updates: Array<{ status: string; data: Record<string, unknown> }> = []
   const credits: Array<Record<string, unknown>> = []
+  const refunds: string[] = []
   const confirm = new ConfirmBookingPaymentUseCase(
     {
       findById: async () =>
-        options.booking === undefined ? { client_id: 'c1', residence_id: 'r1' } : options.booking,
+        options.booking === undefined
+          ? { client_id: 'c1', residence_id: 'r1', status: 'confirmed' }
+          : options.booking,
     } as never,
     {
       findLatestByBooking: async () => (options.payment === undefined ? pending : options.payment),
       findByProviderCheckoutId: async () =>
         options.payment === undefined ? pending : options.payment,
+      findSucceededByBooking: async () => options.otherPaid ?? null,
       updateStatus: async (_id: string, status: string, data: Record<string, unknown>) => {
         updates.push({ status, data })
         return { ...pending, status }
       },
     } as never,
-    { getCheckoutSession: async () => options.session ?? null } as never,
+    {
+      getCheckoutSession: async () => options.session ?? null,
+      refundCheckoutSession: async (id: string) => {
+        if (options.refundFails) throw new Error('checkout-refund-failed')
+        refunds.push(id)
+      },
+    } as never,
     { execute: async (input: Record<string, unknown>) => void credits.push(input) } as never
   )
-  return { confirm, updates, credits }
+  return { confirm, updates, credits, refunds }
 }
 
 const paid = {
@@ -146,5 +159,63 @@ test.group('ConfirmBookingPaymentUseCase', () => {
   test('webhook d’une session inconnue : ignoré', async ({ assert }) => {
     const { confirm } = useCase({ payment: null })
     assert.isNull(await confirm.executeForCheckout('cos-x'))
+  })
+
+  test('payé après l’annulation : rendu au client, jamais crédité', async ({ assert }) => {
+    // Le client a payé sur une session encore ouverte alors que la réservation
+    // venait d'être annulée : l'argent n'est dû à personne d'autre que lui.
+    const { confirm, updates, credits, refunds } = useCase({
+      booking: { client_id: 'c1', status: 'cancelled' },
+      session: paid,
+    })
+    const payment = await confirm.executeForCheckout('cos-1')
+
+    assert.equal(payment?.status, 'refunded')
+    assert.deepEqual(refunds, ['cos-1'])
+    assert.lengthOf(credits, 0)
+    assert.equal(updates.at(-1)?.data.failure_reason, 'booking_cancelled')
+  })
+
+  test('second paiement d’une réservation déjà payée : rendu au client', async ({ assert }) => {
+    // Deux sessions ouvertes par un double appui, payées toutes deux : la
+    // seconde est remboursée, la réservation n'est payée qu'une fois.
+    const { confirm, credits, refunds, updates } = useCase({
+      session: paid,
+      otherPaid: { ...pending, id: 'BOOKING-b1-autre', status: 'success' },
+    })
+    const payment = await confirm.executeForCheckout('cos-1')
+
+    assert.equal(payment?.status, 'refunded')
+    assert.deepEqual(refunds, ['cos-1'])
+    assert.lengthOf(credits, 0)
+    assert.equal(updates.at(-1)?.data.failure_reason, 'duplicate_payment')
+  })
+
+  test('le paiement lui-même ne compte pas comme doublon', async ({ assert }) => {
+    // Deux confirmations simultanées du même paiement : la seconde le voit déjà
+    // réussi, ce n'est pas un second paiement.
+    const { confirm, credits, refunds } = useCase({
+      session: paid,
+      otherPaid: { ...pending, status: 'success' },
+    })
+    const payment = await confirm.executeForCheckout('cos-1')
+
+    assert.equal(payment?.status, 'success')
+    assert.lengthOf(refunds, 0)
+    assert.lengthOf(credits, 1)
+  })
+
+  test('remboursement refusé : en attente, l’erreur remonte pour rejouer', async ({ assert }) => {
+    // Le webhook répond alors en erreur : Wave le rejoue jusqu'à trois jours,
+    // et chaque rejeu retente le remboursement.
+    const { confirm, updates, credits } = useCase({
+      booking: { client_id: 'c1', status: 'cancelled' },
+      session: paid,
+      refundFails: true,
+    })
+
+    await assert.rejects(() => confirm.executeForCheckout('cos-1'))
+    assert.lengthOf(updates, 0)
+    assert.lengthOf(credits, 0)
   })
 })
