@@ -18,6 +18,7 @@ export const controllers = {
     Stats: () => import('#controllers/admin/stats_controller'),
     Subscriptions: () => import('#controllers/admin/subscriptions_controller'),
     Users: () => import('#controllers/admin/users_controller'),
+    WaveTest: () => import('#controllers/admin/wave_test_controller'),
     Withdrawals: () => import('#controllers/admin/withdrawals_controller'),
   },
   auth: {

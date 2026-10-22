@@ -5,6 +5,7 @@ import router from '@adonisjs/core/services/router'
 const AuthController = () => import('#controllers/auth/auth_controller')
 const CronController = () => import('#controllers/cron_controller')
 const AdminWithdrawalsController = () => import('#controllers/admin/withdrawals_controller')
+const AdminWaveTestController = () => import('#controllers/admin/wave_test_controller')
 const ProprioWalletController = () => import('#controllers/proprio/wallet_controller')
 const WaveWebhookController = () => import('#controllers/wave_webhook_controller')
 const AdminPlansController = () => import('#controllers/admin/plans_controller')
@@ -108,6 +109,19 @@ router
           })
           .prefix('withdrawals')
           .as('withdrawals')
+
+        // Banc d'essai Wave, pour Postman : de vraies sessions, sans écriture
+        // en base.
+        router
+          .group(() => {
+            router.get('config', [AdminWaveTestController, 'config'])
+            router.post('checkout', [AdminWaveTestController, 'checkout'])
+            router.get('checkout/:id', [AdminWaveTestController, 'show'])
+            router.post('checkout/:id/refund', [AdminWaveTestController, 'refund'])
+            router.post('checkout/:id/expire', [AdminWaveTestController, 'expire'])
+          })
+          .prefix('wave-test')
+          .as('wave_test')
 
         // Notifications push aux propriétaires : groupées ou ciblées.
         router
@@ -569,6 +583,11 @@ router
         'waveReturn',
       ])
       .as('subscription_wave_return')
+    // Retour des essais du banc Wave (`admin/wave-test`) : publique, Wave y
+    // renvoie le navigateur du payeur sans jeton.
+    router
+      .get('payments/wave/test/return', [AdminWaveTestController, 'waveReturn'])
+      .as('wave_test_return')
 
     router
       .group(() => {
