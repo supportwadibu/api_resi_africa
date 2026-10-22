@@ -2,16 +2,20 @@ export interface FinanceSummaryDto {
   /** Chiffre d'affaires brut : somme encaissée sur les réservations. */
   ca_brut: number
   /**
-   * Dépenses engagées sur la même période, hors commissions d'apporteur :
-   * celles-ci sont dans `commissions`, et ne sont retranchées qu'une fois.
+   * Dépenses engagées sur la même période, commissions d'apporteur et
+   * abonnement compris.
    */
   depenses: number
   /**
-   * Bénéfice net : `ca_brut − depenses − commissions`. Peut être négatif si
-   * les charges dépassent les revenus.
+   * Bénéfice net : `ca_brut − depenses`. Peut être négatif si les charges
+   * dépassent les revenus.
    */
   benefice_net: number
-  /** Commissions dues aux apporteurs d'affaire, réparties comme `ca_brut`. */
+  /**
+   * Détail : la part de `depenses` due aux apporteurs d'affaire, datée de
+   * l'enregistrement des réservations. Déjà dans `depenses`, jamais retranchée
+   * une seconde fois.
+   */
   commissions: number
   /**
    * Sommes rendues sur départs anticipés, déjà déduites de `ca_brut`.

@@ -9,7 +9,6 @@ import {
   quoteEarlyCheckOut,
   quoteEarlyCheckOutWithOptions,
 } from '../early_check_out.ts'
-import { withReferrerCommission } from '../referrer.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 import { syncReferrerCommissionExpense } from '../referrer_expense.ts'
 
@@ -172,17 +171,15 @@ export class CheckOutBookingUseCase {
             })
           : quoteEarlyCheckOut(booking, input.actual_check_out_at ?? now, now)
 
-      // Un séjour écourté réduit le montant retenu, et la commission avec lui.
-      patch = withReferrerCommission(
+      // Un séjour écourté réduit le montant retenu, pas la commission : elle
+      // est figée à l'enregistrement (voir `REFERRER_COMMISSION_RATE`).
+      patch = buildEarlyCheckOutPatch(
         booking,
-        buildEarlyCheckOutPatch(
-          booking,
-          quote,
-          input.final_amount ?? quote.proposed_amount,
-          now,
-          input.early_checkout_option,
-          input.penalty_amount
-        )
+        quote,
+        input.final_amount ?? quote.proposed_amount,
+        now,
+        input.early_checkout_option,
+        input.penalty_amount
       )
     }
 

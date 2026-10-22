@@ -162,8 +162,10 @@ export interface BookingDocument {
   /** Taux figé à la création : le changer ne réécrit pas les commissions dues. */
   referrer_commission_rate?: number
   /**
-   * Commission due, en francs. Recalculée au taux figé chaque fois que
-   * `total_amount` change — prolongation, modification, départ anticipé.
+   * Commission due, en francs, figée à l'enregistrement : prolongation,
+   * modification et départ anticipé ne la touchent pas. Les réservations
+   * antérieures à cette règle peuvent porter un montant recalculé au départ
+   * anticipé ; il est laissé tel quel, l'apporteur ayant été réglé dessus.
    */
   referrer_commission_amount?: number
 
@@ -361,6 +363,17 @@ const Booking = {
   async findById(id: string): Promise<BookingRecord | null> {
     if (!id) return null
     return toDoc<BookingDocument>(await bookings().doc(id).get())
+  },
+
+  /**
+   * Réservations portant une commission d'apporteur, tous propriétaires
+   * confondus. Sert au rattrapage des dépenses `commission` de l'historique.
+   *
+   * Une seule inégalité, sur un seul champ : l'index automatique suffit.
+   */
+  async findWithReferrerCommission(): Promise<BookingRecord[]> {
+    const snapshot = await bookings().where('referrer_commission_amount', '>', 0).get()
+    return toDocs<BookingDocument>(snapshot.docs)
   },
 
   /**

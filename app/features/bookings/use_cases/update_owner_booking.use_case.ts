@@ -8,7 +8,6 @@ import { findOverlappingPeriod, toPeriods } from '../availability.ts'
 import type { BookingDto, UpdateOwnerBookingInput } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 import { syncReferrerCommissionExpense } from '../referrer_expense.ts'
-import { withReferrerCommission } from '../referrer.ts'
 import { defaultCheckOutFor, type StayType } from '../stay_type.ts'
 import { computeOwnerBookingAmounts, resolveAgreedAmount } from './create_owner_booking.use_case.ts'
 
@@ -143,26 +142,25 @@ export class UpdateOwnerBookingUseCase {
       input.days_count
     )
 
-    const patch = withReferrerCommission(
-      booking,
-      buildEditPatch({
-        property: {
-          id: property._id,
-          residence_id: property.residence_id ?? null,
-          daily_price: property.pricing.daily_price,
-        },
-        stay_type: input.stay_type,
-        check_in_at: checkIn,
-        check_out_at: checkOut,
-        amounts,
-        received_amount: input.received_amount,
-        agreed_unit_price: input.agreed_unit_price,
-        // Absent : l'acompte déjà enregistré tient toujours. Le ramener à zéro
-        // parce qu'un écran ne l'a pas renvoyé effacerait un versement réel.
-        deposit_amount: input.deposit_amount ?? booking.deposit_amount ?? 0,
-        message: input.message === undefined ? booking.message : input.message,
-      })
-    )
+    // La commission reste celle de l'enregistrement, quel que soit le nouveau
+    // montant (voir `REFERRER_COMMISSION_RATE`).
+    const patch = buildEditPatch({
+      property: {
+        id: property._id,
+        residence_id: property.residence_id ?? null,
+        daily_price: property.pricing.daily_price,
+      },
+      stay_type: input.stay_type,
+      check_in_at: checkIn,
+      check_out_at: checkOut,
+      amounts,
+      received_amount: input.received_amount,
+      agreed_unit_price: input.agreed_unit_price,
+      // Absent : l'acompte déjà enregistré tient toujours. Le ramener à zéro
+      // parce qu'un écran ne l'a pas renvoyé effacerait un versement réel.
+      deposit_amount: input.deposit_amount ?? booking.deposit_amount ?? 0,
+      message: input.message === undefined ? booking.message : input.message,
+    })
 
     let updated
     try {

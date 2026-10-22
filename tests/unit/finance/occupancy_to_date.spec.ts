@@ -1,7 +1,6 @@
 import { test } from '@japa/runner'
 
 import { elapsedWindow, occupancyForWindow } from '#features/bookings/booking_stats'
-import { aggregateCommissions } from '#features/finance/repositories/finance_repository'
 
 const SEPTEMBER = {
   from: new Date('2026-09-01T00:00:00Z'),
@@ -72,32 +71,5 @@ test.group('taux d’occupation à date', () => {
     const now = new Date('2026-08-15T00:00:00Z')
 
     assert.equal(occupancyForWindow(bookings as never, 1, elapsedWindow(SEPTEMBER, now)), 0)
-  })
-})
-
-test.group('aggregateCommissions', () => {
-  test('répartit la commission au prorata des jours, comme le chiffre d’affaires', ({ assert }) => {
-    // 28 septembre → 4 octobre, 6 000 F de commission : 3 jours en septembre
-    // sur 6, donc 3 000 F imputés à septembre.
-    const bookings = [
-      {
-        start_date: new Date('2026-09-28T12:00:00Z'),
-        end_date: new Date('2026-10-04T12:00:00Z'),
-        referrer_commission_amount: 6000,
-      },
-    ]
-
-    assert.equal(aggregateCommissions(bookings, SEPTEMBER), 3000)
-  })
-
-  test('les réservations sans apporteur ne comptent pas', ({ assert }) => {
-    const bookings = [
-      {
-        start_date: new Date('2026-09-05T12:00:00Z'),
-        end_date: new Date('2026-09-08T12:00:00Z'),
-      },
-    ]
-
-    assert.equal(aggregateCommissions(bookings, SEPTEMBER), 0)
   })
 })

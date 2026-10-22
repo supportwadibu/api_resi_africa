@@ -24,13 +24,17 @@ export function mirroredCommissionAmount(booking: CommissionBooking): number {
 }
 
 /**
- * Aligne la dépense `commission` d'une réservation sur sa commission du moment.
+ * Aligne la dépense `commission` d'une réservation sur sa commission.
  *
- * La réservation est la source : c'est elle que le relevé financier lit, et
- * elle seule est recalculée à la prolongation, au départ anticipé ou à la
- * modification. La dépense n'en est que le reflet dans la liste des dépenses ;
- * sans cet alignement, elle gardait le montant de la création, et survivait à
- * l'annulation.
+ * Cette dépense est la commission telle que le relevé financier la déduit :
+ * datée de l'enregistrement, au montant figé ce jour-là. Elle est créée à
+ * l'enregistrement et retirée à l'annulation ; entre les deux, le montant ne
+ * bouge plus.
+ *
+ * Rejouée après chaque action sur la réservation : sans effet quand la dépense
+ * est en place, elle crée celle d'une réservation antérieure à son
+ * introduction. `node ace commissions:sync` en fait autant pour tout
+ * l'historique.
  *
  * Clé dérivée de l'identifiant de la réservation : un rejeu de la création
  * hors ligne rend la même réservation, donc le même reflet.

@@ -81,6 +81,13 @@ test.group('mirroredCommissionAmount', () => {
     assert.equal(mirroredCommissionAmount({ ...base, status: 'confirmed' }), 5000)
   })
 
+  test('un départ anticipé ne la réduit pas', ({ assert }) => {
+    // Séjour de 50 000 F écourté à 30 000 F : la commission figée à
+    // l'enregistrement reste 5 000 F, pas 3 000 F.
+    const shortened = { ...base, status: 'completed', total_amount: 30000 }
+    assert.equal(mirroredCommissionAmount(shortened), 5000)
+  })
+
   test("tombe à zéro à l'annulation ou sans apporteur", ({ assert }) => {
     assert.equal(mirroredCommissionAmount({ ...base, status: 'cancelled' }), 0)
     assert.equal(mirroredCommissionAmount({ ...base, status: 'confirmed', referrer: null }), 0)

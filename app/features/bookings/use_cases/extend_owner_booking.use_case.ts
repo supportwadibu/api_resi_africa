@@ -7,7 +7,6 @@ import type { BookingDto } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 import { syncReferrerCommissionExpense } from '../referrer_expense.ts'
 import { computeOwnerBookingAmounts } from './create_owner_booking.use_case.ts'
-import { withReferrerCommission } from '../referrer.ts'
 import { lateCheckoutFeeFor } from '../stay_pricing.ts'
 
 /**
@@ -205,16 +204,15 @@ export class ExtendOwnerBookingUseCase {
     try {
       updated = await Booking.extendBooking(
         id,
-        withReferrerCommission(
-          booking,
-          buildExtensionPatch(
-            input.check_out_at,
-            days,
-            expected,
-            received,
-            discountPercent,
-            lateCheckoutFee
-          )
+        // La commission reste celle de l'enregistrement : une prolongation ne
+        // l'augmente pas (voir `REFERRER_COMMISSION_RATE`).
+        buildExtensionPatch(
+          input.check_out_at,
+          days,
+          expected,
+          received,
+          discountPercent,
+          lateCheckoutFee
         ),
         { owner_id: ownerId },
         (active) =>

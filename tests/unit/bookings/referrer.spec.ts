@@ -4,7 +4,6 @@ import {
   buildReferrerFields,
   computeReferrerCommission,
   REFERRER_COMMISSION_RATE,
-  withReferrerCommission,
 } from '#features/bookings/referrer'
 import { buildOwnerBookingPayload } from '#models/booking'
 
@@ -33,34 +32,6 @@ test.group('buildReferrerFields', () => {
       referrer_commission_rate: 0.1,
       referrer_commission_amount: 5000,
     })
-  })
-})
-
-test.group('withReferrerCommission', () => {
-  const booking = { referrer: { name: 'Koffi', phone: null }, referrer_commission_rate: 0.1 }
-
-  test('une prolongation relève la commission au taux figé', ({ assert }) => {
-    const patch = withReferrerCommission(booking, { total_amount: 80000, days_count: 4 })
-
-    assert.equal(patch.referrer_commission_amount, 8000)
-    assert.equal(patch.days_count, 4)
-  })
-
-  test('le taux figé fait foi, pas le taux courant', ({ assert }) => {
-    const patch = withReferrerCommission(
-      { ...booking, referrer_commission_rate: 0.05 },
-      { total_amount: 80000 }
-    )
-
-    assert.equal(patch.referrer_commission_amount, 4000)
-  })
-
-  test('sans apporteur ou sans changement de montant, le patch est inchangé', ({ assert }) => {
-    const patch = { total_amount: 80000 }
-    assert.strictEqual(withReferrerCommission({}, patch), patch)
-
-    const noAmount = { status: 'completed' }
-    assert.strictEqual(withReferrerCommission(booking, noAmount), noAmount)
   })
 })
 
