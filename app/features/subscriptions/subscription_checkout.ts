@@ -182,6 +182,27 @@ export interface PaidCheckout {
    * pour une montée de forfait seulement (`metadata.upgrade_credit`).
    */
   upgrade_credit?: number | null
+  /** Abonnement dont les jours restants ont fourni `upgrade_credit`. */
+  upgrade_from?: string | null
+}
+
+/**
+ * Le crédit de montée porté par le paiement vaut-il encore ?
+ *
+ * Seulement si l'abonnement qui l'a fourni est toujours celui en cours, actif
+ * et non échu : résilié entre-temps, ses jours ont déjà été remboursés, et
+ * honorer le crédit les ferait toucher une seconde fois. La résiliation ferme
+ * les sessions en attente (`PendingPaymentSettler`) ; ce contrôle, relu dans
+ * la transaction d'activation, couvre ce qui lui échapperait.
+ */
+export function honoredUpgradeCredit(
+  payment: PaidCheckout,
+  current: (CurrentSubscription & { _id: string }) | null,
+  now: Date = new Date()
+): number | null {
+  if (typeof payment.upgrade_credit !== 'number') return null
+  if (!current || current._id !== payment.upgrade_from) return null
+  return isLivePaid(current, now) ? payment.upgrade_credit : null
 }
 
 export interface ActivationPlan {
@@ -201,14 +222,17 @@ export interface ActivationPlan {
  *   perdre ;
  * - abonnement échu que le cron n'a pas encore basculé : marqué `expired` ;
  * - montée de forfait : l'ancien est clos sans report — ses jours restants
- *   ont déjà été déduits du prix payé (`upgrade_credit`).
+ *   ont déjà été déduits du prix payé (`upgrade_credit`). Un crédit qui ne
+ *   vaut plus (`honoredUpgradeCredit`) est ignoré : la période ne vaut alors
+ *   que ce qui a été payé.
  */
 export function buildPaidSubscription(
   payment: PaidCheckout,
   current: (CurrentSubscription & { _id: string }) | null,
   now: Date = new Date()
 ): ActivationPlan {
-  const isUpgradePayment = typeof payment.upgrade_credit === 'number'
+  const credit = honoredUpgradeCredit(payment, current, now)
+  const isUpgradePayment = credit !== null
   const isLive = current !== null && current.end_date.getTime() > now.getTime()
   const carriesOver =
     isLive && current.status === 'active' && !current.is_trial && !isUpgradePayment
@@ -219,7 +243,7 @@ export function buildPaidSubscription(
   // Valeur d'un jour, figée : remboursement et crédit de montée s'en
   // déduisent. Le crédit d'une montée y est réintégré — la période vaut le
   // prix du forfait, même si le propriétaire n'en a payé qu'une partie.
-  const dailyValue = (payment.amount + (payment.upgrade_credit ?? 0)) / durationDays
+  const dailyValue = (payment.amount + (credit ?? 0)) / durationDays
 
   return {
     subscription: {

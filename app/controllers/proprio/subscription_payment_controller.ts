@@ -1,5 +1,4 @@
 import { subscriptionCheckoutValidator } from '#validators/subscription/subscription'
-import { planTierLabel } from '#features/plans/plan_tier'
 import env from '#start/env'
 
 import type { HttpContext } from '@adonisjs/core/http'
@@ -146,7 +145,7 @@ export default class ProprioSubscriptionPaymentController {
     if (subscriptionId) {
       const subscription = await new SubscriptionRepository().findById(subscriptionId)
       if (subscription) {
-        params.set('forfait', planTierLabel(subscription.plan_tier))
+        params.set('forfait', subscription.plan_tier)
         params.set('jusqu', subscription.end_date.toISOString().slice(0, 10))
       }
     }

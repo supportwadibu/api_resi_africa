@@ -94,6 +94,10 @@ export class ConfirmSubscriptionPaymentUseCase {
               amount: locked.amount,
               transaction_reference: locked._id,
               upgrade_credit: readUpgradeCredit(locked.metadata),
+              upgrade_from:
+                typeof locked.metadata?.upgrade_from === 'string'
+                  ? locked.metadata.upgrade_from
+                  : null,
             },
             current,
             now

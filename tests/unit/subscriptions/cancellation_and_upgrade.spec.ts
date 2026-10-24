@@ -3,6 +3,7 @@ import { test } from '@japa/runner'
 import {
   buildPaidSubscription,
   dailyValueOf,
+  honoredUpgradeCredit,
   isRenewable,
   remainingPaidDays,
   unusedValue,
@@ -57,6 +58,7 @@ test.group('montée de forfait', () => {
         amount: 4000,
         transaction_reference: 'SUB-1',
         upgrade_credit: 1000,
+        upgrade_from: 'sub_pro',
       },
       {
         _id: 'sub_pro',
@@ -72,6 +74,41 @@ test.group('montée de forfait', () => {
     assert.equal(subscription.end_date.getTime(), inDays(30).getTime())
     assert.approximately(subscription.daily_value!, 5000 / 30, 1e-9)
     assert.deepEqual(close, { id: 'sub_pro', status: 'cancelled', reason: 'upgraded' })
+  })
+})
+
+test.group('crédit de montée refusé', () => {
+  const upgradePayment = {
+    user_id: 'u1',
+    plan_id: 'pro_plus',
+    plan_tier: 'pro_plus' as const,
+    duration_days: 30,
+    amount: 4000,
+    transaction_reference: 'SUB-2',
+    upgrade_credit: 1000,
+    upgrade_from: 'sub_pro',
+  }
+
+  test('l’abonnement d’origine résilié entre-temps : le crédit ne vaut plus', ({ assert }) => {
+    // Ses jours ont déjà été remboursés : honorer le crédit les ferait
+    // toucher deux fois.
+    const { subscription, close } = buildPaidSubscription(upgradePayment, null, NOW)
+
+    assert.isNull(honoredUpgradeCredit(upgradePayment, null, NOW))
+    assert.approximately(subscription.daily_value!, 4000 / 30, 1e-9)
+    assert.isNull(close)
+  })
+
+  test('un autre abonnement en cours ne porte pas le crédit d’un précédent', ({ assert }) => {
+    const other = {
+      _id: 'sub_autre',
+      status: 'active' as const,
+      is_trial: false,
+      plan_tier: 'pro' as const,
+      end_date: inDays(10),
+    }
+
+    assert.isNull(honoredUpgradeCredit(upgradePayment, other, NOW))
   })
 })
 

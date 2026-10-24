@@ -6,6 +6,7 @@ import { DomainError } from '#utils/domain_error'
 
 import { walletIdFor } from '../../wallets/wallet_rules.ts'
 import PlanRepository from '../../plans/repositories/plan_repository.ts'
+import PendingPaymentSettler from '../settle_pending_payments.ts'
 import type { SubscriptionDto } from '../dto/subscription.dto.ts'
 import SubscriptionRepository from '../repositories/subscription_repository.ts'
 import { isLivePaid, unusedValue } from '../subscription_checkout.ts'
@@ -26,10 +27,17 @@ import { isLivePaid, unusedValue } from '../subscription_checkout.ts'
 export class CancelOwnSubscriptionUseCase {
   constructor(
     private subscriptionRepo: SubscriptionRepository = new SubscriptionRepository(),
-    private planRepo: PlanRepository = new PlanRepository()
+    private planRepo: PlanRepository = new PlanRepository(),
+    private settler: PendingPaymentSettler = new PendingPaymentSettler()
   ) {}
 
   async execute(userId: string, now: Date = new Date()): Promise<SubscriptionDto> {
+    // Avant tout remboursement : aucune session Wave ne doit rester payable.
+    // Une montée chiffrée avec le crédit des jours restants, payée après leur
+    // remboursement, ferait toucher ce crédit deux fois. Un paiement déjà
+    // réglé est constaté, et la résiliation refusée : l'abonnement a changé.
+    await this.settler.settle(userId, { strict: true })
+
     await this.subscriptionRepo.expireOverdue(userId)
     const current = await this.subscriptionRepo.findCurrentByUser(userId)
 

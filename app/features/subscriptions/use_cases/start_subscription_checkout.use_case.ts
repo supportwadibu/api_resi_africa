@@ -10,6 +10,7 @@ import PlanRepository from '../../plans/repositories/plan_repository.ts'
 import type { SubscriptionCheckoutDto } from '../dto/subscription_payment.dto.ts'
 import SubscriptionPaymentRepository from '../repositories/subscription_payment_repository.ts'
 import SubscriptionRepository from '../repositories/subscription_repository.ts'
+import PendingPaymentSettler from '../settle_pending_payments.ts'
 import { checkoutRefusal, isUpgrade, upgradeQuote } from '../subscription_checkout.ts'
 import ConfirmSubscriptionPaymentUseCase from './confirm_subscription_payment.use_case.ts'
 
@@ -52,6 +53,7 @@ export class StartSubscriptionCheckoutUseCase {
     // Montée de forfait : le prix est réduit de la valeur des jours restants,
     // et l'ancien abonnement sera clos sans report à la confirmation.
     let upgradeCredit: number | null = null
+    let upgradeFrom: string | null = null
     // Le franc CFA n'a pas de subdivision : Wave attend un entier.
     let amount = Math.round(plan.price)
     if (current && isUpgrade(current, plan.tier)) {
@@ -65,6 +67,7 @@ export class StartSubscriptionCheckoutUseCase {
         )
       }
       upgradeCredit = quote.credit
+      upgradeFrom = current.id
       amount = quote.amount
     }
 
@@ -98,7 +101,10 @@ export class StartSubscriptionCheckoutUseCase {
       currency,
       provider_checkout_id: checkout.id,
       payment_url: paymentUrl,
-      metadata: upgradeCredit === null ? {} : { upgrade_credit: upgradeCredit },
+      // L'abonnement d'origine accompagne le crédit : la confirmation ne
+      // l'honore que s'il est encore celui en cours (`buildPaidSubscription`).
+      metadata:
+        upgradeCredit === null ? {} : { upgrade_credit: upgradeCredit, upgrade_from: upgradeFrom },
     })
 
     return {
@@ -108,35 +114,12 @@ export class StartSubscriptionCheckoutUseCase {
   }
 
   /**
-   * Solde les paiements restés en attente avant d'en ouvrir un nouveau.
-   *
-   * Un paiement déjà réglé chez Wave mais pas encore confirmé est d'abord
-   * constaté : le propriétaire a payé, et relancer un paiement le ferait payer
-   * deux fois. Les autres sessions sont fermées chez Wave, pour qu'un vieux
-   * lien ne puisse plus être payé en plus du nouveau.
+   * Solde les paiements restés en attente avant d'en ouvrir un nouveau : voir
+   * `PendingPaymentSettler`. Sans `strict` : une session que Wave refuse de
+   * fermer n'empêche pas d'en ouvrir une autre.
    */
   private async settlePendingPayments(userId: string) {
-    for (const pending of await this.paymentRepo.findPendingByUser(userId)) {
-      const settled = await this.confirmation.confirm(pending)
-      if (settled.status === 'success') {
-        throw new DomainError(
-          'subscription_payment_received',
-          'Votre paiement précédent vient d’être confirmé : votre abonnement est actif.',
-          409
-        )
-      }
-      if (settled.status !== 'pending' || !pending.provider_checkout_id) continue
-
-      let expired = false
-      try {
-        expired = await this.wave.expireCheckoutSession(pending.provider_checkout_id)
-      } catch (error) {
-        throw toPaymentDomainError(error)
-      }
-      if (expired) {
-        await this.paymentRepo.closePending(pending._id, 'expired', 'superseded')
-      }
-    }
+    await new PendingPaymentSettler(this.paymentRepo, this.wave, this.confirmation).settle(userId)
   }
 }
 
