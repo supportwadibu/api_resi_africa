@@ -12,6 +12,8 @@ const overview = {
     taux_occupation: 0.42,
     reservations: 4,
     moyen_sejour: 3.5,
+    unites_louees: 3,
+    unites_libres: 1,
   },
   revenue_points: [{ month: 'Oct', value: 120000 }],
 }
@@ -19,7 +21,14 @@ const overview = {
 test.group('toPerformanceOverview', () => {
   test('garde le suivi des revenus et de l’occupation', ({ assert }) => {
     assert.deepEqual(toPerformanceOverview(overview), {
-      summary: { ca_brut: 120000, taux_occupation: 0.42, reservations: 4, moyen_sejour: 3.5 },
+      summary: {
+        ca_brut: 120000,
+        taux_occupation: 0.42,
+        reservations: 4,
+        moyen_sejour: 3.5,
+        unites_louees: 3,
+        unites_libres: 1,
+      },
       revenue_points: [{ month: 'Oct', value: 120000 }],
     })
   })

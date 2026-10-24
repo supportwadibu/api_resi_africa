@@ -27,6 +27,13 @@ export interface FinanceSummaryDto {
   reservations: number
   /** Durée moyenne d'un séjour, en jours. */
   moyen_sejour: number
+  /**
+   * Logements ayant porté au moins un séjour sur les jours écoulés de la
+   * période — la fenêtre du taux d'occupation.
+   */
+  unites_louees: number
+  /** Logements du parc exploité sans aucun séjour sur la même fenêtre. */
+  unites_libres: number
 }
 
 export interface RevenuePointDto {

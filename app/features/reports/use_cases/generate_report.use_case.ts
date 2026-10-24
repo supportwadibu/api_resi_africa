@@ -10,7 +10,7 @@ import {
 import BookingRepository from '#features/bookings/repositories/booking_repository'
 import ClientRepository from '#features/clients/repositories/client_repository'
 import ExpenseRepository from '#features/expenses/repositories/expense_repository'
-import { sumOccupiedDays, windowDays } from '#features/finance/occupancy'
+import { sumBookingShares, sumOccupiedDays, windowDays } from '#features/finance/occupancy'
 import { aggregateGrossRevenue } from '#features/finance/repositories/finance_repository'
 import { belongsToResidence } from '#features/finance/residence_scope'
 import GetFinanceOverviewUseCase from '#features/finance/use_cases/get_finance_overview.use_case'
@@ -439,8 +439,11 @@ export class GenerateReportUseCase {
     // Le numérateur est le total **non plafonné** : le plafond d'`occupiedDays`
     // borne un taux d'occupation à 100 %, il n'a pas de sens sur une durée
     // moyenne — c'est aussi ce que fait `FinanceRepository.overview`, qui
-    // divise `totalDays` brut.
-    const stayAverage = averageStay(occupiedDaysInWindow(bookings, window), bookings.length)
+    // divise `totalDays` brut, par la même part de réservations.
+    const stayAverage = averageStay(
+      occupiedDaysInWindow(bookings, window),
+      sumBookingShares(bookings, window.from, window.to)
+    )
 
     // `occupancyForWindow` plutôt qu'un ratio recomposé à la main : c'est la
     // primitive dont dérive déjà le tableau de bord, plafond à 1 compris. Le

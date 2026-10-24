@@ -15,6 +15,8 @@ export interface PerformanceOverviewDto {
     taux_occupation: number
     reservations: number
     moyen_sejour: number
+    unites_louees: number
+    unites_libres: number
   }
   revenue_points: RevenuePointDto[]
 }
@@ -27,6 +29,8 @@ export function toPerformanceOverview(overview: FinanceOverviewDto): Performance
       taux_occupation: summary.taux_occupation,
       reservations: summary.reservations,
       moyen_sejour: summary.moyen_sejour,
+      unites_louees: summary.unites_louees,
+      unites_libres: summary.unites_libres,
     },
     revenue_points: overview.revenue_points,
   }
