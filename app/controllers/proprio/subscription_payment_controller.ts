@@ -1,10 +1,15 @@
 import { subscriptionCheckoutValidator } from '#validators/subscription/subscription'
+import { planTierLabel } from '#features/plans/plan_tier'
+import env from '#start/env'
 
 import type { HttpContext } from '@adonisjs/core/http'
 
 import { ListAvailablePlansUseCase } from '../../features/plans/use_cases/index.ts'
+import SubscriptionRepository from '../../features/subscriptions/repositories/subscription_repository.ts'
 import {
+  CancelOwnSubscriptionUseCase,
   ConfirmSubscriptionPaymentUseCase,
+  GetSubscriptionOptionsUseCase,
   StartSubscriptionCheckoutUseCase,
 } from '../../features/subscriptions/use_cases/index.ts'
 
@@ -45,31 +50,67 @@ export default class ProprioSubscriptionPaymentController {
   }
 
   /**
+   * GET /proprio/subscription/options
+   *
+   * Renouvellement ouvert ou non, remboursement d'une résiliation, prix des
+   * montées de forfait : ce que l'écran des forfaits annonce avant d'agir.
+   */
+  async options(ctx: HttpContext) {
+    const data = await new GetSubscriptionOptionsUseCase().execute(ctx.authUser?.id ?? '')
+    return ctx.response.ok({ data })
+  }
+
+  /**
+   * POST /proprio/subscription/cancel
+   *
+   * Résilie le forfait payant en cours et rend les jours non consommés au
+   * portefeuille RESI du propriétaire.
+   */
+  async cancel(ctx: HttpContext) {
+    const data = await new CancelOwnSubscriptionUseCase().execute(ctx.authUser?.id ?? '')
+    return ctx.response.ok({ data })
+  }
+
+  /**
    * GET /payments/wave/subscriptions/:reference/return
    *
    * Page où Wave renvoie le navigateur après le paiement. Publique : Wave n'y
    * transmet aucun jeton. Elle ne révèle rien — la référence est aléatoire, et
    * la réponse ne dit pas à qui appartient le paiement — et ne fait que
    * déclencher la confirmation, qui relit la session chez Wave.
+   *
+   * La confirmation reste ici, côté serveur, et non sur le site : c'est elle
+   * qui ouvre l'abonnement quand le webhook tarde ou se perd. Le propriétaire
+   * est ensuite redirigé vers la page du site (`SITE_URL`), qui l'invite à
+   * revenir dans l'application. Sans site configuré, une page minimale.
    */
   async waveReturn(ctx: HttpContext) {
     let status: string | null = null
+    let subscriptionId: string | null = null
     try {
       const payment = await new ConfirmSubscriptionPaymentUseCase().executeForReference(
         ctx.params.reference
       )
       status = payment?.status ?? null
+      subscriptionId = payment?.subscription_id ?? null
     } catch {
       // Wave injoignable : la page reste utile, l'application confirmera au
       // retour du propriétaire.
     }
 
-    const message =
-      status === 'success'
-        ? 'Paiement reçu. Votre abonnement est actif.'
-        : ctx.request.input('outcome') === 'error'
-          ? "Le paiement n'a pas abouti. Vous pouvez réessayer depuis l'application."
-          : 'Paiement en cours de vérification.'
+    const succeeded = status === 'success'
+    const failed = !succeeded && ctx.request.input('outcome') === 'error'
+
+    const siteUrl = env.get('SITE_URL')
+    if (siteUrl) {
+      return ctx.response.redirect(await this.siteReturnUrl(siteUrl, failed, subscriptionId))
+    }
+
+    const message = succeeded
+      ? 'Paiement reçu. Votre abonnement est actif.'
+      : failed
+        ? "Le paiement n'a pas abouti. Vous pouvez réessayer depuis l'application."
+        : 'Paiement en cours de vérification.'
 
     return ctx.response
       .header('Content-Type', 'text/html; charset=utf-8')
@@ -81,5 +122,35 @@ export default class ProprioSubscriptionPaymentController {
           `<h1 style="font-size:1.25rem">${message}</h1>` +
           `<p>Vous pouvez revenir dans l'application RESI.</p></body></html>`
       )
+  }
+
+  /**
+   * Page de retour du site, avec de quoi l'annoncer.
+   *
+   * Un paiement encore en vérification mène à la page de succès sans forfait :
+   * Wave n'y renvoie qu'après un paiement réussi, et l'application confirmera
+   * au retour. Seul un échec déclaré par Wave mène à la page d'échec.
+   *
+   * Forfait et échéance passent en clair : ils ne disent rien de plus que ce
+   * que le propriétaire vient de payer, et la référence n'est pas transmise.
+   */
+  private async siteReturnUrl(
+    siteUrl: string,
+    failed: boolean,
+    subscriptionId: string | null
+  ): Promise<string> {
+    const base = siteUrl.replace(/\/+$/, '')
+    if (failed) return `${base}/fr/paiement/echec`
+
+    const params = new URLSearchParams()
+    if (subscriptionId) {
+      const subscription = await new SubscriptionRepository().findById(subscriptionId)
+      if (subscription) {
+        params.set('forfait', planTierLabel(subscription.plan_tier))
+        params.set('jusqu', subscription.end_date.toISOString().slice(0, 10))
+      }
+    }
+    const query = params.toString()
+    return `${base}/fr/paiement/succes${query ? `?${query}` : ''}`
   }
 }

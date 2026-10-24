@@ -12,6 +12,8 @@ export interface WalletDto {
   total_withdrawn: number
   /** Retraits en attente de versement, déjà débités de `balance`. */
   pending_withdrawals: number
+  /** Part de `balance` retirable sans frais : remboursements d'abonnement. */
+  fee_free_balance: number
   updated_at: Date
 }
 

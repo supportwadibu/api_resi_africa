@@ -4,10 +4,7 @@ import Subscription, { type SubscriptionRecord } from '#models/subscription'
 import SubscriptionEvent from '#models/subscription_event'
 import { type SubscriptionStatus } from '#utils/enums/subscription_status'
 
-import type {
-  ListSubscriptionsInput,
-  SubscriptionDto,
-} from '../dto/subscription.dto.ts'
+import type { ListSubscriptionsInput, SubscriptionDto } from '../dto/subscription.dto.ts'
 
 export class SubscriptionRepository {
   static toDto(doc: SubscriptionRecord): SubscriptionDto {
@@ -26,6 +23,8 @@ export class SubscriptionRepository {
       auto_renew: doc.auto_renew,
       cancelled_at: doc.cancelled_at ?? null,
       cancel_reason: doc.cancel_reason ?? null,
+      daily_value: doc.daily_value ?? null,
+      refunded_amount: doc.refunded_amount ?? null,
       created_at: doc.created_at,
       updated_at: doc.updated_at,
     }

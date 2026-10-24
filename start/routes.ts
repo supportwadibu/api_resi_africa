@@ -247,6 +247,12 @@ router
             'confirm',
           ])
           .as('subscription_confirm')
+        router
+          .get('subscription/options', [ProprioSubscriptionPaymentController, 'options'])
+          .as('subscription_options')
+        router
+          .post('subscription/cancel', [ProprioSubscriptionPaymentController, 'cancel'])
+          .as('subscription_cancel')
         router.get('plans', [ProprioSubscriptionPaymentController, 'plans']).as('plans')
 
         router

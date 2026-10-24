@@ -10,7 +10,7 @@ import PlanRepository from '../../plans/repositories/plan_repository.ts'
 import type { SubscriptionCheckoutDto } from '../dto/subscription_payment.dto.ts'
 import SubscriptionPaymentRepository from '../repositories/subscription_payment_repository.ts'
 import SubscriptionRepository from '../repositories/subscription_repository.ts'
-import { checkoutRefusal } from '../subscription_checkout.ts'
+import { checkoutRefusal, isUpgrade, upgradeQuote } from '../subscription_checkout.ts'
 import ConfirmSubscriptionPaymentUseCase from './confirm_subscription_payment.use_case.ts'
 
 /**
@@ -49,10 +49,27 @@ export class StartSubscriptionCheckoutUseCase {
     const refusal = checkoutRefusal(current, plan.tier)
     if (refusal) throw refusal
 
+    // Montée de forfait : le prix est réduit de la valeur des jours restants,
+    // et l'ancien abonnement sera clos sans report à la confirmation.
+    let upgradeCredit: number | null = null
+    // Le franc CFA n'a pas de subdivision : Wave attend un entier.
+    let amount = Math.round(plan.price)
+    if (current && isUpgrade(current, plan.tier)) {
+      const currentPlan = current.plan_id ? await this.planRepo.findById(current.plan_id) : null
+      const quote = upgradeQuote(current, currentPlan?.duration_days, plan.price)
+      if (quote.amount < 1) {
+        throw new DomainError(
+          'upgrade_not_payable',
+          'Les jours restants de votre forfait couvrent déjà ce forfait : le changement se fera à l’échéance.',
+          409
+        )
+      }
+      upgradeCredit = quote.credit
+      amount = quote.amount
+    }
+
     const reference = `SUB-${input.user_id}-${crypto.randomUUID()}`
     const currency = (env.get('WAVE_CURRENCY') ?? 'XOF').toUpperCase()
-    // Le franc CFA n'a pas de subdivision : Wave attend un entier.
-    const amount = Math.round(plan.price)
     const returnUrl = `${env.get('APP_URL')}/api/v1/payments/wave/subscriptions/${reference}/return`
 
     let checkout
@@ -81,6 +98,7 @@ export class StartSubscriptionCheckoutUseCase {
       currency,
       provider_checkout_id: checkout.id,
       payment_url: paymentUrl,
+      metadata: upgradeCredit === null ? {} : { upgrade_credit: upgradeCredit },
     })
 
     return {

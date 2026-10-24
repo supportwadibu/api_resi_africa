@@ -40,6 +40,7 @@ export const controllers = {
     Property: () => import('#controllers/gerant/property_controller'),
     Residence: () => import('#controllers/gerant/residence_controller'),
   },
+  Health: () => import('#controllers/health_controller'),
   NewAccount: () => import('#controllers/new_account_controller'),
   Profile: () => import('#controllers/profile_controller'),
   proprio: {

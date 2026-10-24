@@ -1,4 +1,4 @@
-import { readPlanTier, type PlanTier } from '#features/plans/plan_tier'
+import { readPlanTier, tierAllows, type PlanTier } from '#features/plans/plan_tier'
 import { DomainError } from '#utils/domain_error'
 
 import type { SubscriptionDocument } from '#models/subscription'
@@ -22,12 +22,114 @@ export interface CurrentSubscription {
 }
 
 /**
+ * Abonnement payant en cours, dont la période n'est pas échue.
+ *
+ * C'est le seul qui se renouvelle, se résilie avec remboursement ou sert de
+ * crédit à une montée de forfait : un essai n'a rien coûté, un abonnement
+ * échu n'a plus de jours à rendre.
+ */
+export function isLivePaid(
+  current: CurrentSubscription | null,
+  now: Date = new Date()
+): current is CurrentSubscription {
+  return (
+    current !== null &&
+    !current.is_trial &&
+    current.status === 'active' &&
+    current.end_date.getTime() > now.getTime()
+  )
+}
+
+/**
+ * Le paiement de `planTier` est-il une montée de forfait ?
+ *
+ * Une montée s'applique tout de suite, au prorata : le propriétaire qui passe
+ * de Pro à Pro+ en cours de mois n'a pas à attendre l'échéance pour ouvrir
+ * les fonctions qu'il paie. La descente, elle, attend l'échéance — on ne
+ * rembourse pas un palier qu'on quitte, le propriétaire qui veut récupérer
+ * son argent résilie.
+ */
+export function isUpgrade(
+  current: CurrentSubscription | null,
+  planTier: PlanTier,
+  now: Date = new Date()
+): boolean {
+  return (
+    isLivePaid(current, now) &&
+    tierAllows(planTier, readPlanTier(current.plan_tier)) &&
+    readPlanTier(current.plan_tier) !== planTier
+  )
+}
+
+/**
+ * Jours payés restants, sans le jour en cours.
+ *
+ * Le jour entamé compte comme consommé : le propriétaire a eu accès ce
+ * jour-là, et le lui rendre ferait qu'une résiliation le soir même du
+ * paiement rembourserait plus qu'il n'a consommé de rien.
+ */
+export function remainingPaidDays(endDate: Date, now: Date = new Date()): number {
+  return Math.max(0, Math.floor((endDate.getTime() - now.getTime()) / DAY_MS))
+}
+
+/**
+ * Valeur d'un jour d'abonnement, en francs.
+ *
+ * `daily_value` est figé à l'activation. L'historique ne le porte pas : il se
+ * déduit alors du montant payé et de la durée du plan, 30 jours à défaut d'un
+ * plan encore lisible — la durée de tous les forfaits vendus jusqu'ici.
+ */
+export function dailyValueOf(
+  subscription: { amount: number; daily_value?: number | null },
+  planDurationDays?: number | null
+): number {
+  if (typeof subscription.daily_value === 'number') return subscription.daily_value
+  const duration = planDurationDays && planDurationDays > 0 ? planDurationDays : 30
+  return Number(subscription.amount) / duration
+}
+
+/**
+ * Valeur des jours payés non consommés, au franc inférieur.
+ *
+ * C'est à la fois le remboursement d'une résiliation et le crédit déduit
+ * d'une montée de forfait : les deux rendent au propriétaire exactement ce
+ * qu'il n'a pas utilisé. Au franc inférieur, le franc CFA n'ayant pas de
+ * subdivision : RESI ne rend jamais plus que la valeur restante.
+ */
+export function unusedValue(
+  subscription: { amount: number; end_date: Date; daily_value?: number | null },
+  planDurationDays: number | null | undefined,
+  now: Date = new Date()
+): number {
+  const days = remainingPaidDays(subscription.end_date, now)
+  return Math.floor(dailyValueOf(subscription, planDurationDays) * days)
+}
+
+/**
+ * Prix d'une montée de forfait : le nouveau forfait, moins la valeur des jours
+ * restants de l'ancien.
+ *
+ * `amount` peut tomber à zéro ou moins si l'ancien forfait valait plus par
+ * jour que le nouveau sur la période restante — l'appelant refuse alors, Wave
+ * n'encaissant pas de montant nul.
+ */
+export function upgradeQuote(
+  current: { amount: number; end_date: Date; daily_value?: number | null },
+  currentPlanDurationDays: number | null | undefined,
+  newPlanPrice: number,
+  now: Date = new Date()
+): { credit: number; amount: number } {
+  const credit = unusedValue(current, currentPlanDurationDays, now)
+  return { credit, amount: Math.round(newPlanPrice) - credit }
+}
+
+/**
  * Motif de refus d'un paiement d'abonnement, ou `null` s'il peut être lancé.
  *
- * Pas de changement de palier en cours de période : un propriétaire change de
- * forfait à l'échéance. Dans la fenêtre de renouvellement, il ne peut donc
- * reprendre que son palier ; les jours restants sont reportés
- * (`buildPaidSubscription`), et payer un autre palier les convertirait.
+ * - Montée de forfait : toujours possible, au prorata (`isUpgrade`).
+ * - Même palier : seulement dans la fenêtre de renouvellement ; les jours
+ *   restants sont reportés (`buildPaidSubscription`).
+ * - Palier inférieur : à l'échéance.
  *
  * Un essai, un abonnement échu ou l'absence d'abonnement n'imposent rien.
  */
@@ -36,8 +138,16 @@ export function checkoutRefusal(
   planTier: PlanTier,
   now: Date = new Date()
 ): DomainError | null {
-  if (!current || current.is_trial || current.status !== 'active') return null
-  if (current.end_date.getTime() <= now.getTime()) return null
+  if (!isLivePaid(current, now)) return null
+  if (isUpgrade(current, planTier, now)) return null
+
+  if (readPlanTier(current.plan_tier) !== planTier) {
+    return new DomainError(
+      'plan_change_not_allowed',
+      "Le passage à un forfait inférieur se fait à l'échéance de l'abonnement en cours.",
+      409
+    )
+  }
 
   const daysLeft = Math.ceil((current.end_date.getTime() - now.getTime()) / DAY_MS)
   if (daysLeft > RENEWAL_WINDOW_DAYS) {
@@ -48,15 +158,16 @@ export function checkoutRefusal(
     )
   }
 
-  if (readPlanTier(current.plan_tier) !== planTier) {
-    return new DomainError(
-      'plan_change_not_allowed',
-      "Le changement de forfait se fait à l'échéance de l'abonnement en cours.",
-      409
-    )
-  }
-
   return null
+}
+
+/**
+ * Le renouvellement est-il ouvert ? Faux pour un abonnement payant en cours
+ * hors de sa fenêtre : l'écran n'affiche alors pas « Renouveler ».
+ */
+export function isRenewable(current: CurrentSubscription | null, now: Date = new Date()): boolean {
+  if (!isLivePaid(current, now)) return true
+  return Math.ceil((current.end_date.getTime() - now.getTime()) / DAY_MS) <= RENEWAL_WINDOW_DAYS
 }
 
 export interface PaidCheckout {
@@ -66,6 +177,11 @@ export interface PaidCheckout {
   duration_days?: number | null
   amount: number
   transaction_reference: string
+  /**
+   * Valeur des jours restants de l'abonnement quitté, déduite du prix : posée
+   * pour une montée de forfait seulement (`metadata.upgrade_credit`).
+   */
+  upgrade_credit?: number | null
 }
 
 export interface ActivationPlan {
@@ -83,19 +199,27 @@ export interface ActivationPlan {
  * - abonnement payant en cours (renouvellement) : clos, et ses jours restants
  *   sont reportés en tête de la nouvelle période — payer tôt ne fait rien
  *   perdre ;
- * - abonnement échu que le cron n'a pas encore basculé : marqué `expired`.
+ * - abonnement échu que le cron n'a pas encore basculé : marqué `expired` ;
+ * - montée de forfait : l'ancien est clos sans report — ses jours restants
+ *   ont déjà été déduits du prix payé (`upgrade_credit`).
  */
 export function buildPaidSubscription(
   payment: PaidCheckout,
   current: (CurrentSubscription & { _id: string }) | null,
   now: Date = new Date()
 ): ActivationPlan {
+  const isUpgradePayment = typeof payment.upgrade_credit === 'number'
   const isLive = current !== null && current.end_date.getTime() > now.getTime()
-  const carriesOver = isLive && current.status === 'active' && !current.is_trial
+  const carriesOver =
+    isLive && current.status === 'active' && !current.is_trial && !isUpgradePayment
   const periodStart = carriesOver ? current.end_date : now
   // Le plan peut avoir été supprimé depuis le paiement : la durée figée fait
   // foi, et 30 jours ne servent qu'aux paiements qui n'en portent pas.
   const durationDays = payment.duration_days ?? 30
+  // Valeur d'un jour, figée : remboursement et crédit de montée s'en
+  // déduisent. Le crédit d'une montée y est réintégré — la période vaut le
+  // prix du forfait, même si le propriétaire n'en a payé qu'une partie.
+  const dailyValue = (payment.amount + (payment.upgrade_credit ?? 0)) / durationDays
 
   return {
     subscription: {
@@ -112,16 +236,22 @@ export function buildPaidSubscription(
       auto_renew: false,
       cancelled_at: null,
       cancel_reason: null,
+      daily_value: dailyValue,
+      refunded_amount: null,
     },
-    close: current ? closingOf(current, isLive) : null,
+    close: current ? closingOf(current, isLive, isUpgradePayment) : null,
   }
 }
 
 function closingOf(
   current: CurrentSubscription & { _id: string },
-  isLive: boolean
+  isLive: boolean,
+  isUpgradePayment: boolean
 ): NonNullable<ActivationPlan['close']> {
   if (!isLive) return { id: current._id, status: 'expired', reason: 'renewed' }
+  if (isUpgradePayment && current.status === 'active' && !current.is_trial) {
+    return { id: current._id, status: 'cancelled', reason: 'upgraded' }
+  }
   if (current.is_trial || current.status === 'trial') {
     return { id: current._id, status: 'cancelled', reason: 'upgraded_to_plan' }
   }

@@ -36,6 +36,15 @@ export interface SubscriptionDocument {
   cancelled_at: Date | null
   cancel_reason: string | null
 
+  /**
+   * Valeur d'un jour de la période, en francs, figée à l'activation : base du
+   * remboursement à la résiliation et du crédit d'une montée de forfait.
+   * Absente sur l'historique — `dailyValueOf` la déduit du montant payé.
+   */
+  daily_value?: number | null
+  /** Rendu au portefeuille du propriétaire à la résiliation. Absent ailleurs. */
+  refunded_amount?: number | null
+
   created_at: Date
   updated_at: Date
 }

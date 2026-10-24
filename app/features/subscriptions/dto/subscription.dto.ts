@@ -23,8 +23,29 @@ export interface SubscriptionDto {
   auto_renew: boolean
   cancelled_at: Date | null
   cancel_reason: string | null
+  /** Valeur d'un jour de la période ; `null` sur l'historique. */
+  daily_value: number | null
+  /** Rendu au portefeuille à la résiliation ; `null` sinon. */
+  refunded_amount: number | null
   created_at: Date
   updated_at: Date
+}
+
+/**
+ * Ce que le propriétaire peut faire de son forfait en cours, chiffré par le
+ * serveur : l'écran annonce les montants exacts qui seront débités ou rendus.
+ */
+export interface SubscriptionOptionsDto {
+  /** Le renouvellement est ouvert (7 jours avant l'échéance, ou rien à renouveler). */
+  renewable: boolean
+  /** Un forfait payant est en cours : il peut être résilié. */
+  cancellable: boolean
+  /** Rendu au portefeuille en cas de résiliation maintenant. */
+  refund_amount: number
+  /** Jours payés restants, sans le jour en cours. */
+  remaining_days: number
+  /** Montées possibles, au prix réduit des jours restants. */
+  upgrades: Array<{ plan_id: string; plan_tier: PlanTier; price: number; amount: number }>
 }
 
 export interface StartTrialInput {

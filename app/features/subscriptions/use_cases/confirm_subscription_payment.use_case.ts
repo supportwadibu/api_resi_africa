@@ -12,6 +12,15 @@ import SubscriptionPaymentRepository, {
 import { buildPaidSubscription, isPaymentConsistent } from '../subscription_checkout.ts'
 
 /**
+ * Crédit de montée porté par le paiement, `null` pour un paiement ordinaire.
+ * `metadata` est libre et absent de l'historique : seul un nombre vaut.
+ */
+function readUpgradeCredit(metadata: Record<string, unknown> | undefined): number | null {
+  const credit = metadata?.upgrade_credit
+  return typeof credit === 'number' && Number.isFinite(credit) ? credit : null
+}
+
+/**
  * Constate l'issue d'un paiement d'abonnement et ouvre l'abonnement payé.
  *
  * Appelé par le webhook Wave, par le retour du propriétaire dans
@@ -84,6 +93,7 @@ export class ConfirmSubscriptionPaymentUseCase {
               duration_days: locked.duration_days,
               amount: locked.amount,
               transaction_reference: locked._id,
+              upgrade_credit: readUpgradeCredit(locked.metadata),
             },
             current,
             now

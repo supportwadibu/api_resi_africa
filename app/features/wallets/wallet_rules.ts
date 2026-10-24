@@ -48,6 +48,8 @@ export interface WithdrawalAmounts {
   fee: number
   /** Montant versé au propriétaire. */
   net_amount: number
+  /** Part du montant retirée sans frais (remboursements d'abonnement). */
+  fee_free_amount: number
 }
 
 /**
@@ -56,8 +58,15 @@ export interface WithdrawalAmounts {
  * Le montant demandé est débité du portefeuille ; les frais en sont retranchés
  * pour donner ce que le propriétaire reçoit. Un retrait de 10 000 F lui verse
  * 9 900 F.
+ *
+ * La part du solde issue d'un remboursement d'abonnement (`feeFreeBalance`)
+ * sort la première, sans frais : RESI rend là l'argent du propriétaire.
  */
-export function quoteWithdrawal(amount: number, balance: number): WithdrawalAmounts {
+export function quoteWithdrawal(
+  amount: number,
+  balance: number,
+  feeFreeBalance: number = 0
+): WithdrawalAmounts {
   if (!Number.isInteger(amount) || amount < MINIMUM_WITHDRAWAL) {
     throw new DomainError(
       'withdrawal_amount_too_low',
@@ -74,6 +83,7 @@ export function quoteWithdrawal(amount: number, balance: number): WithdrawalAmou
     )
   }
 
-  const fee = computeWithdrawalFee(amount)
-  return { amount, fee, net_amount: amount - fee }
+  const feeFreeAmount = Math.min(amount, Math.max(0, feeFreeBalance))
+  const fee = computeWithdrawalFee(amount - feeFreeAmount)
+  return { amount, fee, net_amount: amount - fee, fee_free_amount: feeFreeAmount }
 }

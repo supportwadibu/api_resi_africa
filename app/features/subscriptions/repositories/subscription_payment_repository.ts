@@ -39,6 +39,8 @@ export class SubscriptionPaymentRepository {
     currency: string
     provider_checkout_id: string
     payment_url: string
+    /** `upgrade_credit` pour une montée de forfait. */
+    metadata?: Record<string, unknown>
   }): Promise<PaymentHistoryRecord> {
     return PaymentHistory.create({
       user_id: input.user_id,
@@ -54,6 +56,7 @@ export class SubscriptionPaymentRepository {
       transaction_reference: input.reference,
       provider_checkout_id: input.provider_checkout_id,
       payment_url: input.payment_url,
+      metadata: input.metadata,
     })
   }
 
