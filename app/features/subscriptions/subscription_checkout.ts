@@ -223,8 +223,9 @@ export interface ActivationPlan {
  * - abonnement échu que le cron n'a pas encore basculé : marqué `expired` ;
  * - montée de forfait : l'ancien est clos sans report — ses jours restants
  *   ont déjà été déduits du prix payé (`upgrade_credit`). Un crédit qui ne
- *   vaut plus (`honoredUpgradeCredit`) est ignoré : la période ne vaut alors
- *   que ce qui a été payé.
+ *   vaut plus (`honoredUpgradeCredit`) est ignoré, et la période raccourcie
+ *   à ce qui a été payé : 4 000 F versés pour un forfait à 5 000 F ouvrent
+ *   24 jours sur 30, et non 30.
  */
 export function buildPaidSubscription(
   payment: PaidCheckout,
@@ -240,10 +241,21 @@ export function buildPaidSubscription(
   // Le plan peut avoir été supprimé depuis le paiement : la durée figée fait
   // foi, et 30 jours ne servent qu'aux paiements qui n'en portent pas.
   const durationDays = payment.duration_days ?? 30
-  // Valeur d'un jour, figée : remboursement et crédit de montée s'en
-  // déduisent. Le crédit d'une montée y est réintégré — la période vaut le
-  // prix du forfait, même si le propriétaire n'en a payé qu'une partie.
-  const dailyValue = (payment.amount + (credit ?? 0)) / durationDays
+  // Crédit annoncé au lancement, honoré ou non : le prix plein du forfait est
+  // `amount + declaredCredit`.
+  const declaredCredit = Math.max(0, payment.upgrade_credit ?? 0)
+  // Valeur d'un jour, figée, au prix plein : remboursement et crédit de montée
+  // s'en déduisent.
+  const dailyValue = (payment.amount + declaredCredit) / durationDays
+  // Jours ouverts : la durée entière quand le prix plein est couvert —
+  // paiement ordinaire, ou montée dont le crédit est honoré —, sinon la part
+  // que le montant versé paie au prix plein. Fermé par défaut : quelle que
+  // soit la course entre une montée et une résiliation, un paiement n'ouvre
+  // jamais plus que ce qu'il vaut.
+  const paidDays =
+    credit !== null || declaredCredit === 0
+      ? durationDays
+      : (durationDays * payment.amount) / (payment.amount + declaredCredit)
 
   return {
     subscription: {
@@ -254,7 +266,7 @@ export function buildPaidSubscription(
       amount: payment.amount,
       plan_tier: readPlanTier(payment.plan_tier),
       start_date: now,
-      end_date: new Date(periodStart.getTime() + durationDays * DAY_MS),
+      end_date: new Date(periodStart.getTime() + paidDays * DAY_MS),
       trial_ends_at: null,
       payment_reference: payment.transaction_reference,
       auto_renew: false,

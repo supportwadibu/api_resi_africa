@@ -95,7 +95,9 @@ test.group('crédit de montée refusé', () => {
     const { subscription, close } = buildPaidSubscription(upgradePayment, null, NOW)
 
     assert.isNull(honoredUpgradeCredit(upgradePayment, null, NOW))
-    assert.approximately(subscription.daily_value!, 4000 / 30, 1e-9)
+    // 4 000 F payés pour un forfait à 5 000 F : 24 jours sur 30, au prix plein.
+    assert.equal(subscription.end_date.getTime(), inDays(24).getTime())
+    assert.approximately(subscription.daily_value!, 5000 / 30, 1e-9)
     assert.isNull(close)
   })
 
