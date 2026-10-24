@@ -56,32 +56,44 @@ function soldDays(booking: OccupancyBooking, start: Date, end: Date): number {
 }
 
 /**
- * Jours vendus d'un séjour imputables à la fenêtre, pondérés par type de séjour.
+ * Part d'un séjour tombant dans la fenêtre, de 0 à 1, au prorata du temps.
  *
- * Part proportionnelle au temps : un séjour de 2 jours dont 10 heures tombent
- * en septembre et 38 en octobre impute 0,42 jour à septembre et 1,58 à
- * octobre. Un séjour sans durée — sortie le jour même, ou dates corrompues —
- * compte entièrement dans la fenêtre qui contient son entrée.
+ * Un séjour sans durée — sortie le jour même, ou dates corrompues — tombe
+ * entièrement dans la fenêtre qui contient son entrée.
  */
-export function occupiedDaysInWindow(booking: OccupancyBooking, from?: Date, to?: Date): number {
+export function bookingShareInWindow(booking: OccupancyBooking, from?: Date, to?: Date): number {
   const start = booking.start_date
   if (!start) return 0
   const end = booking.end_date ?? start
 
-  const sold = soldDays(booking, start, end)
-  const totalMs = end.getTime() - start.getTime()
-
-  let share: number
-  if (totalMs <= 0) {
+  if (end.getTime() <= start.getTime()) {
     const before = from !== undefined && start < from
     const after = to !== undefined && start >= to
-    share = before || after ? 0 : 1
-  } else {
-    const effectiveStart = from && from > start ? from : start
-    const effectiveEnd = to && to < end ? to : end
-    if (effectiveEnd <= effectiveStart) return 0
-    share = (effectiveEnd.getTime() - effectiveStart.getTime()) / totalMs
+    return before || after ? 0 : 1
   }
+
+  const effectiveStart = from && from > start ? from : start
+  const effectiveEnd = to && to < end ? to : end
+  if (effectiveEnd <= effectiveStart) return 0
+
+  return (effectiveEnd.getTime() - effectiveStart.getTime()) / (end.getTime() - start.getTime())
+}
+
+/**
+ * Jours vendus d'un séjour imputables à la fenêtre, pondérés par type de séjour.
+ *
+ * Part proportionnelle au temps : un séjour de 2 jours dont 10 heures tombent
+ * en septembre et 38 en octobre impute 0,42 jour à septembre et 1,58 à
+ * octobre.
+ */
+export function occupiedDaysInWindow(booking: OccupancyBooking, from?: Date, to?: Date): number {
+  const start = booking.start_date
+  if (!start) return 0
+
+  const share = bookingShareInWindow(booking, from, to)
+  if (share === 0) return 0
+
+  const sold = soldDays(booking, start, booking.end_date ?? start)
 
   // Les réservations antérieures au séjour comptoir n'ont pas de type : elles
   // sont toutes des séjours complets. Un type inconnu suit la même règle
@@ -100,6 +112,55 @@ export function sumOccupiedDays(
   to?: Date
 ): number {
   return bookings.reduce((sum, booking) => sum + occupiedDaysInWindow(booking, from, to), 0)
+}
+
+/**
+ * Nombre de réservations tombant dans la fenêtre, chacune comptée pour la part
+ * de sa durée qui s'y trouve.
+ *
+ * Dénominateur du séjour moyen. Le nombre brut de réservations ne convient
+ * pas : un séjour de 3 jours du 31 octobre au 3 novembre n'apporte qu'un jour
+ * à octobre mais y comptait pour une réservation entière — 1 j de séjour moyen
+ * en octobre, 2 j en novembre, pour un séjour de 3 jours. Rapportés à la même
+ * part, numérateur et dénominateur rendent 3 j dans les deux mois.
+ */
+export function sumBookingShares(
+  bookings: readonly OccupancyBooking[],
+  from?: Date,
+  to?: Date
+): number {
+  return bookings.reduce((sum, booking) => sum + bookingShareInWindow(booking, from, to), 0)
+}
+
+/**
+ * Logements ayant porté au moins un séjour sur la fenêtre.
+ *
+ * Déduit des réservations et non du statut `rented` du logement : depuis que
+ * la disponibilité se lit sur les dates (`bookings/availability.ts`), plus
+ * aucun flux n'écrit ce statut, et le compteur qui s'y fiait restait à zéro
+ * quelle que soit l'activité.
+ *
+ * `unitIds` restreint le décompte aux logements de la capacité : une
+ * réservation se rattache à sa résidence par un `residence_id` figé, et une
+ * unité déplacée depuis ne doit pas compter dans une résidence qu'elle a
+ * quittée.
+ */
+export function rentedUnits(
+  bookings: readonly (OccupancyBooking & { property_id?: string | null })[],
+  from?: Date,
+  to?: Date,
+  unitIds?: ReadonlySet<string> | null
+): number {
+  const rented = new Set<string>()
+
+  for (const booking of bookings) {
+    const propertyId = booking.property_id
+    if (!propertyId || rented.has(propertyId)) continue
+    if (unitIds && !unitIds.has(propertyId)) continue
+    if (bookingShareInWindow(booking, from, to) > 0) rented.add(propertyId)
+  }
+
+  return rented.size
 }
 
 /**

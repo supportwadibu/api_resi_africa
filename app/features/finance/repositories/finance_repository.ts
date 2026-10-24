@@ -6,7 +6,15 @@ import { elapsedWindow } from '#features/bookings/booking_stats'
 
 import Residence from '#models/residence'
 
-import { exploitedUnits, occupancyRate, sumOccupiedDays } from '../occupancy.ts'
+import { averageStay } from '#features/reports/metrics/average_stay'
+
+import {
+  exploitedUnits,
+  occupancyRate,
+  rentedUnits,
+  sumBookingShares,
+  sumOccupiedDays,
+} from '../occupancy.ts'
 import { splitRevenueByMonth } from '../revenue_split.ts'
 import { belongsToResidence } from '../residence_scope.ts'
 
@@ -280,6 +288,17 @@ export class FinanceRepository {
         ? unitIds.size
         : exploitedUnits(propertyStats)
 
+    // Même fenêtre que le taux : un logement réservé pour la fin du mois n'est
+    // pas encore « loué » le 10, et la note sous le taux ne doit pas le
+    // contredire. Sans bornes, toute l'activité compte.
+    const unitsWindow = occupancyRange ?? range
+    const unitesLouees = rentedUnits(
+      bookings,
+      unitsWindow.from,
+      unitsWindow.to,
+      filters.property_id ? new Set([filters.property_id]) : unitIds
+    )
+
     return {
       summary: {
         ca_brut: caBrut,
@@ -294,7 +313,11 @@ export class FinanceRepository {
           ? occupancyRate(bookings, capacity, occupancyRange.from, occupancyRange.to)
           : 0,
         reservations: bookings.length,
-        moyen_sejour: bookings.length ? totalDays / bookings.length : 0,
+        moyen_sejour: averageStay(totalDays, sumBookingShares(bookings, range.from, range.to)),
+        unites_louees: unitesLouees,
+        // Borné à zéro : un logement mis hors service après un séjour de la
+        // période compte parmi les loués sans peser dans la capacité.
+        unites_libres: Math.max(0, capacity - unitesLouees),
       },
       revenue_points: aggregateRevenuePoints(revenueBookings, range),
     }

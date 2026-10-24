@@ -2,9 +2,9 @@ import { test } from '@japa/runner'
 import { averageStay } from '#features/reports/metrics/average_stay'
 
 test.group('averageStay', () => {
-  test('divise les jours d’occupation par le nombre de réservations', ({ assert }) => {
+  test('divise les jours d’occupation par la part de réservations', ({ assert }) => {
     // Même formule que `moyen_sejour` de `FinanceRepository.overview` :
-    // `totalDays / bookings.length`.
+    // `totalDays / sumBookingShares(...)`.
     assert.equal(averageStay(13, 3), 13 / 3)
   })
 
