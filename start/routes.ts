@@ -4,6 +4,7 @@ import router from '@adonisjs/core/services/router'
 
 const AuthController = () => import('#controllers/auth/auth_controller')
 const CronController = () => import('#controllers/cron_controller')
+const HealthController = () => import('#controllers/health_controller')
 const AdminWithdrawalsController = () => import('#controllers/admin/withdrawals_controller')
 const AdminWaveTestController = () => import('#controllers/admin/wave_test_controller')
 const ProprioWalletController = () => import('#controllers/proprio/wallet_controller')
@@ -51,6 +52,11 @@ const ClientBookingPaymentController = () =>
 router.get('/', () => {
   return { hello: 'world' }
 })
+
+// Sonde publique, sans secret : voir `HealthController`. Exposée à la racine
+// et sous le préfixe de l'API, pour qu'un moniteur trouve l'une ou l'autre.
+router.get('health', [HealthController, 'show']).as('health')
+router.get('api/v1/health', [HealthController, 'show']).as('api_health')
 
 router
   .group(() => {
@@ -599,6 +605,8 @@ router
         )
         router.route('stay-statuses', ['GET', 'POST'], [CronController, 'stayStatuses'])
         router.route('purge-sessions', ['GET', 'POST'], [CronController, 'purgeSessions'])
+        // Ancienne sonde, gardée pour un moniteur déjà configuré avec le
+        // secret. La sonde publique est `/health`.
         router.get('health', [CronController, 'health'])
       })
       .prefix('cron')
