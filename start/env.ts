@@ -21,6 +21,12 @@ export default await Env.create(new URL('../', import.meta.url), {
   // App
   APP_KEY: Env.schema.secret(),
   APP_URL: Env.schema.string({ format: 'url', tld: false }),
+  /**
+   * Site public (`site/`), sans barre finale. Wave y renvoie le propriétaire
+   * après un paiement d'abonnement, sur `/fr/paiement/succes` ou `/echec`.
+   * Absent : l'API affiche sa propre page de retour, minimale.
+   */
+  SITE_URL: Env.schema.string.optional({ format: 'url', tld: false }),
 
   // Session
   SESSION_DRIVER: Env.schema.enum(['cookie'] as const),

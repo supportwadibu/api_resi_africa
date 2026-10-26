@@ -9,6 +9,10 @@ import {
   type WithId,
 } from '#firebase/firestore'
 
+import { usableCredit } from '#features/subscriptions/cancellation_policy'
+import type { SubscriptionDocument } from '#models/subscription'
+import { subscriptionCredits, type SubscriptionCreditDocument } from '#models/subscription_credit'
+
 /**
  * Portefeuille d'une résidence : l'argent payé en ligne par ses clients, que
  * RESI doit au propriétaire.
@@ -34,6 +38,12 @@ export interface WalletDocument {
   total_credited: number
   /** Retraits versés, montants bruts (frais compris). */
   total_withdrawn: number
+  /**
+   * Part du solde retirable sans frais : les remboursements d'abonnement.
+   * RESI rend là un argent que le propriétaire avait payé, et y prélever 1 %
+   * reviendrait à ne pas le rendre en entier. Absente sur l'historique : 0.
+   */
+  fee_free_balance?: number
   created_at: Date
   updated_at: Date
 }
@@ -47,6 +57,8 @@ export const WALLET_TRANSACTION_TYPES = [
   // Paiement rendu au client par Wave à l'annulation : RESI a rendu l'argent,
   // le propriétaire ne le lui doit plus.
   'refund',
+  // Jours d'abonnement non consommés, rendus à la résiliation.
+  'subscription_refund',
 ] as const
 export type WalletTransactionType = (typeof WALLET_TRANSACTION_TYPES)[number]
 
@@ -62,6 +74,8 @@ export interface WalletTransactionDocument {
   booking_id: string | null
   booking_payment_id: string | null
   withdrawal_id: string | null
+  /** Abonnement résilié, pour un `subscription_refund`. Absent ailleurs. */
+  subscription_id?: string | null
   created_at: Date
 }
 
@@ -79,6 +93,11 @@ export interface WithdrawalRequestDocument {
   fee: number
   /** Versé au propriétaire. */
   net_amount: number
+  /**
+   * Part du montant prise sur `fee_free_balance`, sans frais : rendue à ce
+   * solde si la demande est refusée. Absente sur l'historique : 0.
+   */
+  fee_free_amount?: number
   /** Numéro Wave du versement, figé à la demande. */
   payout_phone: string
   /** Nom du titulaire, figé à la demande, pour que l'équipe vérifie le compte. */
@@ -114,6 +133,7 @@ function emptyWallet(ownerId: string, residenceId: string | null, now: Date): Wa
     balance: 0,
     total_credited: 0,
     total_withdrawn: 0,
+    fee_free_balance: 0,
     created_at: now,
     updated_at: now,
   }
@@ -167,6 +187,7 @@ const Wallet = {
           balance,
           total_credited: current.total_credited + input.amount,
           total_withdrawn: current.total_withdrawn,
+          fee_free_balance: current.fee_free_balance ?? 0,
           created_at: current.created_at,
           updated_at: now,
         }) as unknown as WalletDocument
@@ -228,6 +249,9 @@ const Wallet = {
           balance,
           total_credited: current.total_credited,
           total_withdrawn: current.total_withdrawn,
+          // Un solde réduit par un remboursement client ne peut porter plus
+          // d'exonération qu'il ne lui reste d'argent.
+          fee_free_balance: Math.min(current.fee_free_balance ?? 0, Math.max(0, balance)),
           created_at: current.created_at,
           updated_at: now,
         }) as unknown as WalletDocument
@@ -252,6 +276,119 @@ const Wallet = {
   },
 
   /**
+   * Résilie un abonnement et rend ses jours non consommés au portefeuille.
+   *
+   * Une seule transaction pour les deux : un abonnement résilié sans
+   * remboursement, ou un remboursement sans résiliation, ferait perdre son
+   * argent au propriétaire ou le lui rendrait en lui laissant l'accès.
+   *
+   * Idempotent : l'abonnement n'est résilié que s'il est encore actif, et la
+   * ligne du journal porte son identifiant — un double appui ne crédite
+   * qu'une fois. Rend `false` si l'abonnement n'était plus actif.
+   *
+   * Le crédit alimente aussi `fee_free_balance` : retirer ce remboursement
+   * ne coûte pas de frais.
+   */
+  async cancelSubscriptionWithRefund(input: {
+    wallet_id: string
+    owner_id: string
+    subscription_id: string
+    refund: number
+    /**
+     * Gardé en crédit bloqué, ajouté au crédit encore valable. 0 ou absent :
+     * aucun crédit.
+     */
+    credit?: { amount: number; expires_at: Date } | null
+    reason: string
+  }): Promise<boolean> {
+    const subscriptionRef = collection<SubscriptionDocument>(COLLECTIONS.subscriptions).doc(
+      input.subscription_id
+    )
+    const walletRef = wallets().doc(input.wallet_id)
+    const lineRef = walletTransactions().doc(`subscription_refund_${input.subscription_id}`)
+    const creditRef = subscriptionCredits().doc(input.owner_id)
+    const creditAmount = Math.max(0, Math.floor(input.credit?.amount ?? 0))
+
+    return transaction(async (tx) => {
+      const [subscriptionSnap, walletSnap, lineSnap, creditSnap] = await Promise.all([
+        tx.get(subscriptionRef),
+        tx.get(walletRef),
+        tx.get(lineRef),
+        tx.get(creditRef),
+      ])
+      const subscription = toDoc<SubscriptionDocument>(subscriptionSnap)
+      if (!subscription || subscription.user_id !== input.owner_id) return false
+      if (subscription.status !== 'active' || lineSnap.exists) return false
+
+      const now = new Date()
+      tx.update(
+        subscriptionRef,
+        toPayload({
+          status: 'cancelled',
+          cancelled_at: now,
+          cancel_reason: input.reason,
+          refunded_amount: input.refund,
+          retained_credit: creditAmount > 0 ? creditAmount : null,
+          updated_at: now,
+        })
+      )
+
+      if (creditAmount > 0 && input.credit) {
+        const previous = toDoc<SubscriptionCreditDocument>(creditSnap)
+        // Un crédit encore valable s'ajoute au nouveau, et l'échéance repart
+        // du dernier : deux résiliations ne doivent pas faire perdre le
+        // premier crédit.
+        tx.set(
+          creditRef,
+          toPayload({
+            user_id: input.owner_id,
+            amount: usableCredit(previous, now) + creditAmount,
+            expires_at: input.credit.expires_at,
+            source_subscription_id: input.subscription_id,
+            created_at: previous?.created_at ?? now,
+            updated_at: now,
+          } satisfies SubscriptionCreditDocument) as unknown as SubscriptionCreditDocument
+        )
+      }
+
+      if (input.refund <= 0) return true
+
+      const current = toDoc<WalletDocument>(walletSnap) ?? emptyWallet(input.owner_id, null, now)
+      const balance = current.balance + input.refund
+      tx.set(
+        walletRef,
+        toPayload({
+          owner_id: current.owner_id,
+          residence_id: current.residence_id,
+          balance,
+          total_credited: current.total_credited + input.refund,
+          total_withdrawn: current.total_withdrawn,
+          fee_free_balance: (current.fee_free_balance ?? 0) + input.refund,
+          created_at: current.created_at,
+          updated_at: now,
+        }) as unknown as WalletDocument
+      )
+      tx.set(
+        lineRef,
+        toPayload({
+          wallet_id: input.wallet_id,
+          owner_id: input.owner_id,
+          residence_id: null,
+          type: 'subscription_refund',
+          amount: input.refund,
+          balance_after: balance,
+          booking_id: null,
+          booking_payment_id: null,
+          withdrawal_id: null,
+          subscription_id: input.subscription_id,
+          created_at: now,
+        } satisfies WalletTransactionDocument) as unknown as WalletTransactionDocument
+      )
+      return true
+    })
+  },
+
+  /**
    * Enregistre une demande de retrait et en débite le portefeuille.
    *
    * Débité à la demande et non au versement : sinon deux demandes successives
@@ -263,7 +400,10 @@ const Wallet = {
     owner_id: string
     payout_phone: string
     payout_name: string | null
-    quote: (balance: number) => { amount: number; fee: number; net_amount: number }
+    quote: (
+      balance: number,
+      feeFreeBalance: number
+    ) => { amount: number; fee: number; net_amount: number; fee_free_amount: number }
   }): Promise<WithdrawalRequestRecord | null> {
     const walletRef = wallets().doc(input.wallet_id)
     const requestRef = withdrawals().doc()
@@ -273,7 +413,8 @@ const Wallet = {
       const wallet = toDoc<WalletDocument>(await tx.get(walletRef))
       if (!wallet || wallet.owner_id !== input.owner_id) return null
 
-      const quoted = input.quote(wallet.balance)
+      const feeFreeBalance = wallet.fee_free_balance ?? 0
+      const quoted = input.quote(wallet.balance, feeFreeBalance)
       const amount = quoted.amount
       const now = new Date()
       const balance = wallet.balance - amount
@@ -285,6 +426,7 @@ const Wallet = {
         amount,
         fee: quoted.fee,
         net_amount: quoted.net_amount,
+        fee_free_amount: quoted.fee_free_amount,
         payout_phone: input.payout_phone,
         payout_name: input.payout_name,
         status: 'pending',
@@ -296,7 +438,11 @@ const Wallet = {
         updated_at: now,
       }
 
-      tx.update(walletRef, { balance, updated_at: now })
+      tx.update(walletRef, {
+        balance,
+        fee_free_balance: feeFreeBalance - quoted.fee_free_amount,
+        updated_at: now,
+      })
       tx.set(requestRef, toPayload(request) as unknown as WithdrawalRequestDocument)
       tx.set(
         lineRef,
@@ -364,7 +510,11 @@ const Wallet = {
 
       if (wallet && input.status === 'rejected') {
         const balance = wallet.balance + request.amount
-        tx.update(walletRef, { balance, updated_at: now })
+        tx.update(walletRef, {
+          balance,
+          fee_free_balance: (wallet.fee_free_balance ?? 0) + (request.fee_free_amount ?? 0),
+          updated_at: now,
+        })
         tx.set(
           walletTransactions().doc(`reversal_${id}`),
           toPayload({

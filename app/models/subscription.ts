@@ -36,6 +36,27 @@ export interface SubscriptionDocument {
   cancelled_at: Date | null
   cancel_reason: string | null
 
+  /**
+   * Valeur d'un jour de la période, en francs, figée à l'activation : base du
+   * remboursement à la résiliation et du crédit d'une montée de forfait.
+   * Absente sur l'historique — `dailyValueOf` la déduit du montant payé.
+   */
+  daily_value?: number | null
+  /** Rendu au portefeuille du propriétaire à la résiliation. Absent ailleurs. */
+  refunded_amount?: number | null
+  /**
+   * Crédit d'abonnement déduit du paiement. Absent sur l'historique et sur les
+   * paiements sans crédit : 0.
+   */
+  credit_applied?: number | null
+  /** Gardé en crédit bloqué à la résiliation. Absent ailleurs. */
+  retained_credit?: number | null
+  /**
+   * Résilié sans remboursement : l'abonnement reste actif jusqu'à
+   * `end_date`, puis expire. Absent sur l'historique : faux.
+   */
+  cancel_at_period_end?: boolean | null
+
   created_at: Date
   updated_at: Date
 }

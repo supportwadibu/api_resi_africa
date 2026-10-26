@@ -14,7 +14,7 @@ export class RequestWithdrawalUseCase {
       owner_id: input.owner_id,
       payout_phone: normalizePhone(input.payout_phone),
       payout_name: input.payout_name?.trim() || null,
-      quote: (balance) => quoteWithdrawal(input.amount, balance),
+      quote: (balance, feeFreeBalance) => quoteWithdrawal(input.amount, balance, feeFreeBalance),
     })
 
     if (!request) {

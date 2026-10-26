@@ -61,12 +61,20 @@ test.group('checkoutRefusal', () => {
     )
   })
 
-  test('dans la fenêtre, changer de palier est refusé : pas de switch en cours de période', ({
-    assert,
-  }) => {
+  test('monter de palier est permis à tout moment : la montée se paie au prorata', ({ assert }) => {
+    assert.isNull(
+      checkoutRefusal(
+        { status: 'active', is_trial: false, plan_tier: 'pro', end_date: inDays(20) },
+        'pro_plus',
+        NOW
+      )
+    )
+  })
+
+  test('descendre de palier attend l’échéance', ({ assert }) => {
     const refusal = checkoutRefusal(
-      { status: 'active', is_trial: false, plan_tier: 'pro', end_date: inDays(3) },
-      'pro_plus',
+      { status: 'active', is_trial: false, plan_tier: 'pro_plus', end_date: inDays(3) },
+      'pro',
       NOW
     )
 

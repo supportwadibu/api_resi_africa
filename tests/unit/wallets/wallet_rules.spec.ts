@@ -18,7 +18,12 @@ test.group('computeWithdrawalFee', () => {
 
 test.group('quoteWithdrawal', () => {
   test('débite le montant demandé, verse le net', ({ assert }) => {
-    assert.deepEqual(quoteWithdrawal(10000, 25000), { amount: 10000, fee: 100, net_amount: 9900 })
+    assert.deepEqual(quoteWithdrawal(10000, 25000), {
+      amount: 10000,
+      fee: 100,
+      net_amount: 9900,
+      fee_free_amount: 0,
+    })
   })
 
   test('refuse un retrait au-dessus du solde', ({ assert }) => {

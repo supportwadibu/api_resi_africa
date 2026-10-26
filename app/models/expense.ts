@@ -31,6 +31,7 @@ import {
  */
 
 export const EXPENSE_CATEGORIES = [
+  'rent',
   'electricity',
   'water',
   'internet',

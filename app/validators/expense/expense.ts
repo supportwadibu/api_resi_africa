@@ -3,6 +3,14 @@ import vine from '@vinejs/vine'
 import { EXPENSE_CATEGORIES } from '#models/expense'
 
 /**
+ * Instant de la dépense : ISO 8601 horodaté, envoyé par le mobile pour que
+ * l'historique affiche l'heure, ou le jour seul. Le jour seul reste admis :
+ * les versions antérieures de l'application et les saisies déjà en file hors
+ * ligne l'envoient encore.
+ */
+const SPENT_AT_FORMATS = ['YYYY-MM-DD', 'iso8601']
+
+/**
  * POST /proprio/expenses
  */
 export const createExpenseValidator = vine.compile(
@@ -18,7 +26,7 @@ export const createExpenseValidator = vine.compile(
     residence_id: vine.string().trim().minLength(1).optional(),
     category: vine.enum(EXPENSE_CATEGORIES),
     amount: vine.number().positive(),
-    spent_at: vine.date(),
+    spent_at: vine.date({ formats: SPENT_AT_FORMATS }),
     note: vine.string().trim().maxLength(500).optional(),
     /** UUID d'idempotence d'une saisie hors ligne, rejouée par la file. */
     client_request_id: vine.string().trim().minLength(1).maxLength(64).optional(),
@@ -36,7 +44,7 @@ export const updateExpenseValidator = vine.compile(
     residence_id: vine.string().trim().minLength(1).nullable().optional(),
     category: vine.enum(EXPENSE_CATEGORIES).optional(),
     amount: vine.number().positive().optional(),
-    spent_at: vine.date().optional(),
+    spent_at: vine.date({ formats: SPENT_AT_FORMATS }).optional(),
     // `nullable` : une note vidée doit pouvoir être effacée, pas seulement
     // omise — omettre la clé laisse la note en place.
     note: vine.string().trim().maxLength(500).nullable().optional(),

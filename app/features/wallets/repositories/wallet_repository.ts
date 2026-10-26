@@ -149,6 +149,7 @@ export class WalletRepository {
       total_credited: wallet.total_credited,
       total_withdrawn: wallet.total_withdrawn,
       pending_withdrawals: pending,
+      fee_free_balance: wallet.fee_free_balance ?? 0,
       updated_at: wallet.updated_at,
     }
   }

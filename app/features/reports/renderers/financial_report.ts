@@ -14,13 +14,14 @@ export interface FinancialReportData {
 }
 
 /**
- * Libellés des huit valeurs de `EXPENSE_CATEGORIES` (`app/models/expense.ts`).
+ * Libellés des valeurs de `EXPENSE_CATEGORIES` (`app/models/expense.ts`).
  * Duplique la liste plutôt que de l'importer : coupler ce renderer au type
  * exact figerait son évolution à celle du modèle de dépense, alors qu'une
  * catégorie inconnue doit simplement retomber sur « Autre » (voir le repli
  * ci-dessous).
  */
 const CATEGORY_LABELS: Record<string, string> = {
+  rent: 'Loyer',
   electricity: 'Électricité',
   water: 'Eau',
   internet: 'Internet',
