@@ -37,6 +37,7 @@ export const COLLECTIONS = {
   plans: 'plans',
   subscriptions: 'subscriptions',
   subscriptionEvents: 'subscription_events',
+  subscriptionCredits: 'subscription_credits',
   promoCodes: 'promo_codes',
   promoCodeUsages: 'promo_code_usages',
   typeOfPieces: 'type_of_pieces',

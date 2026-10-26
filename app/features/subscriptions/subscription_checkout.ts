@@ -184,6 +184,11 @@ export interface PaidCheckout {
   upgrade_credit?: number | null
   /** Abonnement dont les jours restants ont fourni `upgrade_credit`. */
   upgrade_from?: string | null
+  /**
+   * Crédit d'abonnement bloqué déduit du prix (`metadata.subscription_credit`).
+   * Toujours honoré : il est consommé dans la transaction d'activation.
+   */
+  subscription_credit?: number | null
 }
 
 /**
@@ -244,9 +249,10 @@ export function buildPaidSubscription(
   // Crédit annoncé au lancement, honoré ou non : le prix plein du forfait est
   // `amount + declaredCredit`.
   const declaredCredit = Math.max(0, payment.upgrade_credit ?? 0)
+  const subscriptionCredit = Math.max(0, payment.subscription_credit ?? 0)
   // Valeur d'un jour, figée, au prix plein : remboursement et crédit de montée
-  // s'en déduisent.
-  const dailyValue = (payment.amount + declaredCredit) / durationDays
+  // s'en déduisent. Le crédit d'abonnement fait partie du prix payé.
+  const dailyValue = (payment.amount + declaredCredit + subscriptionCredit) / durationDays
   // Jours ouverts : la durée entière quand le prix plein est couvert —
   // paiement ordinaire, ou montée dont le crédit est honoré —, sinon la part
   // que le montant versé paie au prix plein. Fermé par défaut : quelle que
@@ -274,6 +280,9 @@ export function buildPaidSubscription(
       cancel_reason: null,
       daily_value: dailyValue,
       refunded_amount: null,
+      credit_applied: subscriptionCredit > 0 ? subscriptionCredit : null,
+      retained_credit: null,
+      cancel_at_period_end: false,
     },
     close: current ? closingOf(current, isLive, isUpgradePayment) : null,
   }
@@ -298,6 +307,18 @@ function closingOf(
 }
 
 /**
+ * Nombre porté par `metadata`, `null` sinon. `metadata` est libre et absent
+ * de l'historique : seul un nombre fini vaut.
+ */
+export function readPaymentNumber(
+  metadata: Record<string, unknown> | undefined,
+  key: string
+): number | null {
+  const value = metadata?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/**
  * La session payée chez Wave correspond-elle au paiement enregistré ?
  *
  * Montant, devise et référence doivent être ceux que l'application a
@@ -305,11 +326,19 @@ function closingOf(
  * ce forfait. Wave renvoie le montant en chaîne.
  */
 export function isPaymentConsistent(
-  payment: { _id: string; amount: number; currency: string },
+  payment: {
+    _id: string
+    amount: number
+    currency: string
+    metadata?: Record<string, unknown>
+  },
   session: { amount: string; currency: string; client_reference: string | null }
 ): boolean {
+  // Les frais Wave sont encaissés avec le forfait. Absents des paiements
+  // antérieurs à leur refacturation : la session ne portait que le prix.
+  const fee = readPaymentNumber(payment.metadata, 'wave_fee') ?? 0
   return (
-    Number(session.amount) === Number(payment.amount) &&
+    Number(session.amount) === Number(payment.amount) + fee &&
     session.currency.toUpperCase() === payment.currency.toUpperCase() &&
     (session.client_reference === null || session.client_reference === payment._id)
   )

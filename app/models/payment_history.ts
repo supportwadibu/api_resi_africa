@@ -9,8 +9,12 @@ import {
   type WithId,
 } from '#firebase/firestore'
 import type { SubscriptionDocument } from '#models/subscription'
+import { subscriptionCredits, type SubscriptionCreditDocument } from '#models/subscription_credit'
 import type { PlanTier } from '#features/plans/plan_tier'
-import type { ActivationPlan } from '#features/subscriptions/subscription_checkout'
+import {
+  readPaymentNumber,
+  type ActivationPlan,
+} from '#features/subscriptions/subscription_checkout'
 import { ACTIVE_SUBSCRIPTION_STATUSES } from '#utils/enums/subscription_status'
 
 /**
@@ -247,8 +251,25 @@ const PaymentHistory = {
         ? null
         : toDoc<SubscriptionDocument>(currentSnapshot.docs[0])
 
+      // Crédit d'abonnement déduit au lancement : consommé ici, dans la même
+      // transaction que l'activation, pour qu'un paiement confirmé deux fois
+      // — webhook et retour du propriétaire — ne le débite qu'une fois.
+      const creditUsed = readPaymentNumber(payment.metadata, 'subscription_credit') ?? 0
+      const creditRef = subscriptionCredits().doc(payment.user_id)
+      const credit =
+        creditUsed > 0 ? toDoc<SubscriptionCreditDocument>(await tx.get(creditRef)) : null
+
       const { subscription, close } = build(payment, current)
       const now = new Date()
+
+      // Le paiement est honoré même si le crédit a fondu entre-temps : l'argent
+      // est reçu, et `PendingPaymentSettler` ne laisse qu'une session ouverte.
+      if (credit) {
+        tx.update(
+          creditRef,
+          toPayload({ amount: Math.max(0, credit.amount - creditUsed), updated_at: now })
+        )
+      }
 
       if (close) {
         tx.update(

@@ -1,13 +1,14 @@
 import { tierAllows } from '#features/plans/plan_tier'
+import SubscriptionCredit from '#models/subscription_credit'
 
 import PlanRepository from '../../plans/repositories/plan_repository.ts'
+import { cancellationTerms, usableCredit, WAVE_FEE_RATE } from '../cancellation_policy.ts'
 import type { SubscriptionOptionsDto } from '../dto/subscription.dto.ts'
 import SubscriptionRepository from '../repositories/subscription_repository.ts'
 import {
   isLivePaid,
   isRenewable,
   remainingPaidDays,
-  unusedValue,
   upgradeQuote,
 } from '../subscription_checkout.ts'
 
@@ -26,15 +27,30 @@ export class GetSubscriptionOptionsUseCase {
 
   async execute(userId: string, now: Date = new Date()): Promise<SubscriptionOptionsDto> {
     await this.subscriptionRepo.expireOverdue(userId)
-    const current = await this.subscriptionRepo.findCurrentByUser(userId)
+    const [current, creditDoc] = await Promise.all([
+      this.subscriptionRepo.findCurrentByUser(userId),
+      SubscriptionCredit.findByUser(userId),
+    ])
+
+    const creditAmount = usableCredit(creditDoc, now)
+    const credit =
+      creditDoc && creditAmount > 0
+        ? { amount: creditAmount, expires_at: creditDoc.expires_at }
+        : null
 
     if (!current || !isLivePaid(current, now)) {
       return {
         renewable: true,
         cancellable: false,
+        cancel_mode: null,
         refund_amount: 0,
+        refund_credit: 0,
+        access_ends_at: null,
+        cancel_scheduled: false,
         remaining_days: 0,
         upgrades: [],
+        credit,
+        wave_fee_rate: WAVE_FEE_RATE,
       }
     }
 
@@ -55,12 +71,21 @@ export class GetSubscriptionOptionsUseCase {
       // `StartSubscriptionCheckoutUseCase` la refuserait.
       .filter((upgrade) => upgrade.amount >= 1)
 
+    const scheduled = current.cancel_at_period_end
+    const terms = cancellationTerms(current, now)
+
     return {
       renewable: isRenewable(current, now),
-      cancellable: true,
-      refund_amount: unusedValue(current, currentPlan?.duration_days, now),
+      cancellable: !scheduled,
+      cancel_mode: scheduled ? null : terms.mode,
+      refund_amount: scheduled ? 0 : terms.refund,
+      refund_credit: scheduled ? 0 : terms.credit,
+      access_ends_at: terms.immediate && !scheduled ? now : current.end_date,
+      cancel_scheduled: scheduled,
       remaining_days: remainingPaidDays(current.end_date, now),
       upgrades,
+      credit,
+      wave_fee_rate: WAVE_FEE_RATE,
     }
   }
 }

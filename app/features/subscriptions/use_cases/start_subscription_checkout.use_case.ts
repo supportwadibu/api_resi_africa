@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 
 import logger from '@adonisjs/core/services/logger'
 
+import SubscriptionCredit from '#models/subscription_credit'
 import WaveClient, { toPaymentDomainError } from '#services/wave_client'
 import env from '#start/env'
 import { DomainError } from '#utils/domain_error'
@@ -10,6 +11,7 @@ import PlanRepository from '../../plans/repositories/plan_repository.ts'
 import type { SubscriptionCheckoutDto } from '../dto/subscription_payment.dto.ts'
 import SubscriptionPaymentRepository from '../repositories/subscription_payment_repository.ts'
 import SubscriptionRepository from '../repositories/subscription_repository.ts'
+import { usableCredit, waveFeeFor } from '../cancellation_policy.ts'
 import PendingPaymentSettler from '../settle_pending_payments.ts'
 import { checkoutRefusal, isUpgrade, upgradeQuote } from '../subscription_checkout.ts'
 import ConfirmSubscriptionPaymentUseCase from './confirm_subscription_payment.use_case.ts'
@@ -71,6 +73,21 @@ export class StartSubscriptionCheckoutUseCase {
       amount = quote.amount
     }
 
+    // Crédit bloqué d'une résiliation : déduit du prix, sans jamais le
+    // ramener à zéro — Wave n'encaisse pas de montant nul. Le reste demeure
+    // pour un paiement suivant. Consommé à l'activation seulement : une
+    // session abandonnée ne le fait pas perdre.
+    const subscriptionCredit = Math.min(
+      usableCredit(await SubscriptionCredit.findByUser(input.user_id)),
+      amount - 1
+    )
+    if (subscriptionCredit > 0) amount -= subscriptionCredit
+
+    // Les frais Wave sont à la charge du propriétaire, annoncés avant le
+    // paiement. `amount` reste le prix du forfait : remboursement et dépense
+    // s'en déduisent, Wave garde ses frais.
+    const waveFee = waveFeeFor(amount)
+
     const reference = `SUB-${input.user_id}-${crypto.randomUUID()}`
     const currency = (env.get('WAVE_CURRENCY') ?? 'XOF').toUpperCase()
     const returnUrl = `${env.get('APP_URL')}/api/v1/payments/wave/subscriptions/${reference}/return`
@@ -78,7 +95,7 @@ export class StartSubscriptionCheckoutUseCase {
     let checkout
     try {
       checkout = await this.wave.createCheckoutSession({
-        amount,
+        amount: amount + waveFee,
         currency,
         clientReference: reference,
         successUrl: `${returnUrl}?outcome=success`,
@@ -103,8 +120,13 @@ export class StartSubscriptionCheckoutUseCase {
       payment_url: paymentUrl,
       // L'abonnement d'origine accompagne le crédit : la confirmation ne
       // l'honore que s'il est encore celui en cours (`buildPaidSubscription`).
-      metadata:
-        upgradeCredit === null ? {} : { upgrade_credit: upgradeCredit, upgrade_from: upgradeFrom },
+      metadata: {
+        ...(upgradeCredit === null
+          ? {}
+          : { upgrade_credit: upgradeCredit, upgrade_from: upgradeFrom }),
+        ...(subscriptionCredit > 0 ? { subscription_credit: subscriptionCredit } : {}),
+        wave_fee: waveFee,
+      },
     })
 
     return {

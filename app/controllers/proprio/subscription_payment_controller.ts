@@ -62,8 +62,8 @@ export default class ProprioSubscriptionPaymentController {
   /**
    * POST /proprio/subscription/cancel
    *
-   * Résilie le forfait payant en cours et rend les jours non consommés au
-   * portefeuille RESI du propriétaire.
+   * Résilie le forfait payant en cours selon `cancellation_policy.ts` :
+   * remboursement au portefeuille RESI, crédit bloqué, ou fin à l'échéance.
    */
   async cancel(ctx: HttpContext) {
     const data = await new CancelOwnSubscriptionUseCase().execute(ctx.authUser?.id ?? '')

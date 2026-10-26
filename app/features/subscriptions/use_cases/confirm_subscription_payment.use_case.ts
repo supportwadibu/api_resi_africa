@@ -9,15 +9,15 @@ import type { SubscriptionPaymentDto } from '../dto/subscription_payment.dto.ts'
 import SubscriptionPaymentRepository, {
   type SubscriptionPaymentRecord,
 } from '../repositories/subscription_payment_repository.ts'
-import { buildPaidSubscription, isPaymentConsistent } from '../subscription_checkout.ts'
+import {
+  buildPaidSubscription,
+  isPaymentConsistent,
+  readPaymentNumber,
+} from '../subscription_checkout.ts'
 
-/**
- * Crédit de montée porté par le paiement, `null` pour un paiement ordinaire.
- * `metadata` est libre et absent de l'historique : seul un nombre vaut.
- */
+/** Crédit de montée porté par le paiement, `null` pour un paiement ordinaire. */
 function readUpgradeCredit(metadata: Record<string, unknown> | undefined): number | null {
-  const credit = metadata?.upgrade_credit
-  return typeof credit === 'number' && Number.isFinite(credit) ? credit : null
+  return readPaymentNumber(metadata, 'upgrade_credit')
 }
 
 /**
@@ -98,6 +98,7 @@ export class ConfirmSubscriptionPaymentUseCase {
                 typeof locked.metadata?.upgrade_from === 'string'
                   ? locked.metadata.upgrade_from
                   : null,
+              subscription_credit: readPaymentNumber(locked.metadata, 'subscription_credit'),
             },
             current,
             now
@@ -151,15 +152,18 @@ export class ConfirmSubscriptionPaymentUseCase {
     spentAt: Date
   ): Promise<void> {
     const tier = planTierLabel(readPlanTier(payment.plan_tier))
+    // Les frais Wave sont un coût réel du propriétaire : la dépense dit ce qui
+    // est sorti de son compte. Absents des paiements antérieurs : 0.
+    const fee = readPaymentNumber(payment.metadata, 'wave_fee') ?? 0
 
     await Expense.createOnce({
       owner_id: payment.user_id,
       property_id: null,
       residence_id: null,
       category: 'subscription',
-      amount: Number(payment.amount),
+      amount: Number(payment.amount) + fee,
       spent_at: spentAt,
-      note: `Abonnement ${tier}`,
+      note: fee > 0 ? `Abonnement ${tier} (dont ${fee} F de frais Wave)` : `Abonnement ${tier}`,
       client_request_id: `subscription:${payment._id}`,
     })
   }

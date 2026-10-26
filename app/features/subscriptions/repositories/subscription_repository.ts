@@ -25,6 +25,9 @@ export class SubscriptionRepository {
       cancel_reason: doc.cancel_reason ?? null,
       daily_value: doc.daily_value ?? null,
       refunded_amount: doc.refunded_amount ?? null,
+      credit_applied: doc.credit_applied ?? null,
+      retained_credit: doc.retained_credit ?? null,
+      cancel_at_period_end: doc.cancel_at_period_end ?? false,
       created_at: doc.created_at,
       updated_at: doc.updated_at,
     }
@@ -75,6 +78,19 @@ export class SubscriptionRepository {
   /** Abonnements vivants de l'owner, bruts : voir `Subscription.findLiveByUser`. */
   async findLiveByUser(userId: string) {
     return Subscription.findLiveByUser(userId)
+  }
+
+  /**
+   * Résiliation sans remboursement : le statut reste `active` jusqu'à
+   * l'échéance, que `expireOverdue` constate comme pour tout abonnement.
+   */
+  async scheduleCancellation(id: string, reason: string): Promise<SubscriptionDto | null> {
+    const doc = await Subscription.findByIdAndUpdate(id, {
+      cancelled_at: new Date(),
+      cancel_reason: reason,
+      cancel_at_period_end: true,
+    })
+    return doc ? SubscriptionRepository.toDto(doc) : null
   }
 
   /**

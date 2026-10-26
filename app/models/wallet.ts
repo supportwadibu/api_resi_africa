@@ -9,7 +9,9 @@ import {
   type WithId,
 } from '#firebase/firestore'
 
+import { usableCredit } from '#features/subscriptions/cancellation_policy'
 import type { SubscriptionDocument } from '#models/subscription'
+import { subscriptionCredits, type SubscriptionCreditDocument } from '#models/subscription_credit'
 
 /**
  * Portefeuille d'une résidence : l'argent payé en ligne par ses clients, que
@@ -292,6 +294,11 @@ const Wallet = {
     owner_id: string
     subscription_id: string
     refund: number
+    /**
+     * Gardé en crédit bloqué, ajouté au crédit encore valable. 0 ou absent :
+     * aucun crédit.
+     */
+    credit?: { amount: number; expires_at: Date } | null
     reason: string
   }): Promise<boolean> {
     const subscriptionRef = collection<SubscriptionDocument>(COLLECTIONS.subscriptions).doc(
@@ -299,12 +306,15 @@ const Wallet = {
     )
     const walletRef = wallets().doc(input.wallet_id)
     const lineRef = walletTransactions().doc(`subscription_refund_${input.subscription_id}`)
+    const creditRef = subscriptionCredits().doc(input.owner_id)
+    const creditAmount = Math.max(0, Math.floor(input.credit?.amount ?? 0))
 
     return transaction(async (tx) => {
-      const [subscriptionSnap, walletSnap, lineSnap] = await Promise.all([
+      const [subscriptionSnap, walletSnap, lineSnap, creditSnap] = await Promise.all([
         tx.get(subscriptionRef),
         tx.get(walletRef),
         tx.get(lineRef),
+        tx.get(creditRef),
       ])
       const subscription = toDoc<SubscriptionDocument>(subscriptionSnap)
       if (!subscription || subscription.user_id !== input.owner_id) return false
@@ -318,9 +328,28 @@ const Wallet = {
           cancelled_at: now,
           cancel_reason: input.reason,
           refunded_amount: input.refund,
+          retained_credit: creditAmount > 0 ? creditAmount : null,
           updated_at: now,
         })
       )
+
+      if (creditAmount > 0 && input.credit) {
+        const previous = toDoc<SubscriptionCreditDocument>(creditSnap)
+        // Un crédit encore valable s'ajoute au nouveau, et l'échéance repart
+        // du dernier : deux résiliations ne doivent pas faire perdre le
+        // premier crédit.
+        tx.set(
+          creditRef,
+          toPayload({
+            user_id: input.owner_id,
+            amount: usableCredit(previous, now) + creditAmount,
+            expires_at: input.credit.expires_at,
+            source_subscription_id: input.subscription_id,
+            created_at: previous?.created_at ?? now,
+            updated_at: now,
+          } satisfies SubscriptionCreditDocument) as unknown as SubscriptionCreditDocument
+        )
+      }
 
       if (input.refund <= 0) return true
 
