@@ -50,6 +50,8 @@ export const COLLECTIONS = {
   wallets: 'wallets',
   walletTransactions: 'wallet_transactions',
   withdrawalRequests: 'withdrawal_requests',
+  payoutNumbers: 'payout_numbers',
+  platformSettings: 'platform_settings',
 } as const
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS]

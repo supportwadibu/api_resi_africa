@@ -102,6 +102,12 @@ export interface WithdrawalRequestDocument {
   payout_phone: string
   /** Nom du titulaire, figé à la demande, pour que l'équipe vérifie le compte. */
   payout_name: string | null
+  /**
+   * Position du numéro Wave enregistré choisi (1 ou 2). Absente sur
+   * l'historique et sur les demandes d'une application antérieure aux
+   * numéros enregistrés, qui saisissaient le numéro à la main.
+   */
+  payout_slot?: number | null
   status: WithdrawalStatus
   /** Référence du transfert Wave saisie par l'équipe. */
   payout_reference: string | null
@@ -413,6 +419,7 @@ const Wallet = {
     owner_id: string
     payout_phone: string
     payout_name: string | null
+    payout_slot: number | null
     quote: (
       balance: number,
       feeFreeBalance: number
@@ -442,6 +449,7 @@ const Wallet = {
         fee_free_amount: quoted.fee_free_amount,
         payout_phone: input.payout_phone,
         payout_name: input.payout_name,
+        payout_slot: input.payout_slot,
         status: 'pending',
         payout_reference: null,
         rejection_reason: null,
