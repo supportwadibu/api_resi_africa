@@ -99,6 +99,10 @@ export class ConfirmSubscriptionPaymentUseCase {
                   ? locked.metadata.upgrade_from
                   : null,
               subscription_credit: readPaymentNumber(locked.metadata, 'subscription_credit'),
+              subscription_credit_declared: readPaymentNumber(
+                locked.metadata,
+                'subscription_credit_declared'
+              ),
             },
             current,
             now

@@ -102,6 +102,12 @@ export interface WithdrawalRequestDocument {
   payout_phone: string
   /** Nom du titulaire, figé à la demande, pour que l'équipe vérifie le compte. */
   payout_name: string | null
+  /**
+   * Position du numéro Wave enregistré choisi (1 ou 2). Absente sur
+   * l'historique et sur les demandes d'une application antérieure aux
+   * numéros enregistrés, qui saisissaient le numéro à la main.
+   */
+  payout_slot?: number | null
   status: WithdrawalStatus
   /** Référence du transfert Wave saisie par l'équipe. */
   payout_reference: string | null
@@ -299,6 +305,12 @@ const Wallet = {
      * aucun crédit.
      */
     credit?: { amount: number; expires_at: Date } | null
+    /**
+     * Remboursement intégral : consomme le droit unique du propriétaire. La
+     * résiliation est refusée (`false`) s'il a déjà servi — relu ici, dans la
+     * transaction, et non seulement par l'appelant.
+     */
+    full_refund?: boolean
     reason: string
   }): Promise<boolean> {
     const subscriptionRef = collection<SubscriptionDocument>(COLLECTIONS.subscriptions).doc(
@@ -320,6 +332,9 @@ const Wallet = {
       if (!subscription || subscription.user_id !== input.owner_id) return false
       if (subscription.status !== 'active' || lineSnap.exists) return false
 
+      const previous = toDoc<SubscriptionCreditDocument>(creditSnap)
+      if (input.full_refund && previous?.full_refund_used_at) return false
+
       const now = new Date()
       tx.update(
         subscriptionRef,
@@ -333,8 +348,7 @@ const Wallet = {
         })
       )
 
-      if (creditAmount > 0 && input.credit) {
-        const previous = toDoc<SubscriptionCreditDocument>(creditSnap)
+      if ((creditAmount > 0 && input.credit) || input.full_refund) {
         // Un crédit encore valable s'ajoute au nouveau, et l'échéance repart
         // du dernier : deux résiliations ne doivent pas faire perdre le
         // premier crédit.
@@ -343,8 +357,13 @@ const Wallet = {
           toPayload({
             user_id: input.owner_id,
             amount: usableCredit(previous, now) + creditAmount,
-            expires_at: input.credit.expires_at,
-            source_subscription_id: input.subscription_id,
+            expires_at:
+              creditAmount > 0 && input.credit
+                ? input.credit.expires_at
+                : (previous?.expires_at ?? now),
+            source_subscription_id:
+              creditAmount > 0 ? input.subscription_id : (previous?.source_subscription_id ?? null),
+            full_refund_used_at: input.full_refund ? now : (previous?.full_refund_used_at ?? null),
             created_at: previous?.created_at ?? now,
             updated_at: now,
           } satisfies SubscriptionCreditDocument) as unknown as SubscriptionCreditDocument
@@ -400,6 +419,7 @@ const Wallet = {
     owner_id: string
     payout_phone: string
     payout_name: string | null
+    payout_slot: number | null
     quote: (
       balance: number,
       feeFreeBalance: number
@@ -429,6 +449,7 @@ const Wallet = {
         fee_free_amount: quoted.fee_free_amount,
         payout_phone: input.payout_phone,
         payout_name: input.payout_name,
+        payout_slot: input.payout_slot,
         status: 'pending',
         payout_reference: null,
         rejection_reason: null,

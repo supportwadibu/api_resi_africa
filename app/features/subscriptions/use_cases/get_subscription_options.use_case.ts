@@ -72,7 +72,9 @@ export class GetSubscriptionOptionsUseCase {
       .filter((upgrade) => upgrade.amount >= 1)
 
     const scheduled = current.cancel_at_period_end
-    const terms = cancellationTerms(current, now)
+    const terms = cancellationTerms(current, now, {
+      fullRefundAvailable: !creditDoc?.full_refund_used_at,
+    })
 
     return {
       renewable: isRenewable(current, now),

@@ -185,10 +185,12 @@ export interface PaidCheckout {
   /** Abonnement dont les jours restants ont fourni `upgrade_credit`. */
   upgrade_from?: string | null
   /**
-   * Crédit d'abonnement bloqué déduit du prix (`metadata.subscription_credit`).
-   * Toujours honoré : il est consommé dans la transaction d'activation.
+   * Crédit d'abonnement réellement consommé dans la transaction d'activation,
+   * borné à ce qui restait du crédit (`PaymentHistory.activateSubscription`).
    */
   subscription_credit?: number | null
+  /** Crédit d'abonnement déduit du prix au lancement (`metadata.subscription_credit`). */
+  subscription_credit_declared?: number | null
 }
 
 /**
@@ -249,19 +251,25 @@ export function buildPaidSubscription(
   // Crédit annoncé au lancement, honoré ou non : le prix plein du forfait est
   // `amount + declaredCredit`.
   const declaredCredit = Math.max(0, payment.upgrade_credit ?? 0)
+  // Crédit d'abonnement réellement consommé à l'activation, et celui annoncé
+  // au lancement : ils diffèrent si le crédit a fondu entre-temps.
   const subscriptionCredit = Math.max(0, payment.subscription_credit ?? 0)
+  const declaredSubscriptionCredit = Math.max(
+    subscriptionCredit,
+    payment.subscription_credit_declared ?? subscriptionCredit
+  )
   // Valeur d'un jour, figée, au prix plein : remboursement et crédit de montée
   // s'en déduisent. Le crédit d'abonnement fait partie du prix payé.
-  const dailyValue = (payment.amount + declaredCredit + subscriptionCredit) / durationDays
+  const fullPrice = payment.amount + declaredCredit + declaredSubscriptionCredit
+  const dailyValue = fullPrice / durationDays
   // Jours ouverts : la durée entière quand le prix plein est couvert —
-  // paiement ordinaire, ou montée dont le crédit est honoré —, sinon la part
-  // que le montant versé paie au prix plein. Fermé par défaut : quelle que
-  // soit la course entre une montée et une résiliation, un paiement n'ouvre
-  // jamais plus que ce qu'il vaut.
-  const paidDays =
-    credit !== null || declaredCredit === 0
-      ? durationDays
-      : (durationDays * payment.amount) / (payment.amount + declaredCredit)
+  // paiement ordinaire, crédits honorés —, sinon la part que le montant versé
+  // et les crédits honorés paient au prix plein. Fermé par défaut : quelle que
+  // soit la course entre un paiement, une résiliation ou un autre paiement
+  // qui consomme le même crédit, un paiement n'ouvre jamais plus que ce qu'il
+  // vaut.
+  const covered = payment.amount + (credit ?? 0) + subscriptionCredit
+  const paidDays = covered >= fullPrice ? durationDays : (durationDays * covered) / fullPrice
 
   return {
     subscription: {

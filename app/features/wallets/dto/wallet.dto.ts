@@ -1,4 +1,5 @@
 import type { PaginationMeta } from '#features/feedbacks/dto/feedback.dto'
+import type { PayoutNumber } from '#features/wallets/wallet_rules'
 import type { WalletTransactionType, WithdrawalStatus } from '#models/wallet'
 
 export interface WalletDto {
@@ -38,6 +39,8 @@ export interface WithdrawalDto {
   net_amount: number
   payout_phone: string
   payout_name: string | null
+  /** Numéro enregistré choisi (1 ou 2) ; `null` pour un numéro saisi à la main. */
+  payout_slot: number | null
   status: WithdrawalStatus
   payout_reference: string | null
   rejection_reason: string | null
@@ -60,8 +63,27 @@ export interface RequestWithdrawalInput {
   owner_id: string
   wallet_id: string
   amount: number
-  payout_phone: string
+  /** Numéro enregistré à créditer, 1 ou 2. Prime sur `payout_phone`. */
+  payout_slot?: number
+  /**
+   * Numéro saisi à la main, envoyé par les applications antérieures aux
+   * numéros enregistrés.
+   */
+  payout_phone?: string
   payout_name?: string | null
+}
+
+/** Ce que l'écran de retrait du propriétaire doit savoir. */
+export interface PayoutSettingsDto {
+  minimum_withdrawal: number
+  fee_rate: number
+  numbers: PayoutNumber[]
+}
+
+/** Réglages des retraits, côté backoffice. */
+export interface WithdrawalSettingsDto {
+  minimum_amount: number
+  updated_at: Date | null
 }
 
 export interface ListWithdrawalsInput {

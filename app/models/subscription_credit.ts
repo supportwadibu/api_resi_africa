@@ -17,6 +17,13 @@ export interface SubscriptionCreditDocument {
   expires_at: Date
   /** Abonnement dont la résiliation a donné le dernier crédit. */
   source_subscription_id: string | null
+  /**
+   * Date du remboursement intégral, auquel le propriétaire n'a droit qu'une
+   * fois (`cancellationTerms`). Rangée ici plutôt que sur l'utilisateur : ce
+   * document est déjà lu et écrit dans la transaction de résiliation.
+   * Absente tant que le droit n'a pas servi.
+   */
+  full_refund_used_at?: Date | null
   created_at: Date
   updated_at: Date
 }

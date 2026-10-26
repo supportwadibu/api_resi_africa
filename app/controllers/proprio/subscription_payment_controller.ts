@@ -5,6 +5,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 
 import { ListAvailablePlansUseCase } from '../../features/plans/use_cases/index.ts'
 import SubscriptionRepository from '../../features/subscriptions/repositories/subscription_repository.ts'
+import { subscriptionReturnPage } from '../../features/subscriptions/return_page.ts'
 import {
   CancelOwnSubscriptionUseCase,
   ConfirmSubscriptionPaymentUseCase,
@@ -81,7 +82,8 @@ export default class ProprioSubscriptionPaymentController {
    * La confirmation reste ici, côté serveur, et non sur le site : c'est elle
    * qui ouvre l'abonnement quand le webhook tarde ou se perd. Le propriétaire
    * est ensuite redirigé vers la page du site (`SITE_URL`), qui l'invite à
-   * revenir dans l'application. Sans site configuré, une page minimale.
+   * revenir dans l'application. Sans site configuré, une page qui rouvre
+   * l'application elle-même (`subscriptionReturnPage`).
    */
   async waveReturn(ctx: HttpContext) {
     let status: string | null = null
@@ -105,22 +107,9 @@ export default class ProprioSubscriptionPaymentController {
       return ctx.response.redirect(await this.siteReturnUrl(siteUrl, failed, subscriptionId))
     }
 
-    const message = succeeded
-      ? 'Paiement reçu. Votre abonnement est actif.'
-      : failed
-        ? "Le paiement n'a pas abouti. Vous pouvez réessayer depuis l'application."
-        : 'Paiement en cours de vérification.'
-
     return ctx.response
       .header('Content-Type', 'text/html; charset=utf-8')
-      .send(
-        `<!doctype html><html lang="fr"><head><meta charset="utf-8">` +
-          `<meta name="viewport" content="width=device-width,initial-scale=1">` +
-          `<title>RESI — Abonnement</title></head>` +
-          `<body style="font-family:system-ui,sans-serif;max-width:28rem;margin:4rem auto;padding:0 1rem;text-align:center">` +
-          `<h1 style="font-size:1.25rem">${message}</h1>` +
-          `<p>Vous pouvez revenir dans l'application RESI.</p></body></html>`
-      )
+      .send(subscriptionReturnPage(succeeded ? 'success' : failed ? 'failure' : 'pending'))
   }
 
   /**

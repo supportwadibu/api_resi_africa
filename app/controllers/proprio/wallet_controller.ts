@@ -2,11 +2,14 @@ import {
   listWalletTransactionsValidator,
   listWithdrawalsValidator,
   requestWithdrawalValidator,
+  savePayoutNumbersValidator,
 } from '#validators/wallet/wallet'
 
 import type { HttpContext } from '@adonisjs/core/http'
 
 import {
+  GetPayoutSettingsUseCase,
+  SavePayoutNumbersUseCase,
   ListOwnerWalletsUseCase,
   ListWalletTransactionsUseCase,
   ListWithdrawalsUseCase,
@@ -43,6 +46,19 @@ export default class ProprioWalletController {
       wallet_id: ctx.params.id,
     })
     return ctx.response.created({ data })
+  }
+
+  /** GET /proprio/payout-settings */
+  async payoutSettings(ctx: HttpContext) {
+    const data = await new GetPayoutSettingsUseCase().execute(ctx.authUser!.id)
+    return ctx.response.ok({ data })
+  }
+
+  /** PUT /proprio/payout-numbers */
+  async savePayoutNumbers(ctx: HttpContext) {
+    const payload = await ctx.request.validateUsing(savePayoutNumbersValidator)
+    const data = await new SavePayoutNumbersUseCase().execute(ctx.authUser!.id, payload.numbers)
+    return ctx.response.ok({ data })
   }
 
   /** GET /proprio/withdrawals */

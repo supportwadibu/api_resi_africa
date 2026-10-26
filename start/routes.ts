@@ -116,6 +116,15 @@ router
           .prefix('withdrawals')
           .as('withdrawals')
 
+        // Réglages des retraits : le minimum, modifiable sans redéploiement.
+        router
+          .group(() => {
+            router.get('/', [AdminWithdrawalsController, 'settings'])
+            router.put('/', [AdminWithdrawalsController, 'updateSettings'])
+          })
+          .prefix('settings/withdrawals')
+          .as('withdrawal_settings')
+
         // Banc d'essai Wave, pour Postman : de vraies sessions, sans écriture
         // en base.
         router
@@ -361,6 +370,12 @@ router
               .prefix('wallets')
               .as('wallets')
             router.get('withdrawals', [ProprioWalletController, 'withdrawals']).as('withdrawals')
+            router
+              .get('payout-settings', [ProprioWalletController, 'payoutSettings'])
+              .as('payout_settings')
+            router
+              .put('payout-numbers', [ProprioWalletController, 'savePayoutNumbers'])
+              .as('payout_numbers')
 
             router
               .group(() => {

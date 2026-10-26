@@ -2,14 +2,17 @@ import {
   listWithdrawalsValidator,
   markWithdrawalPaidValidator,
   rejectWithdrawalValidator,
+  updateWithdrawalSettingsValidator,
 } from '#validators/wallet/wallet'
 
 import type { HttpContext } from '@adonisjs/core/http'
 
 import {
   GetAdminWithdrawalUseCase,
+  GetWithdrawalSettingsUseCase,
   ListAdminWithdrawalsUseCase,
   ResolveWithdrawalUseCase,
+  UpdateWithdrawalSettingsUseCase,
 } from '../../features/wallets/use_cases/index.ts'
 
 /**
@@ -45,6 +48,19 @@ export default class AdminWithdrawalsController {
       status: 'rejected',
       rejection_reason: payload.rejection_reason,
     })
+    return ctx.response.ok({ data })
+  }
+
+  /** GET /admin/settings/withdrawals */
+  async settings(ctx: HttpContext) {
+    const data = await new GetWithdrawalSettingsUseCase().execute()
+    return ctx.response.ok({ data })
+  }
+
+  /** PUT /admin/settings/withdrawals */
+  async updateSettings(ctx: HttpContext) {
+    const payload = await ctx.request.validateUsing(updateWithdrawalSettingsValidator)
+    const data = await new UpdateWithdrawalSettingsUseCase().execute(payload, ctx.authUser!.id)
     return ctx.response.ok({ data })
   }
 }

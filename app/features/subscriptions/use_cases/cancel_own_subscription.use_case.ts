@@ -1,6 +1,7 @@
 import logger from '@adonisjs/core/services/logger'
 
 import Expense from '#models/expense'
+import SubscriptionCredit from '#models/subscription_credit'
 import Wallet from '#models/wallet'
 import { DomainError } from '#utils/domain_error'
 
@@ -56,7 +57,10 @@ export class CancelOwnSubscriptionUseCase {
       )
     }
 
-    const terms = cancellationTerms(current, now)
+    const ledger = await SubscriptionCredit.findByUser(userId)
+    const terms = cancellationTerms(current, now, {
+      fullRefundAvailable: !ledger?.full_refund_used_at,
+    })
 
     if (!terms.immediate) {
       const scheduled = await this.subscriptionRepo.scheduleCancellation(
@@ -72,6 +76,7 @@ export class CancelOwnSubscriptionUseCase {
       subscription_id: current.id,
       refund: terms.refund,
       credit: terms.credit > 0 ? { amount: terms.credit, expires_at: creditExpiry(now) } : null,
+      full_refund: terms.mode === 'full_refund',
       reason: 'owner_cancelled',
     })
     if (!cancelled) {

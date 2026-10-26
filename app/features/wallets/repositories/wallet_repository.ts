@@ -5,6 +5,8 @@ import Wallet, {
   type WithdrawalRequestRecord,
   type WithdrawalStatus,
 } from '#models/wallet'
+import PayoutNumbers from '#models/payout_numbers'
+import PlatformSetting from '#models/platform_setting'
 
 import type { ResidenceDocument } from '#models/residence'
 import type { UserDocument } from '#models/user'
@@ -14,7 +16,9 @@ import type {
   WalletDto,
   WalletTransactionDto,
   WithdrawalDto,
+  WithdrawalSettingsDto,
 } from '../dto/wallet.dto.ts'
+import type { PayoutNumber } from '../wallet_rules.ts'
 
 export class WalletRepository {
   static toTransactionDto(doc: WalletTransactionRecord): WalletTransactionDto {
@@ -44,6 +48,7 @@ export class WalletRepository {
       net_amount: doc.net_amount,
       payout_phone: doc.payout_phone,
       payout_name: doc.payout_name ?? null,
+      payout_slot: doc.payout_slot ?? null,
       status: doc.status,
       payout_reference: doc.payout_reference ?? null,
       rejection_reason: doc.rejection_reason ?? null,
@@ -80,6 +85,25 @@ export class WalletRepository {
     return wallets
       .map((wallet) => this.toWalletDto(wallet, names, pendingByWallet.get(wallet._id) ?? 0))
       .sort((a, b) => b.balance - a.balance)
+  }
+
+  async payoutNumbers(ownerId: string): Promise<PayoutNumber[]> {
+    return PayoutNumbers.findByOwner(ownerId)
+  }
+
+  async replacePayoutNumbers(ownerId: string, numbers: PayoutNumber[]): Promise<PayoutNumber[]> {
+    return PayoutNumbers.replace(ownerId, numbers)
+  }
+
+  async withdrawalSettings(): Promise<WithdrawalSettingsDto> {
+    return PlatformSetting.withdrawals()
+  }
+
+  async updateWithdrawalSettings(
+    minimumAmount: number,
+    adminId: string
+  ): Promise<WithdrawalSettingsDto> {
+    return PlatformSetting.updateWithdrawals(minimumAmount, adminId)
   }
 
   async findForOwner(walletId: string, ownerId: string): Promise<WalletRecord | null> {
