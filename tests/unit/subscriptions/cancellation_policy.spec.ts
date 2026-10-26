@@ -6,7 +6,10 @@ import {
   usableCredit,
   waveFeeFor,
 } from '#features/subscriptions/cancellation_policy'
-import { isPaymentConsistent } from '#features/subscriptions/subscription_checkout'
+import {
+  buildPaidSubscription,
+  isPaymentConsistent,
+} from '#features/subscriptions/subscription_checkout'
 
 const DAY = 24 * 60 * 60 * 1000
 const PAID_AT = new Date('2026-10-01T10:00:00Z')
@@ -35,6 +38,54 @@ test.group('annulation — 7 premiers jours', () => {
     const terms = cancellationTerms({ ...pro, amount: 1000, credit_applied: 2000 }, dayAfter(2))
     assert.equal(terms.refund, 1000)
     assert.equal(terms.credit, 2000)
+  })
+})
+
+test.group('annulation — remboursement intégral déjà utilisé', () => {
+  test('Pro : souscrire et résilier chaque semaine ne rend plus rien', ({ assert }) => {
+    const terms = cancellationTerms(pro, dayAfter(2), { fullRefundAvailable: false })
+    assert.equal(terms.mode, 'period_end')
+    assert.equal(terms.refund, 0)
+  })
+
+  test('Pro+ : la deuxième semaine s’applique dès le premier jour', ({ assert }) => {
+    const terms = cancellationTerms(proPlus, dayAfter(2), { fullRefundAvailable: false })
+    assert.equal(terms.mode, 'partial_refund')
+    assert.equal(terms.refund, 3000)
+    assert.equal(terms.credit, 2000)
+  })
+})
+
+test.group('crédit d’abonnement à l’activation', () => {
+  const payment = {
+    user_id: 'u1',
+    plan_id: 'pro',
+    plan_tier: 'pro' as const,
+    duration_days: 30,
+    amount: 1000,
+    transaction_reference: 'SUB-1',
+  }
+
+  test('honoré en entier : la période est complète', ({ assert }) => {
+    const { subscription } = buildPaidSubscription(
+      { ...payment, subscription_credit: 2000, subscription_credit_declared: 2000 },
+      null,
+      PAID_AT
+    )
+    assert.equal(subscription.end_date.getTime(), dayAfter(30).getTime())
+    assert.equal(subscription.credit_applied, 2000)
+  })
+
+  test('fondu entre-temps : seule la part payée ouvre des jours', ({ assert }) => {
+    // 1 000 F versés et 2 000 F de crédit annoncés, mais plus de crédit à
+    // l'activation : 1 000 F sur 3 000 F, soit 10 jours.
+    const { subscription } = buildPaidSubscription(
+      { ...payment, subscription_credit: 0, subscription_credit_declared: 2000 },
+      null,
+      PAID_AT
+    )
+    assert.equal(subscription.end_date.getTime(), dayAfter(10).getTime())
+    assert.isNull(subscription.credit_applied)
   })
 })
 

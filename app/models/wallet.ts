@@ -299,6 +299,12 @@ const Wallet = {
      * aucun crédit.
      */
     credit?: { amount: number; expires_at: Date } | null
+    /**
+     * Remboursement intégral : consomme le droit unique du propriétaire. La
+     * résiliation est refusée (`false`) s'il a déjà servi — relu ici, dans la
+     * transaction, et non seulement par l'appelant.
+     */
+    full_refund?: boolean
     reason: string
   }): Promise<boolean> {
     const subscriptionRef = collection<SubscriptionDocument>(COLLECTIONS.subscriptions).doc(
@@ -320,6 +326,9 @@ const Wallet = {
       if (!subscription || subscription.user_id !== input.owner_id) return false
       if (subscription.status !== 'active' || lineSnap.exists) return false
 
+      const previous = toDoc<SubscriptionCreditDocument>(creditSnap)
+      if (input.full_refund && previous?.full_refund_used_at) return false
+
       const now = new Date()
       tx.update(
         subscriptionRef,
@@ -333,8 +342,7 @@ const Wallet = {
         })
       )
 
-      if (creditAmount > 0 && input.credit) {
-        const previous = toDoc<SubscriptionCreditDocument>(creditSnap)
+      if ((creditAmount > 0 && input.credit) || input.full_refund) {
         // Un crédit encore valable s'ajoute au nouveau, et l'échéance repart
         // du dernier : deux résiliations ne doivent pas faire perdre le
         // premier crédit.
@@ -343,8 +351,13 @@ const Wallet = {
           toPayload({
             user_id: input.owner_id,
             amount: usableCredit(previous, now) + creditAmount,
-            expires_at: input.credit.expires_at,
-            source_subscription_id: input.subscription_id,
+            expires_at:
+              creditAmount > 0 && input.credit
+                ? input.credit.expires_at
+                : (previous?.expires_at ?? now),
+            source_subscription_id:
+              creditAmount > 0 ? input.subscription_id : (previous?.source_subscription_id ?? null),
+            full_refund_used_at: input.full_refund ? now : (previous?.full_refund_used_at ?? null),
             created_at: previous?.created_at ?? now,
             updated_at: now,
           } satisfies SubscriptionCreditDocument) as unknown as SubscriptionCreditDocument

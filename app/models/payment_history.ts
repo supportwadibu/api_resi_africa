@@ -10,6 +10,7 @@ import {
 } from '#firebase/firestore'
 import type { SubscriptionDocument } from '#models/subscription'
 import { subscriptionCredits, type SubscriptionCreditDocument } from '#models/subscription_credit'
+import { usableCredit } from '#features/subscriptions/cancellation_policy'
 import type { PlanTier } from '#features/plans/plan_tier'
 import {
   readPaymentNumber,
@@ -254,20 +255,34 @@ const PaymentHistory = {
       // Crédit d'abonnement déduit au lancement : consommé ici, dans la même
       // transaction que l'activation, pour qu'un paiement confirmé deux fois
       // — webhook et retour du propriétaire — ne le débite qu'une fois.
-      const creditUsed = readPaymentNumber(payment.metadata, 'subscription_credit') ?? 0
+      const creditDeclared = readPaymentNumber(payment.metadata, 'subscription_credit') ?? 0
       const creditRef = subscriptionCredits().doc(payment.user_id)
       const credit =
-        creditUsed > 0 ? toDoc<SubscriptionCreditDocument>(await tx.get(creditRef)) : null
-
-      const { subscription, close } = build(payment, current)
+        creditDeclared > 0 ? toDoc<SubscriptionCreditDocument>(await tx.get(creditRef)) : null
       const now = new Date()
+      // Seul ce qui reste du crédit est consommé : deux sessions ouvertes sur
+      // le même crédit, ou un crédit échu entre-temps, ne le font pas compter
+      // deux fois. Le paiement reste honoré — l'argent est reçu —, mais la
+      // période se raccourcit à ce que le versé et le crédit réel paient
+      // (`buildPaidSubscription`).
+      const creditHonored = Math.min(creditDeclared, usableCredit(credit, now))
 
-      // Le paiement est honoré même si le crédit a fondu entre-temps : l'argent
-      // est reçu, et `PendingPaymentSettler` ne laisse qu'une session ouverte.
-      if (credit) {
+      const { subscription, close } = build(
+        {
+          ...payment,
+          metadata: {
+            ...payment.metadata,
+            subscription_credit: creditHonored,
+            subscription_credit_declared: creditDeclared,
+          },
+        },
+        current
+      )
+
+      if (credit && creditHonored > 0) {
         tx.update(
           creditRef,
-          toPayload({ amount: Math.max(0, credit.amount - creditUsed), updated_at: now })
+          toPayload({ amount: Math.max(0, credit.amount - creditHonored), updated_at: now })
         )
       }
 

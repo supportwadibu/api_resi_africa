@@ -69,9 +69,16 @@ export interface CancellableSubscription {
   credit_applied?: number | null
 }
 
+/**
+ * `fullRefundAvailable` : le propriétaire n'a pas encore eu de remboursement
+ * intégral. Il n'y a droit qu'une fois : sans cette borne, souscrire puis
+ * résilier tous les six jours donnerait un abonnement gratuit sans fin. Une
+ * fois ce droit consommé, les règles suivantes valent dès le premier jour.
+ */
 export function cancellationTerms(
   subscription: CancellableSubscription,
-  now: Date = new Date()
+  now: Date = new Date(),
+  { fullRefundAvailable = true }: { fullRefundAvailable?: boolean } = {}
 ): CancellationTerms {
   const elapsedMs = now.getTime() - subscription.start_date.getTime()
   const paid = Math.max(0, Math.floor(Number(subscription.amount)))
@@ -79,7 +86,7 @@ export function cancellationTerms(
 
   // Ce qui a été payé en crédit revient en crédit : le rendre en espèces
   // permettrait de changer un crédit bloqué en argent retirable.
-  if (elapsedMs < FULL_REFUND_DAYS * DAY_MS) {
+  if (fullRefundAvailable && elapsedMs < FULL_REFUND_DAYS * DAY_MS) {
     return { mode: 'full_refund', refund: paid, credit: creditApplied, immediate: true }
   }
 
