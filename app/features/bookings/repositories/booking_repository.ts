@@ -49,6 +49,8 @@ export class BookingRepository {
       // Absent de l'historique, antérieur au parrainage : rien de réglé en crédit.
       sponsorship_credit_amount: doc.sponsorship_credit_amount ?? 0,
       amount_due: Math.max(0, doc.total_amount - (doc.sponsorship_credit_amount ?? 0)),
+      negotiation_level: doc.negotiation_level ?? null,
+      list_daily_price: doc.list_daily_price ?? null,
       message: doc.message ?? null,
       cancelled_at: doc.cancelled_at ?? null,
       completed_at: doc.completed_at ?? null,
@@ -173,6 +175,8 @@ export class BookingRepository {
       promo_code: input.promo_code ?? null,
       promo_code_id: input.promo_code_id ?? null,
       message: input.message ?? null,
+      negotiation_level: input.negotiation_level ?? null,
+      list_daily_price: input.list_daily_price ?? null,
     })
 
     return BookingRepository.toDto(booking)

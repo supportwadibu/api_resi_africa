@@ -31,6 +31,8 @@ function booking(overrides: Partial<BookingDto>): BookingDto {
     total_amount: 40000,
     sponsorship_credit_amount: 0,
     amount_due: 40000,
+    negotiation_level: null,
+    list_daily_price: null,
     promo_code: null,
     message: null,
     cancelled_at: null,

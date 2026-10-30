@@ -48,6 +48,7 @@ const ClientPropertyController = () => import('#controllers/client/property_cont
 const ClientBookingController = () => import('#controllers/client/booking_controller')
 const ClientBookingPaymentController = () =>
   import('#controllers/client/booking_payment_controller')
+const ClientNegotiationController = () => import('#controllers/client/negotiation_controller')
 const SponsorshipController = () => import('#controllers/sponsorship_controller')
 const AdminSponsorshipsController = () => import('#controllers/admin/sponsorships_controller')
 
@@ -595,6 +596,13 @@ router
         router
           .group(() => {
             router.post('properties/:property_id/bookings', [ClientBookingController, 'store'])
+            // Connecté : les paliers révélés sont ceux de ce client, et ne
+            // se rejouent pas en rouvrant la fiche.
+            router.get('properties/:property_id/negotiation', [ClientNegotiationController, 'show'])
+            router.post('properties/:property_id/negotiation/next', [
+              ClientNegotiationController,
+              'next',
+            ])
             router
               .group(() => {
                 router.get('/', [ClientBookingController, 'index'])

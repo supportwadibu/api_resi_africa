@@ -40,6 +40,10 @@ export interface BookingDto {
   sponsorship_credit_amount: number
   /** Reste à payer en ligne : `total_amount` moins le crédit parrainage. */
   amount_due: number
+  /** Palier négocié ; `daily_price` est alors le prix négocié. `null` sans négociation. */
+  negotiation_level: number | null
+  /** Prix normal par jour au moment de la négociation ; `null` sans négociation. */
+  list_daily_price: number | null
   message: string | null
   cancelled_at: Date | null
   completed_at: Date | null
@@ -182,9 +186,13 @@ export interface CreateBookingInput {
   end_date: Date
   promo_code?: string
   message?: string
+  /** Palier de négociation choisi, parmi ceux révélés à ce client. */
+  negotiation_level?: number
 }
 
 export interface CreateCalculatedBookingInput extends CreateBookingInput {
+  /** Prix normal par jour au moment de la négociation ; absent sans négociation. */
+  list_daily_price?: number
   owner_id: string
   /** Copié depuis l'unité par le use case, jamais fourni par le client. */
   residence_id?: string | null

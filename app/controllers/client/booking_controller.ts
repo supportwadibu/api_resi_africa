@@ -39,6 +39,7 @@ export default class ClientBookingController {
       end_date: payload.end_date.toJSDate(),
       promo_code: payload.promo_code,
       message: payload.message,
+      negotiation_level: payload.negotiation_level,
     })
     return ctx.response.created({ data: booking })
   }

@@ -58,6 +58,13 @@ export interface BookingDocument {
    * sur toute réservation sans crédit : 0.
    */
   sponsorship_credit_amount?: number
+  /**
+   * Palier de négociation choisi par le client, et le prix normal d'alors.
+   * `daily_price` porte le prix négocié : c'est lui que la facturation et une
+   * prolongation appliquent. Absents sans négociation et sur l'historique.
+   */
+  negotiation_level?: number | null
+  list_daily_price?: number | null
   message: string | null
 
   /**
@@ -418,6 +425,8 @@ const Booking = {
     promo_code?: string | null
     promo_code_id?: string | null
     message?: string | null
+    negotiation_level?: number | null
+    list_daily_price?: number | null
     created_by?: string | null
   }): Promise<BookingRecord> {
     const firestore = db()
@@ -447,6 +456,9 @@ const Booking = {
       total_amount: input.total_amount,
       promo_code: input.promo_code ?? null,
       message: input.message ?? null,
+      ...(input.negotiation_level
+        ? { negotiation_level: input.negotiation_level, list_daily_price: input.list_daily_price }
+        : {}),
       cancelled_at: null,
       completed_at: null,
       cancellation_reason: null,

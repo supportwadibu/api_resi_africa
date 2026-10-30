@@ -1,3 +1,4 @@
+import { normalizeNegotiation } from '#features/negotiations/negotiation_rules'
 import Residence from '#models/residence'
 import { DomainError } from '#utils/domain_error'
 
@@ -73,7 +74,11 @@ export class CreatePropertyUseCase {
       )
     }
 
-    const property = await this.repo.create({ ...input, address })
+    const negotiation = input.negotiation
+      ? normalizeNegotiation(input.negotiation, input.pricing.daily_price)
+      : undefined
+
+    const property = await this.repo.create({ ...input, address, negotiation })
 
     // Le compteur est ajusté après l'écriture de l'unité : l'incrémenter avant
     // laisserait une résidence créditée d'une unité que la création aurait pu

@@ -117,6 +117,13 @@ export interface PropertyPricing {
   late_checkout_half_day_hours?: number
 }
 
+/** Voir `negotiation_rules.ts`. */
+export interface PropertyNegotiation {
+  enabled: boolean
+  /** Prix par jour de chaque palier, strictement décroissants. */
+  prices: number[]
+}
+
 export interface PropertyVisibility {
   is_public: boolean
   featured: boolean
@@ -156,6 +163,12 @@ export interface PropertyDocument {
   media: PropertyMedia
 
   pricing: PropertyPricing
+  /**
+   * Paliers de négociation, hors de `pricing` : la vue publique recopie
+   * `pricing`, et les paliers ne doivent jamais en sortir — le client irait
+   * droit au plancher. Absent des biens antérieurs : non négociable.
+   */
+  negotiation?: PropertyNegotiation
   charges_included: boolean
   additional_charges: number
 
@@ -268,6 +281,10 @@ function withDefaults(input: Partial<PropertyDocument>): PropertyDocument {
         input.pricing?.late_checkout_grace_minutes ?? DEFAULT_LATE_CHECKOUT_GRACE_MINUTES,
       late_checkout_half_day_hours:
         input.pricing?.late_checkout_half_day_hours ?? DEFAULT_LATE_CHECKOUT_HALF_DAY_HOURS,
+    },
+    negotiation: {
+      enabled: input.negotiation?.enabled ?? false,
+      prices: input.negotiation?.prices ?? [],
     },
     charges_included: input.charges_included ?? false,
     additional_charges: input.additional_charges ?? 0,

@@ -77,6 +77,8 @@ export interface PropertyDto {
   amenities: AmenitiesInput
   media: MediaInput
   pricing: PropertyPricingInput
+  /** Paliers de négociation : propriétaire seulement, jamais sur la vue publique. */
+  negotiation: PropertyNegotiationInput
   charges_included: boolean
   additional_charges: number
   available_from: Date
@@ -115,6 +117,7 @@ export interface CreatePropertyInput {
   amenities?: AmenitiesInput
   media?: MediaInput
   pricing: PropertyPricingInput
+  negotiation?: PropertyNegotiationInput
   charges_included?: boolean
   additional_charges?: number
   available_from: Date
@@ -136,6 +139,8 @@ export interface UpdatePropertyInput {
   amenities?: AmenitiesInput
   media?: MediaInput
   pricing?: Partial<PropertyPricingInput>
+  /** Remplacée en entier : une liste de paliers partielle n’a pas de sens. */
+  negotiation?: PropertyNegotiationInput
   charges_included?: boolean
   additional_charges?: number
   available_from?: Date
@@ -200,6 +205,12 @@ export interface PropertyStatsDto {
 export interface PropertyPriceTierInput {
   min_days: number
   discount_percent: number
+}
+
+export interface PropertyNegotiationInput {
+  enabled: boolean
+  /** Prix par jour de chaque palier, du plus haut au plus bas. */
+  prices: number[]
 }
 
 export interface PropertyPricingInput {

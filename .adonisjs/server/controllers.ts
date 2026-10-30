@@ -29,6 +29,7 @@ export const controllers = {
   client: {
     Booking: () => import('#controllers/client/booking_controller'),
     BookingPayment: () => import('#controllers/client/booking_payment_controller'),
+    Negotiation: () => import('#controllers/client/negotiation_controller'),
     Property: () => import('#controllers/client/property_controller'),
   },
   Cron: () => import('#controllers/cron_controller'),
