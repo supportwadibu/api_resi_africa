@@ -29,6 +29,8 @@ function booking(overrides: Partial<BookingDto>): BookingDto {
     subtotal_amount: 40000,
     discount_amount: 0,
     total_amount: 40000,
+    sponsorship_credit_amount: 0,
+    amount_due: 40000,
     promo_code: null,
     message: null,
     cancelled_at: null,

@@ -48,9 +48,14 @@ export class InitializeBookingPaymentUseCase {
       throw new DomainError('booking_not_payable', 'Cette réservation ne peut pas être payée.', 409)
     }
 
+    // La part réglée par le crédit parrainage n'est pas redemandée : Wave
+    // n'encaisse que le reste.
+    const sponsorshipCredit = booking.sponsorship_credit_amount ?? 0
+    const amountDue = booking.total_amount - sponsorshipCredit
+
     // Wave refuse les décimales en XOF : un montant qui en porterait serait
     // rejeté, et mieux vaut le dire ici qu'en 502.
-    if (!Number.isInteger(booking.total_amount) || booking.total_amount <= 0) {
+    if (!Number.isInteger(amountDue) || amountDue <= 0) {
       throw new DomainError('invalid_payment_amount', 'Le montant de paiement est invalide.', 422)
     }
 
@@ -75,7 +80,7 @@ export class InitializeBookingPaymentUseCase {
     let session
     try {
       session = await this.wave.createCheckoutSession({
-        amount: booking.total_amount,
+        amount: amountDue,
         currency,
         clientReference: transactionReference,
         successUrl: `${returnUrl}?outcome=success`,
@@ -93,12 +98,17 @@ export class InitializeBookingPaymentUseCase {
       client_id: booking.client_id,
       owner_id: booking.owner_id,
       property_id: booking.property_id,
-      amount: booking.total_amount,
+      amount: amountDue,
       currency,
       transaction_reference: transactionReference,
       provider_checkout_id: session.id,
       payment_url: paymentUrl,
-      metadata: { booking_id: booking.id },
+      // Le crédit figé sur le paiement, et non relu sur la réservation à la
+      // confirmation : c'est sur ce montant que la session a été chiffrée.
+      metadata: {
+        booking_id: booking.id,
+        ...(sponsorshipCredit > 0 ? { sponsorship_credit_amount: sponsorshipCredit } : {}),
+      },
     })
 
     return { payment, payment_url: paymentUrl }

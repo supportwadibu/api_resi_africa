@@ -8,6 +8,7 @@ import GoogleAuthService, { type GoogleIdentity } from '#services/google_auth_se
 import { AuthError } from '#utils/auth_error'
 import logger from '@adonisjs/core/services/logger'
 
+import { AttachSponsorUseCase } from '../../../features/sponsorships/use_cases/attach_sponsor.use_case.ts'
 import { StartTrialForOwnerUseCase } from '../../../features/subscriptions/use_cases/start_trial_for_owner.use_case.ts'
 
 /**
@@ -170,6 +171,7 @@ export class GoogleLoginUseCase {
     // l'application pendant l'examen de sa pièce d'identité. Un client n'a
     // pas d'abonnement : pas d'essai.
     if (roleName === 'proprio') await this.startTrial(user._id)
+    await new AttachSponsorUseCase().atSignup(user._id, input.sponsorship_code)
 
     const tokens = await issueTokens(user, input.device)
     return { ...tokens, is_new_user: true }

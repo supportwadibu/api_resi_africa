@@ -6,6 +6,7 @@ import WaveClient, { toPaymentDomainError } from '#services/wave_client'
 
 import type { BookingPaymentDto } from '../dto/booking_payment.dto.ts'
 import BookingPaymentRepository from '../repositories/booking_payment_repository.ts'
+import { sponsorshipCreditOf } from '../sponsorship_credit.ts'
 
 /**
  * Rembourse au client, par Wave, le paiement en ligne d'une réservation
@@ -32,18 +33,27 @@ export class RefundBookingPaymentUseCase {
     return this.paymentRepo.findSucceededByBooking(bookingId)
   }
 
-  /** Rembourse `payment` et rend le montant rendu. */
+  /**
+   * Rembourse `payment` et rend le montant rendu en argent.
+   *
+   * La part réglée par le crédit parrainage ne repart pas par Wave : elle est
+   * débitée du portefeuille avec le reste — le propriétaire en avait été
+   * crédité —, et rendue au client en crédit par l'annulation.
+   */
   async execute(
     payment: BookingPaymentDto,
     booking: { id: string; owner_id: string; residence_id: string | null }
   ): Promise<number> {
-    if (!payment.provider_checkout_id) return 0
+    const viaWave = payment.provider !== 'sponsorship_credit'
+    if (viaWave && !payment.provider_checkout_id) return 0
 
-    try {
-      await this.wave.refundCheckoutSession(payment.provider_checkout_id)
-    } catch (error) {
-      logger.error({ err: error, payment: payment.id }, 'Remboursement Wave impossible')
-      throw toPaymentDomainError(error)
+    if (viaWave) {
+      try {
+        await this.wave.refundCheckoutSession(payment.provider_checkout_id!)
+      } catch (error) {
+        logger.error({ err: error, payment: payment.id }, 'Remboursement Wave impossible')
+        throw toPaymentDomainError(error)
+      }
     }
 
     await this.paymentRepo.updateStatus(payment.id, 'refunded', { refunded_at: new Date() })
@@ -53,7 +63,7 @@ export class RefundBookingPaymentUseCase {
       residence_id: booking.residence_id,
       booking_id: booking.id,
       booking_payment_id: payment.id,
-      amount: payment.amount,
+      amount: payment.amount + sponsorshipCreditOf(payment),
     })
 
     return payment.amount

@@ -13,6 +13,7 @@ import {
   ListMyBookingsUseCase,
 } from '../../features/bookings/use_cases/index.ts'
 import UpdateBookingUseCase from '../../features/bookings/use_cases/update_booking.use_case.ts'
+import { ApplyStayCreditUseCase } from '../../features/sponsorships/use_cases/index.ts'
 
 export default class ClientBookingController {
   async index(ctx: HttpContext) {
@@ -62,6 +63,12 @@ export default class ClientBookingController {
 
     const payload = await ctx.request.validateUsing(cancelBookingValidator)
     const booking = await new CancelBookingUseCase().execute(ctx.params.id, userId, payload)
+    return ctx.response.ok({ data: booking })
+  }
+
+  /** POST /client/bookings/:id/sponsorship-credit — payer avec le crédit parrainage. */
+  async applySponsorshipCredit(ctx: HttpContext) {
+    const booking = await new ApplyStayCreditUseCase().execute(ctx.params.id, ctx.authUser!.id)
     return ctx.response.ok({ data: booking })
   }
 }

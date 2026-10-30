@@ -1,8 +1,5 @@
 /* eslint-disable prettier/prettier */
-import type {
-  AuthTokensOutput,
-  RegisterVerifyInput,
-} from '#auth/dto/index'
+import type { AuthTokensOutput, RegisterVerifyInput } from '#auth/dto/index'
 import { logAuthAttempt } from '#auth/helpers/auth_audit'
 import { issueTokens } from '#auth/helpers/issue_tokens'
 import { otpReasonMessage } from '#auth/helpers/otp_reason'
@@ -12,6 +9,7 @@ import OtpService from '#services/otp_service'
 import { AuthError } from '#utils/auth_error'
 import logger from '@adonisjs/core/services/logger'
 
+import { AttachSponsorUseCase } from '../../../features/sponsorships/use_cases/attach_sponsor.use_case.ts'
 import { StartTrialForOwnerUseCase } from '../../../features/subscriptions/use_cases/start_trial_for_owner.use_case.ts'
 
 /**
@@ -74,6 +72,7 @@ export class RegisterVerifyUseCase {
     // dossier. Sans lui, un compte neuf serait inactif — et bloqué par le
     // middleware `plan()` — jusqu'à la validation par un administrateur.
     if (user.role_id === 'proprio') await this.startTrial(user._id)
+    await new AttachSponsorUseCase().atSignup(user._id, input.sponsorship_code)
 
     return issueTokens(user, input.device)
   }

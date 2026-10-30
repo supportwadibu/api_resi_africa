@@ -46,6 +46,9 @@ export class BookingRepository {
       discount_amount: doc.discount_amount,
       total_amount: doc.total_amount,
       promo_code: doc.promo_code ?? null,
+      // Absent de l'historique, antérieur au parrainage : rien de réglé en crédit.
+      sponsorship_credit_amount: doc.sponsorship_credit_amount ?? 0,
+      amount_due: Math.max(0, doc.total_amount - (doc.sponsorship_credit_amount ?? 0)),
       message: doc.message ?? null,
       cancelled_at: doc.cancelled_at ?? null,
       completed_at: doc.completed_at ?? null,

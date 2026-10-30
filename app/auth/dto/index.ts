@@ -31,6 +31,8 @@ export interface RegisterVerifyInput {
   channel: OtpChannel
   target: string
   code: string
+  /** Code du parrain saisi à l'inscription. */
+  sponsorship_code?: string
   device: DeviceContext
 }
 
@@ -50,6 +52,8 @@ export interface GoogleLoginInput {
   device: DeviceContext
   /** Rôle d'un compte créé à cette connexion. Ignoré pour un compte existant. */
   role_name?: 'proprio' | 'client'
+  /** Code du parrain. Ignoré pour un compte existant. */
+  sponsorship_code?: string
 }
 
 export interface RefreshTokensInput {

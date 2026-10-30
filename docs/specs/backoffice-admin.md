@@ -37,6 +37,11 @@ les lectures unitaires `{ data }`, les erreurs `{ code, message }`.
 | PATCH | `subscriptions/:id/extend` | Prolonge un abonnement en cours de `days` jours (1 à 365), `reason` facultative ; tracé dans `subscription_events` |
 | GET · POST | `promo-codes` | Codes promo (liste complète, non paginée) · création |
 | PATCH · DELETE | `promo-codes/:id` | Modification (le code est immuable) · suppression d'un code jamais utilisé |
+| GET | `sponsorships?status&sponsor_id&page&per_page` | Parrainages : parrain, filleul, gain et règle figée. Voir [parrainage](parrainage-design.md) |
+| PATCH | `sponsorships/:id/cancel` | Annule le gain d'un filleul, `reason` obligatoire ; un gain disponible est repris sur le solde du parrain |
+| GET | `sponsorship-redemptions?status&type&page&per_page` | Retraits et conversions des gains |
+| PATCH | `sponsorship-redemptions/:id/paid` · `:id/reject` | Retrait de gains versé (`payout_reference` facultative) · refusé (`rejection_reason`), le montant revient au solde |
+| GET · PUT | `settings/sponsorships` | Réglages du parrainage, remplacés en entier |
 
 `plans` et `feedbacks` préexistaient. Depuis les forfaits, un plan porte un
 `tier` (`basic` 3 000 F, `full` 5 000 F), requis à la création, et un
@@ -94,6 +99,9 @@ Non paginée : un agrégat calculé sur une page serait faux.
 | `promo_code_in_use` | 409 | Suppression d'un code déjà utilisé — le désactiver |
 | `invalid_promo_value` | 422 | Pourcentage supérieur à 100 |
 | `invalid_promo_period` | 422 | Expiration antérieure au début |
+| `sponsorship_not_found` · `redemption_not_found` | 404 | Parrainage ou demande introuvable |
+| `sponsorship_already_cancelled` · `redemption_already_processed` | 409 | Déjà traité |
+| `invalid_sponsorship_settings` | 422 | Gain en pourcentage supérieur à 100 |
 
 ## Limites connues
 

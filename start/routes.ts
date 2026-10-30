@@ -48,6 +48,8 @@ const ClientPropertyController = () => import('#controllers/client/property_cont
 const ClientBookingController = () => import('#controllers/client/booking_controller')
 const ClientBookingPaymentController = () =>
   import('#controllers/client/booking_payment_controller')
+const SponsorshipController = () => import('#controllers/sponsorship_controller')
+const AdminSponsorshipsController = () => import('#controllers/admin/sponsorships_controller')
 
 router.get('/', () => {
   return { hello: 'world' }
@@ -224,6 +226,30 @@ router
           })
           .prefix('promo-codes')
           .as('promo_codes')
+
+        // Parrainage : filleuls et gains, retraits de gains versés à la main.
+        router
+          .group(() => {
+            router.get('/', [AdminSponsorshipsController, 'index'])
+            router.patch(':id/cancel', [AdminSponsorshipsController, 'cancel'])
+          })
+          .prefix('sponsorships')
+          .as('sponsorships')
+        router
+          .group(() => {
+            router.get('/', [AdminSponsorshipsController, 'redemptions'])
+            router.patch(':id/paid', [AdminSponsorshipsController, 'markPaid'])
+            router.patch(':id/reject', [AdminSponsorshipsController, 'reject'])
+          })
+          .prefix('sponsorship-redemptions')
+          .as('sponsorship_redemptions')
+        router
+          .group(() => {
+            router.get('/', [AdminSponsorshipsController, 'settings'])
+            router.put('/', [AdminSponsorshipsController, 'updateSettings'])
+          })
+          .prefix('settings/sponsorships')
+          .as('sponsorship_settings')
       })
       .prefix('admin')
       .as('admin')
@@ -574,6 +600,10 @@ router
                 router.get('/', [ClientBookingController, 'index'])
                 router.patch(':id', [ClientBookingController, 'update'])
                 router.patch(':id/cancel', [ClientBookingController, 'cancel'])
+                router.post(':id/sponsorship-credit', [
+                  ClientBookingController,
+                  'applySponsorshipCredit',
+                ])
                 router.post(':id/payments/wave/init', [
                   ClientBookingPaymentController,
                   'initializeWave',
@@ -590,6 +620,30 @@ router
       })
       .prefix('client')
       .as('client')
+
+    /**
+     * Parrainage, côté parrain. Hors de `proprio` : ouvert à tous les paliers
+     * et au compte suspendu — inviter n'engage aucune fonction payante — et
+     * partagé avec le client.
+     */
+    router
+      .group(() => {
+        // Public : le formulaire d'inscription vérifie le code avant l'OTP.
+        router.get('codes/:code', [SponsorshipController, 'checkCode'])
+
+        router
+          .group(() => {
+            router.get('/', [SponsorshipController, 'show'])
+            router.post('apply', [SponsorshipController, 'apply'])
+            router.get('sponsored', [SponsorshipController, 'sponsored'])
+            router.get('transactions', [SponsorshipController, 'transactions'])
+            router.get('redemptions', [SponsorshipController, 'redemptions'])
+            router.post('redemptions', [SponsorshipController, 'requestRedemption'])
+          })
+          .use([middleware.auth(), middleware.role(['client', 'proprio'])])
+      })
+      .prefix('sponsorship')
+      .as('sponsorship')
 
     // Une seule URL à déclarer chez Wave : voir `WaveWebhookController`.
     router.post('payments/wave/webhook', [WaveWebhookController, 'handle']).as('wave_webhook')
@@ -625,6 +679,7 @@ router
           [CronController, 'subscriptionReminders']
         )
         router.route('stay-statuses', ['GET', 'POST'], [CronController, 'stayStatuses'])
+        router.route('sponsorship-rewards', ['GET', 'POST'], [CronController, 'sponsorshipRewards'])
         router.route('purge-sessions', ['GET', 'POST'], [CronController, 'purgeSessions'])
         // Ancienne sonde, gardée pour un moniteur déjà configuré avec le
         // secret. La sonde publique est `/health`.

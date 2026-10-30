@@ -17,7 +17,9 @@ const BOOKING_PAYMENT_STATUSES = [
   'expired',
   'refunded',
 ] as const
-const BOOKING_PAYMENT_PROVIDERS = ['wave'] as const
+// `sponsorship_credit` : séjour couvert en entier par le crédit parrainage du
+// client — aucun argent n'a transité par Wave, le paiement est réussi d'emblée.
+const BOOKING_PAYMENT_PROVIDERS = ['wave', 'sponsorship_credit'] as const
 
 export type BookingPaymentStatus = (typeof BOOKING_PAYMENT_STATUSES)[number]
 export type BookingPaymentProvider = (typeof BOOKING_PAYMENT_PROVIDERS)[number]

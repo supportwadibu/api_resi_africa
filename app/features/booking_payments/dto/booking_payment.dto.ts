@@ -5,7 +5,7 @@ export type BookingPaymentStatus =
   | 'cancelled'
   | 'expired'
   | 'refunded'
-export type BookingPaymentProvider = 'wave'
+export type BookingPaymentProvider = 'wave' | 'sponsorship_credit'
 
 export interface BookingPaymentDto {
   id: string

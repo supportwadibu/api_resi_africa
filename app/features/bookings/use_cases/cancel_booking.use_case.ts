@@ -1,6 +1,7 @@
 /* eslint-disable prettier/prettier */
 import { ClosePendingBookingPaymentUseCase } from '#features/booking_payments/use_cases/close_pending_booking_payment.use_case'
 import { RefundBookingPaymentUseCase } from '#features/booking_payments/use_cases/refund_booking_payment.use_case'
+import { RestoreStayCreditUseCase } from '#features/sponsorships/use_cases/restore_stay_credit.use_case'
 import { DomainError } from '#utils/domain_error'
 
 import type { BookingDto, CancelBookingInput } from '../dto/booking.dto.ts'
@@ -18,7 +19,8 @@ export class CancelBookingUseCase {
   constructor(
     private repo: BookingRepository = new BookingRepository(),
     private refunds: RefundBookingPaymentUseCase = new RefundBookingPaymentUseCase(),
-    private pendingPayments: ClosePendingBookingPaymentUseCase = new ClosePendingBookingPaymentUseCase()
+    private pendingPayments: ClosePendingBookingPaymentUseCase = new ClosePendingBookingPaymentUseCase(),
+    private stayCredit: RestoreStayCreditUseCase = new RestoreStayCreditUseCase()
   ) {}
 
   async execute(
@@ -59,6 +61,9 @@ export class CancelBookingUseCase {
       throw new DomainError('booking_not_found', 'Réservation introuvable.', 404)
     }
     await this.repo.markPropertyAsAvailable(current.property_id)
+    // Tout paiement est rendu à l'annulation par le client : le crédit
+    // parrainage engagé l'est aussi, en crédit.
+    await this.stayCredit.execute(current)
     return booking
   }
 }
