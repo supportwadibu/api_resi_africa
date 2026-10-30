@@ -1,3 +1,4 @@
+import { QualifySponsorshipUseCase } from '#features/sponsorships/use_cases/qualify_sponsorship.use_case'
 import Booking from '#models/booking'
 import type { BookingRecord } from '#models/booking'
 import { DomainError } from '#utils/domain_error'
@@ -147,6 +148,13 @@ export async function findClosableBooking(
  * et laissait dériver le compteur sur toute correction ultérieure.
  */
 export class CheckOutBookingUseCase {
+  constructor(
+    private sponsorships: Pick<
+      QualifySponsorshipUseCase,
+      'onBookingCompleted'
+    > = new QualifySponsorshipUseCase()
+  ) {}
+
   async execute(
     id: string,
     ownerId: string,
@@ -192,6 +200,17 @@ export class CheckOutBookingUseCase {
     }
 
     await syncReferrerCommissionExpense(updated)
+    await this.sponsorships.onBookingCompleted(
+      {
+        id: updated._id,
+        client_id: updated.client_id,
+        owner_id: updated.owner_id,
+        source: updated.source,
+        total_amount: updated.total_amount,
+        sponsorship_credit_amount: updated.sponsorship_credit_amount,
+      },
+      now
+    )
 
     return BookingRepository.toDto(updated)
   }

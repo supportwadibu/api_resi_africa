@@ -1,5 +1,7 @@
 import { ClosePendingBookingPaymentUseCase } from '#features/booking_payments/use_cases/close_pending_booking_payment.use_case'
 import { RefundBookingPaymentUseCase } from '#features/booking_payments/use_cases/refund_booking_payment.use_case'
+import { sponsorshipCreditOf } from '#features/booking_payments/sponsorship_credit'
+import { RestoreStayCreditUseCase } from '#features/sponsorships/use_cases/restore_stay_credit.use_case'
 import Booking from '#models/booking'
 import { DomainError } from '#utils/domain_error'
 
@@ -26,7 +28,8 @@ import BookingRepository from '../repositories/booking_repository.ts'
 export class CancelOwnerBookingUseCase {
   constructor(
     private refunds: RefundBookingPaymentUseCase = new RefundBookingPaymentUseCase(),
-    private pendingPayments: ClosePendingBookingPaymentUseCase = new ClosePendingBookingPaymentUseCase()
+    private pendingPayments: ClosePendingBookingPaymentUseCase = new ClosePendingBookingPaymentUseCase(),
+    private stayCredit: RestoreStayCreditUseCase = new RestoreStayCreditUseCase()
   ) {}
 
   async execute(id: string, ownerId: string, input: CancelBookingInput = {}): Promise<BookingDto> {
@@ -41,8 +44,15 @@ export class CancelOwnerBookingUseCase {
     await this.pendingPayments.execute(id)
 
     const onlinePayment = await this.refunds.findPaid(id)
+    // Crédit parrainage compris : un séjour réglé en crédit est payé, et le
+    // propriétaire, qui en a été crédité, doit dire s'il le garde ou le rend.
     const patch = buildCancellationPatch(
-      { ...booking, online_paid_amount: onlinePayment?.amount ?? 0 },
+      {
+        ...booking,
+        online_paid_amount: onlinePayment
+          ? onlinePayment.amount + sponsorshipCreditOf(onlinePayment)
+          : 0,
+      },
       input
     )
 
@@ -65,6 +75,16 @@ export class CancelOwnerBookingUseCase {
     await new BookingRepository().markPropertyAsAvailable(booking.property_id)
     // Une commission ne survit pas à l'annulation : son reflet est retiré.
     await syncReferrerCommissionExpense(updated)
+    // Le crédit parrainage suit le sort de l'argent : rendu avec lui, ou gardé
+    // par le propriétaire avec l'acompte.
+    const kept = onlinePayment !== null && patch.cancellation_deposit_action !== 'refund'
+    if (!kept) {
+      await this.stayCredit.execute({
+        id: booking._id,
+        client_id: booking.client_id,
+        sponsorship_credit_amount: booking.sponsorship_credit_amount,
+      })
+    }
 
     return BookingRepository.toDto(updated)
   }

@@ -8,6 +8,7 @@ import { DomainError } from '#utils/domain_error'
 
 import type { BookingPaymentDto } from '../dto/booking_payment.dto.ts'
 import BookingPaymentRepository from '../repositories/booking_payment_repository.ts'
+import { sponsorshipCreditOf } from '../sponsorship_credit.ts'
 
 /**
  * Constate l'issue du paiement Wave d'une réservation, sans attendre le
@@ -103,12 +104,14 @@ export class ConfirmBookingPaymentUseCase {
 
       // L'argent est chez RESI : il entre au portefeuille de la résidence,
       // d'où le propriétaire le retire. Idempotent, comme la confirmation.
+      // Le crédit parrainage du client s'y ajoute : RESI le finance, le
+      // propriétaire touche le prix plein.
       await this.credit.execute({
         owner_id: payment.owner_id,
         residence_id: booking?.residence_id ?? null,
         booking_id: payment.booking_id,
         booking_payment_id: payment.id,
-        amount: payment.amount,
+        amount: payment.amount + sponsorshipCreditOf(payment),
       })
 
       return paid

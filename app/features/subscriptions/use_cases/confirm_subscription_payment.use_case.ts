@@ -1,6 +1,7 @@
 import logger from '@adonisjs/core/services/logger'
 
 import { planTierLabel, readPlanTier } from '#features/plans/plan_tier'
+import { QualifySponsorshipUseCase } from '#features/sponsorships/use_cases/qualify_sponsorship.use_case'
 import Expense from '#models/expense'
 import WaveClient, { isSessionPayable, toPaymentDomainError } from '#services/wave_client'
 import { DomainError } from '#utils/domain_error'
@@ -34,7 +35,11 @@ function readUpgradeCredit(metadata: Record<string, unknown> | undefined): numbe
 export class ConfirmSubscriptionPaymentUseCase {
   constructor(
     private paymentRepo: SubscriptionPaymentRepository = new SubscriptionPaymentRepository(),
-    private wave: Pick<WaveClient, 'getCheckoutSession'> = new WaveClient()
+    private wave: Pick<WaveClient, 'getCheckoutSession'> = new WaveClient(),
+    private sponsorships: Pick<
+      QualifySponsorshipUseCase,
+      'onSubscriptionPaid'
+    > = new QualifySponsorshipUseCase()
   ) {}
 
   /** Confirmation demandée par le propriétaire : le paiement doit être le sien. */
@@ -112,6 +117,10 @@ export class ConfirmSubscriptionPaymentUseCase {
 
       if (result?.activated) {
         await this.recordSubscriptionExpense(payment, now)
+        await this.sponsorships.onSubscriptionPaid(
+          { user_id: payment.user_id, payment_reference: payment._id, amount: payment.amount },
+          now
+        )
       }
 
       return SubscriptionPaymentRepository.toDto(result?.payment ?? payment)

@@ -1,5 +1,7 @@
 import logger from '@adonisjs/core/services/logger'
 
+import { QualifySponsorshipUseCase } from '#features/sponsorships/use_cases/qualify_sponsorship.use_case'
+
 import BookingRepository from '../repositories/booking_repository.ts'
 import { resolveStayTransition } from '../stay_status.ts'
 
@@ -23,7 +25,13 @@ export interface SyncStayStatusesResult {
  * idempotente.
  */
 export class SyncStayStatusesUseCase {
-  constructor(private repo: BookingRepository = new BookingRepository()) {}
+  constructor(
+    private repo: BookingRepository = new BookingRepository(),
+    private sponsorships: Pick<
+      QualifySponsorshipUseCase,
+      'onBookingCompleted'
+    > = new QualifySponsorshipUseCase()
+  ) {}
 
   async execute(now: Date = new Date()): Promise<SyncStayStatusesResult> {
     const open = await this.repo.findOpenStays()
@@ -48,8 +56,24 @@ export class SyncStayStatusesUseCase {
           transition
         )
 
-        if (!applied) result.skipped += 1
-        else result.completed += 1
+        if (!applied) {
+          result.skipped += 1
+        } else {
+          result.completed += 1
+          if (transition.status === 'completed') {
+            await this.sponsorships.onBookingCompleted(
+              {
+                id: booking._id,
+                client_id: booking.client_id,
+                owner_id: booking.owner_id,
+                source: booking.source,
+                total_amount: booking.total_amount,
+                sponsorship_credit_amount: booking.sponsorship_credit_amount,
+              },
+              now
+            )
+          }
+        }
       } catch (error) {
         result.failed += 1
         logger.error({ err: error, booking_id: booking._id }, 'Bascule de statut en échec')

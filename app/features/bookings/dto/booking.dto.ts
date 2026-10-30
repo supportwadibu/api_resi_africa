@@ -36,6 +36,10 @@ export interface BookingDto {
   discount_amount: number
   total_amount: number
   promo_code: string | null
+  /** Part réglée avec le crédit parrainage, comprise dans `total_amount`. */
+  sponsorship_credit_amount: number
+  /** Reste à payer en ligne : `total_amount` moins le crédit parrainage. */
+  amount_due: number
   message: string | null
   cancelled_at: Date | null
   completed_at: Date | null

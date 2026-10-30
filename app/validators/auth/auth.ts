@@ -44,6 +44,10 @@ export const registerVerifyValidator = vine.compile(
     channel: vine.enum(['email', 'phone'] as const),
     target: vine.string().trim().minLength(3).maxLength(254),
     code: vine.string().trim().fixedLength(6),
+    // Code du parrain, saisi au formulaire d'inscription. Lu à la validation
+    // de l'OTP et non à l'envoi : un compte jamais vérifié n'est le filleul
+    // de personne.
+    sponsorship_code: vine.string().trim().maxLength(20).optional(),
   })
 )
 
@@ -69,6 +73,8 @@ export const googleLoginValidator = vine.compile(
     // rôle, sinon une connexion depuis l'app client changerait un
     // propriétaire en client. Absent pour l'application propriétaire.
     role_name: vine.enum(['proprio', 'client'] as const).optional(),
+    // Code du parrain, lu à la création du compte seulement.
+    sponsorship_code: vine.string().trim().maxLength(20).optional(),
   })
 )
 

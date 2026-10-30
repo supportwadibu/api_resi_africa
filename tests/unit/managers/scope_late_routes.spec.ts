@@ -354,6 +354,9 @@ test.group('GET /gerant/clients/:id/bookings : historique et cumuls cloisonnés'
   })
 })
 
+/** Parrainage hors sujet ici : la qualification lirait Firestore. */
+const NO_SPONSORSHIP = { onBookingCompleted: async () => {} }
+
 test.group('check-out et extend : le périmètre est vérifié avant toute écriture', (group) => {
   const restore: Array<() => void> = []
 
@@ -438,7 +441,7 @@ test.group('check-out et extend : le périmètre est vérifié avant toute écri
 
     try {
       await findInScope(SCOPE)
-      await new CheckOutBookingUseCase().execute('bk-1', SCOPE.ownerId)
+      await new CheckOutBookingUseCase(NO_SPONSORSHIP).execute('bk-1', SCOPE.ownerId)
       assert.fail('la clôture aurait dû être refusée')
     } catch (error) {
       assert.instanceOf(error, DomainError)
@@ -492,7 +495,7 @@ test.group('check-out et extend : le périmètre est vérifié avant toute écri
     const writes = countWrites()
 
     await findInScope(SCOPE)
-    const booking = await new CheckOutBookingUseCase().execute('bk-1', SCOPE.ownerId)
+    const booking = await new CheckOutBookingUseCase(NO_SPONSORSHIP).execute('bk-1', SCOPE.ownerId)
 
     assert.equal(booking.status, 'completed')
     assert.equal(writes.updates, 1)
@@ -517,7 +520,7 @@ test.group('check-out et extend : le périmètre est vérifié avant toute écri
     const writes = countWrites()
 
     await findInScope(OWNER_SCOPE)
-    await new CheckOutBookingUseCase().execute('bk-1', OWNER_SCOPE.ownerId)
+    await new CheckOutBookingUseCase(NO_SPONSORSHIP).execute('bk-1', OWNER_SCOPE.ownerId)
 
     assert.equal(writes.updates, 1)
   })

@@ -51,6 +51,13 @@ export interface BookingDocument {
   discount_amount: number
   total_amount: number
   promo_code: string | null
+  /**
+   * Part du séjour réglée avec le crédit parrainage du client. Comprise dans
+   * `total_amount`, qui reste le prix du séjour : RESI finance ce crédit, et
+   * le propriétaire est crédité du prix plein. Absente sur l'historique et
+   * sur toute réservation sans crédit : 0.
+   */
+  sponsorship_credit_amount?: number
   message: string | null
 
   /**

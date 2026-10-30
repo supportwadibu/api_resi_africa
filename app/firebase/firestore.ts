@@ -52,6 +52,11 @@ export const COLLECTIONS = {
   withdrawalRequests: 'withdrawal_requests',
   payoutNumbers: 'payout_numbers',
   platformSettings: 'platform_settings',
+  sponsorshipCodes: 'sponsorship_codes',
+  sponsorships: 'sponsorships',
+  sponsorshipAccounts: 'sponsorship_accounts',
+  sponsorshipTransactions: 'sponsorship_transactions',
+  sponsorshipRedemptions: 'sponsorship_redemptions',
 } as const
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS]

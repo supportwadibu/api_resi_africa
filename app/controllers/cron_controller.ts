@@ -4,6 +4,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 
 import { SyncStayStatusesUseCase } from '../features/bookings/use_cases/index.ts'
 import { SendSubscriptionRemindersUseCase } from '../features/notifications/use_cases/index.ts'
+import { ReleaseSponsorshipRewardsUseCase } from '../features/sponsorships/use_cases/index.ts'
 import { SuspendUnverifiedOwnersUseCase } from '../features/subscriptions/use_cases/index.ts'
 import { PurgeExpiredSessionsUseCase } from '../features/users/use_cases/index.ts'
 
@@ -79,6 +80,26 @@ export default class CronController {
 
     return ctx.response.ok({
       task: 'stay-statuses',
+      ...result,
+      duration_ms: Date.now() - startedAt,
+    })
+  }
+
+  /**
+   * POST|GET /api/v1/cron/sponsorship-rewards
+   *
+   * Rend disponibles les gains de parrainage sortis de leur délai d'attente.
+   * Idempotent ; un appel quotidien suffit — l'écran Parrainage libère aussi
+   * les gains échus du parrain qui l'ouvre.
+   */
+  async sponsorshipRewards(ctx: HttpContext) {
+    const startedAt = Date.now()
+    const result = await new ReleaseSponsorshipRewardsUseCase().execute()
+
+    logger.info({ ...result, duration_ms: Date.now() - startedAt }, 'Cron : gains de parrainage')
+
+    return ctx.response.ok({
+      task: 'sponsorship-rewards',
       ...result,
       duration_ms: Date.now() - startedAt,
     })

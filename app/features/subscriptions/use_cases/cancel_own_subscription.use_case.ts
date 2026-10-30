@@ -1,5 +1,6 @@
 import logger from '@adonisjs/core/services/logger'
 
+import { QualifySponsorshipUseCase } from '#features/sponsorships/use_cases/qualify_sponsorship.use_case'
 import Expense from '#models/expense'
 import SubscriptionCredit from '#models/subscription_credit'
 import Wallet from '#models/wallet'
@@ -84,6 +85,9 @@ export class CancelOwnSubscriptionUseCase {
     }
 
     await this.reduceSubscriptionExpense(userId, current, terms.refund)
+    // Remboursé, l'abonnement n'a rien rapporté : le gain de parrainage
+    // encore en attente qu'il avait déclenché tombe.
+    if (terms.refund > 0) await new QualifySponsorshipUseCase().onSubscriptionRefunded(userId, now)
 
     const updated = await this.subscriptionRepo.findById(current.id)
     return (
