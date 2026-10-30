@@ -57,6 +57,11 @@ export class PropertyRepository {
         late_checkout_half_day_hours:
           doc.pricing?.late_checkout_half_day_hours ?? DEFAULT_LATE_CHECKOUT_HALF_DAY_HOURS,
       },
+      // Absente des biens antérieurs à la négociation : non négociable.
+      negotiation: {
+        enabled: doc.negotiation?.enabled ?? false,
+        prices: doc.negotiation?.prices ?? [],
+      },
       charges_included: doc.charges_included,
       additional_charges: doc.additional_charges,
       available_from: doc.available_from,

@@ -55,6 +55,7 @@ function property(id: string, overrides: Partial<PropertyDto> = {}): PropertyDto
     amenities: {},
     media: { images: [] },
     pricing: { daily_price: 25000 },
+    negotiation: { enabled: false, prices: [] },
     charges_included: false,
     additional_charges: 0,
     available_from: new Date('2026-01-01'),

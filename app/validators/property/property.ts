@@ -1,5 +1,7 @@
 import vine from '@vinejs/vine'
 
+import { MAX_NEGOTIATION_STEPS } from '#features/negotiations/negotiation_rules'
+
 const PROPERTY_TYPES = ['apartment', 'studio', 'villa', 'duplex'] as const
 
 const PROPERTY_STATUSES = [
@@ -100,6 +102,17 @@ const pricingSchema = vine.object({
 })
 
 /**
+ * Paliers de négociation. Ordre et bornes sont vérifiés par
+ * `normalizeNegotiation`, qui dit pourquoi un palier est refusé.
+ */
+const negotiationSchema = vine
+  .object({
+    enabled: vine.boolean(),
+    prices: vine.array(vine.number().positive()).maxLength(MAX_NEGOTIATION_STEPS),
+  })
+  .optional()
+
+/**
  * POST /proprio/properties
  */
 export const createPropertyValidator = vine.compile(
@@ -117,6 +130,7 @@ export const createPropertyValidator = vine.compile(
     amenities: amenitiesSchema,
     media: mediaSchema,
     pricing: pricingSchema,
+    negotiation: negotiationSchema,
     charges_included: vine.boolean().optional(),
     additional_charges: vine.number().min(0).optional(),
     available_from: vine.date(),
@@ -144,6 +158,7 @@ export const updatePropertyValidator = vine.compile(
     amenities: amenitiesSchema,
     media: mediaSchema,
     pricing: pricingSchema.optional(),
+    negotiation: negotiationSchema,
     charges_included: vine.boolean().optional(),
     additional_charges: vine.number().min(0).optional(),
     available_from: vine.date().optional(),

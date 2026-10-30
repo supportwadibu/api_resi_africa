@@ -4,7 +4,7 @@ import { findExtensionConflict, toPeriods } from '../availability.ts'
 import type { BookingDto, UpdateBookingInput } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 import PromoCodeRepository from '../repositories/promo_code_repository.ts'
-import { assertExtensionBounds, calculateStayPrice } from '../stay_pricing.ts'
+import { assertExtensionBounds, calculateStayPrice, negotiatedPricing } from '../stay_pricing.ts'
 
 export class UpdateBookingUseCase {
   constructor(
@@ -32,7 +32,13 @@ export class UpdateBookingUseCase {
 
     assertExtensionBounds(property.pricing, current.start_date, current.end_date, input.end_date)
 
-    const price = calculateStayPrice(property.pricing, current.start_date, input.end_date)
+    // Un séjour négocié se prolonge au prix négocié : relire la grille du
+    // bien ferait payer au prix normal les jours déjà acquis.
+    const pricing =
+      current.negotiation_level !== null
+        ? negotiatedPricing(property.pricing, current.daily_price)
+        : property.pricing
+    const price = calculateStayPrice(pricing, current.start_date, input.end_date)
     const promo = input.promo_code
       ? await this.validatePromoCode(input.promo_code, client_id, price.subtotal)
       : null

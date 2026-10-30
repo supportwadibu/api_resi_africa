@@ -203,6 +203,16 @@ export function calculateStayPrice(
 }
 
 /**
+ * Grille d'un séjour au prix négocié : le palier remplace le prix par jour,
+ * sans remise de durée — le prix négocié est final (voir
+ * `negotiation_rules.ts`). Bornes de durée et départ tardif restent ceux du
+ * bien.
+ */
+export function negotiatedPricing(pricing: PropertyPricing, dailyPrice: number): PropertyPricing {
+  return { ...pricing, daily_price: dailyPrice, price_tiers: [] }
+}
+
+/**
  * Valide la nouvelle borne de sortie d'une prolongation.
  *
  * VineJS ne voit que la forme de `end_date` : il ignore la date de début, qui

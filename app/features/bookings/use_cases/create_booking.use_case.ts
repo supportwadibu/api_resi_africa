@@ -4,12 +4,14 @@ import { DomainError } from '#utils/domain_error'
 import type { BookingDto, CreateBookingInput } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 import PromoCodeRepository from '../repositories/promo_code_repository.ts'
-import { calculateStayPrice } from '../stay_pricing.ts'
+import { calculateStayPrice, negotiatedPricing } from '../stay_pricing.ts'
+import Negotiation from '#models/negotiation'
 
 export class CreateBookingUseCase {
   constructor(
     private repo: BookingRepository = new BookingRepository(),
-    private promoRepo: PromoCodeRepository = new PromoCodeRepository()
+    private promoRepo: PromoCodeRepository = new PromoCodeRepository(),
+    private negotiations: Pick<typeof Negotiation, 'offers'> = Negotiation
   ) {}
 
   async execute(input: CreateBookingInput): Promise<BookingDto> {
@@ -26,7 +28,22 @@ export class CreateBookingUseCase {
       )
     }
 
-    const price = calculateStayPrice(property.pricing, input.start_date, input.end_date)
+    const negotiated = input.negotiation_level
+      ? await this.negotiatedPrice(property, input.client_id, input.negotiation_level)
+      : null
+    if (negotiated !== null && input.promo_code) {
+      throw new DomainError(
+        'promo_not_with_negotiation',
+        'Un code promo ne s’ajoute pas à un prix négocié.',
+        422
+      )
+    }
+
+    const price = calculateStayPrice(
+      negotiated === null ? property.pricing : negotiatedPricing(property.pricing, negotiated),
+      input.start_date,
+      input.end_date
+    )
     const promo = input.promo_code
       ? await this.validatePromoCode(input.promo_code, input.client_id, price.subtotal)
       : null
@@ -47,10 +64,37 @@ export class CreateBookingUseCase {
         total_amount: price.subtotal - (promo?.discount ?? 0),
         promo_code: promo?.code ?? undefined,
         promo_code_id: promo?.id ?? null,
+        negotiation_level: negotiated === null ? undefined : input.negotiation_level,
+        list_daily_price: negotiated === null ? undefined : property.pricing.daily_price,
       })
     } catch (error) {
       this.mapTechnicalError(error)
     }
+  }
+
+  /**
+   * Prix d'un palier que le serveur a lui-même révélé à ce client : le
+   * palier est relu dans sa négociation, jamais pris de la requête. Le bien
+   * doit être encore négociable — un propriétaire qui coupe la négociation
+   * n'honore plus les offres en cours.
+   */
+  private async negotiatedPrice(
+    property: { _id: string; negotiation?: { enabled: boolean } },
+    clientId: string,
+    level: number
+  ): Promise<number> {
+    const offers = property.negotiation?.enabled
+      ? await this.negotiations.offers(property._id, clientId, new Date())
+      : []
+    const price = offers[level - 1]
+    if (price === undefined) {
+      throw new DomainError(
+        'negotiation_offer_unavailable',
+        'Ce prix négocié n’est plus disponible. Négociez à nouveau ou réservez au prix normal.',
+        409
+      )
+    }
+    return price
   }
 
   private async validatePromoCode(code: string, clientId: string, subtotal: number) {
