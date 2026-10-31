@@ -1,5 +1,6 @@
 import { SCOPE_READ_LIMIT } from '#features/managers/scope'
 import {
+  DEFAULT_CHECKOUT_TIME,
   DEFAULT_LATE_CHECKOUT_GRACE_MINUTES,
   DEFAULT_LATE_CHECKOUT_HALF_DAY_HOURS,
 } from '#features/bookings/stay_pricing'
@@ -56,6 +57,9 @@ export class PropertyRepository {
           doc.pricing?.late_checkout_grace_minutes ?? DEFAULT_LATE_CHECKOUT_GRACE_MINUTES,
         late_checkout_half_day_hours:
           doc.pricing?.late_checkout_half_day_hours ?? DEFAULT_LATE_CHECKOUT_HALF_DAY_HOURS,
+        // Absente des biens antérieurs aux nuits à heure fixe : 12h30, l'heure
+        // que la facturation leur applique.
+        checkout_time: doc.pricing?.checkout_time ?? DEFAULT_CHECKOUT_TIME,
       },
       // Absente des biens antérieurs à la négociation : non négociable.
       negotiation: {

@@ -7,7 +7,7 @@ import type { BookingDto } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 import { syncReferrerCommissionExpense } from '../referrer_expense.ts'
 import { computeOwnerBookingAmounts } from './create_owner_booking.use_case.ts'
-import { lateCheckoutFeeFor } from '../stay_pricing.ts'
+import { extensionCheckOutFor, lateCheckoutFeeFor } from '../stay_pricing.ts'
 
 /**
  * Champs écrits par la prolongation d'un séjour comptoir.
@@ -155,7 +155,14 @@ export class ExtendOwnerBookingUseCase {
     const checkIn = booking.check_in_at ?? booking.start_date
     const currentCheckOut = booking.check_out_at ?? booking.end_date
 
-    if (input.check_out_at.getTime() <= currentCheckOut.getTime()) {
+    const property = await Property.findById(booking.property_id)
+    if (!property) {
+      throw new DomainError('property_not_found', 'Bien introuvable.', 404)
+    }
+
+    const checkOut = extensionCheckOutFor(checkIn, input.check_out_at, property.pricing)
+
+    if (checkOut.getTime() <= currentCheckOut.getTime()) {
       throw new DomainError(
         'invalid_extension',
         'La nouvelle date de sortie doit être postérieure à la date actuelle.',
@@ -163,17 +170,7 @@ export class ExtendOwnerBookingUseCase {
       )
     }
 
-    const property = await Property.findById(booking.property_id)
-    if (!property) {
-      throw new DomainError('property_not_found', 'Bien introuvable.', 404)
-    }
-
-    const amounts = computeOwnerBookingAmounts(
-      property.pricing,
-      stayType,
-      checkIn,
-      input.check_out_at
-    )
+    const amounts = computeOwnerBookingAmounts(property.pricing, stayType, checkIn, checkOut)
     const { days, expected, discountPercent } = amounts
 
     // À défaut de montant renégocié, le prix suit le tarif convenu à la
@@ -206,17 +203,9 @@ export class ExtendOwnerBookingUseCase {
         id,
         // La commission reste celle de l'enregistrement : une prolongation ne
         // l'augmente pas (voir `REFERRER_COMMISSION_RATE`).
-        buildExtensionPatch(
-          input.check_out_at,
-          days,
-          expected,
-          received,
-          discountPercent,
-          lateCheckoutFee
-        ),
+        buildExtensionPatch(checkOut, days, expected, received, discountPercent, lateCheckoutFee),
         { owner_id: ownerId },
-        (active) =>
-          findExtensionConflict(id, currentCheckOut, input.check_out_at, toPeriods(active)) !== null
+        (active) => findExtensionConflict(id, currentCheckOut, checkOut, toPeriods(active)) !== null
       )
     } catch (error) {
       if (error instanceof Error && error.message === 'booking_period_conflict') {

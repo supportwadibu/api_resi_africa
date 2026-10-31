@@ -64,11 +64,32 @@ export function paidAmountOf(booking: EarlyCheckOutBooking): number {
   return booking.received_amount ?? booking.total_amount
 }
 
+const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24
+
+/**
+ * Nuits entamées à l'instant `departure`, sur un séjour de `plannedNights`
+ * nuits qui devait finir à `plannedCheckOut`.
+ *
+ * Chaque nuit finit à l'heure de départ du séjour, un jour avant la suivante :
+ * on les retrouve en reculant depuis la sortie prévue, sans relire le bien. Sur
+ * l'historique en blocs de 24h, la sortie prévue tombait à l'heure d'entrée, et
+ * le décompte retombe sur celui de l'époque — tout bloc entamé est dû.
+ */
+function startedNights(plannedCheckOut: Date, plannedNights: number, departure: Date): number {
+  let started = 1
+  for (let night = 1; night < plannedNights; night++) {
+    const endOfNight = plannedCheckOut.getTime() - (plannedNights - night) * MILLISECONDS_PER_DAY
+    if (departure.getTime() > endOfNight) started++
+  }
+  return started
+}
+
 /**
  * Chiffre un départ anticipé à l'instant `departure`.
  *
- * Tout jour entamé reste dû : un séjour de 5 jours quitté après 2 jours et
- * 3 heures en facture 3. Une demi-journée ou un passage se facturent à
+ * Toute nuit entamée reste due : un séjour de 5 nuits quitté le surlendemain
+ * à 15h, après l'heure de départ de la deuxième nuit, en facture 3. Une
+ * demi-journée ou un passage se facturent à
  * l'unité — leur montant est indivisible, seule l'heure de sortie bouge.
  *
  * Le prorata porte sur le montant **réglé** et non sur la grille : il reprend
@@ -124,7 +145,7 @@ export function quoteEarlyCheckOut(
   const isFullDay = (booking.stay_type ?? 'full_day') === 'full_day'
 
   const billedDays = isFullDay
-    ? Math.min(plannedDays, Math.max(1, countStayDays(checkIn, departure)))
+    ? startedNights(plannedCheckOut, plannedDays, departure)
     : plannedDays
 
   const proposed = isFullDay ? Math.round((paid * billedDays) / plannedDays) : paid

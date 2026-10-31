@@ -1,5 +1,8 @@
 import { test } from '@japa/runner'
-import { computeOwnerBookingAmounts } from '#features/bookings/use_cases/create_owner_booking.use_case'
+import {
+  computeOwnerBookingAmounts,
+  resolveOwnerCheckOut,
+} from '#features/bookings/use_cases/create_owner_booking.use_case'
 
 import type { PropertyPricing } from '#models/property'
 
@@ -162,15 +165,31 @@ test.group('computeOwnerBookingAmounts', () => {
       late_checkout_grace_minutes: 0,
       late_checkout_half_day_hours: 0,
     }
-    // Sans tolérance ni demi-journée, tout dépassement entame un jour.
+    // Sans tolérance ni demi-nuit, tout dépassement de 12h30 entame une nuit.
     const result = computeOwnerBookingAmounts(
       strict,
       'full_day',
       new Date('2026-10-18T12:00:00Z'),
-      new Date('2026-10-19T12:30:00Z')
+      new Date('2026-10-19T12:31:00Z')
     )
     assert.equal(result.days, 2)
     assert.equal(result.expected, 40000)
+  })
+
+  test('sans sortie envoyée, un séjour complet sort à 12h30 après ses nuits', ({ assert }) => {
+    const checkOut = resolveOwnerCheckOut(
+      { stay_type: 'full_day', check_in_at: new Date('2026-10-18T22:00:00Z'), days_count: 2 },
+      pricing
+    )
+    assert.equal(checkOut.toISOString(), '2026-10-20T12:30:00.000Z')
+  })
+
+  test('sans sortie envoyée, un passage garde sa durée par défaut', ({ assert }) => {
+    const checkOut = resolveOwnerCheckOut(
+      { stay_type: 'passage', check_in_at: new Date('2026-10-18T14:00:00Z') },
+      pricing
+    )
+    assert.equal(checkOut.toISOString(), '2026-10-18T18:00:00.000Z')
   })
 
   test('un choix explicite inférieur au minimum de séjour est refusé', ({ assert }) => {
@@ -184,7 +203,7 @@ test.group('computeOwnerBookingAmounts', () => {
           new Date('2026-10-19T15:00:00Z'),
           1
         ),
-      /Séjour minimum de 2 jour\(s\)/
+      /Séjour minimum de 2 nuit\(s\)/
     )
   })
 })

@@ -11,6 +11,7 @@ import type { PropertyPricing } from '#models/property'
 import { findOverlappingPeriod, toPeriods } from '../availability.ts'
 import {
   lateCheckoutFeeFor,
+  plannedCheckOutFor,
   resolveBilledStay,
   resolveDiscountPercent,
   resolveLateCheckoutPolicy,
@@ -66,8 +67,8 @@ export function computeOwnerBookingAmounts(
     }
   }
 
-  // Jours entiers et départ tardif selon la règle du bien. Un nombre de jours
-  // choisi au comptoir (Option 1) remplace les jours entiers : voir
+  // Nuits et départ tardif selon la règle du bien. Un nombre de nuits choisi
+  // au comptoir (Option 1) remplace les nuits écoulées : voir
   // `resolveBilledStay`.
   const { days, lateCheckout } = resolveBilledStay(
     checkIn,
@@ -78,12 +79,12 @@ export function computeOwnerBookingAmounts(
 
   const minimum = pricing.minimum_stay_days ?? 1
   if (days < minimum) {
-    throw new DomainError('minimum_stay_not_reached', `Séjour minimum de ${minimum} jour(s).`, 422)
+    throw new DomainError('minimum_stay_not_reached', `Séjour minimum de ${minimum} nuit(s).`, 422)
   }
 
   const maximum = pricing.maximum_stay_days
   if (maximum !== null && maximum !== undefined && days > maximum) {
-    throw new DomainError('maximum_stay_exceeded', `Séjour maximum de ${maximum} jour(s).`, 422)
+    throw new DomainError('maximum_stay_exceeded', `Séjour maximum de ${maximum} nuit(s).`, 422)
   }
 
   const discountPercent = resolveDiscountPercent(days, pricing.price_tiers)
@@ -100,6 +101,24 @@ export function computeOwnerBookingAmounts(
     lateCheckout,
     lateCheckoutFee,
   }
+}
+
+/**
+ * Sortie d'un séjour comptoir envoyé sans `check_out_at`.
+ *
+ * Un séjour complet sort à l'heure de départ du bien, après les nuits
+ * choisies — une seule à défaut. Ajouter 24h à l'arrivée ferait dépendre la
+ * sortie, donc le prix, de l'heure d'entrée.
+ */
+export function resolveOwnerCheckOut(
+  input: { stay_type: StayType; check_in_at: Date; check_out_at?: Date; days_count?: number },
+  pricing: PropertyPricing
+): Date {
+  if (input.check_out_at) return input.check_out_at
+  if (input.stay_type === 'full_day') {
+    return plannedCheckOutFor(input.check_in_at, input.days_count ?? 1, pricing)
+  }
+  return defaultCheckOutFor(input.stay_type, input.check_in_at)
 }
 
 export interface OwnerBookingAmounts {
@@ -207,7 +226,7 @@ export class CreateOwnerBookingUseCase {
     }
 
     const checkIn = input.check_in_at
-    const checkOut = input.check_out_at ?? defaultCheckOutFor(input.stay_type, checkIn)
+    const checkOut = resolveOwnerCheckOut(input, property.pricing)
 
     const amounts = computeOwnerBookingAmounts(
       property.pricing,

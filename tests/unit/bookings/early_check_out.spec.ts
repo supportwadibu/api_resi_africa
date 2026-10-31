@@ -50,6 +50,22 @@ test.group('quoteEarlyCheckOut', () => {
     assert.equal(quote.refund_amount, 60000)
   })
 
+  test('nuits à 12h30 : la nuit entamée après l’heure de départ est due', ({ assert }) => {
+    // Entrée le 24 à 22h pour 5 nuits : sortie prévue le 29 à 12h30.
+    const booking = fiveDayStay({
+      start_date: new Date('2026-09-24T22:00:00Z'),
+      check_in_at: new Date('2026-09-24T22:00:00Z'),
+      end_date: new Date('2026-09-29T12:30:00Z'),
+      check_out_at: new Date('2026-09-29T12:30:00Z'),
+    })
+    const quote = (iso: string) =>
+      quoteEarlyCheckOut(booking, new Date(iso), new Date(iso)).billed_days
+
+    assert.equal(quote('2026-09-25T10:00:00Z'), 1)
+    assert.equal(quote('2026-09-26T12:30:00Z'), 2)
+    assert.equal(quote('2026-09-26T15:00:00Z'), 3)
+  })
+
   test('un jour entamé est dû', ({ assert }) => {
     const booking = fiveDayStay()
     const departure = after(booking, 51)
