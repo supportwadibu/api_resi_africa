@@ -1,7 +1,8 @@
+import logger from '@adonisjs/core/services/logger'
+
 import type { DeviceContext } from '#auth/dto/index'
 import { logAuthAttempt } from '#auth/helpers/auth_audit'
 import type { OtpChannel, OtpPurpose } from '#models/otp_code'
-/* eslint-disable prettier/prettier */
 import NotificationService from '#services/notification_service'
 import OtpService from '#services/otp_service'
 import { AuthError } from '#utils/auth_error'
@@ -24,9 +25,7 @@ export interface GenerateAndSendOtpInput {
  * la tentative. En cas d'échec d'envoi, le code est journalisé `failed`
  * et une AuthError('otp_send_failed', 502) est levée.
  */
-export async function generateAndSendOtp(
-  input: GenerateAndSendOtpInput
-): Promise<string> {
+export async function generateAndSendOtp(input: GenerateAndSendOtpInput): Promise<string> {
   const { otp, plainCode } = await OtpService.generate({
     userId: input.userId,
     channel: input.channel,
@@ -42,6 +41,12 @@ export async function generateAndSendOtp(
       purpose: input.purpose,
     })
   } catch (error) {
+    // L'AuthError renvoyée au client masque la cause ; sans ce log, une clé
+    // révoquée ou un domaine non vérifié ne se lirait que dans la RTDB.
+    logger.error(
+      { err: error, channel: input.channel, purpose: input.purpose },
+      "Échec d'envoi de l'OTP"
+    )
     await logAuthAttempt({
       user_id: input.userId,
       otp_id: otp._id,

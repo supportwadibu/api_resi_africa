@@ -131,6 +131,25 @@ export default await Env.create(new URL('../', import.meta.url), {
   APP_NAME: Env.schema.string.optional(),
   SMS_SENDER_ID: Env.schema.string.optional(),
 
+  /**
+   * Envoi d'emails (OTP). `console` journalise sans envoyer et n'est pas
+   * accepté en production : un envoi y lève alors `otp_send_failed`.
+   */
+  MAIL_PROVIDER: Env.schema.enum.optional(['console', 'resend'] as const),
+  /** Expéditeur sur un domaine vérifié chez le fournisseur : `Resi <no-reply@domaine>`. */
+  MAIL_FROM: Env.schema.string.optional(),
+  MAIL_REPLY_TO: Env.schema.string.optional(),
+  /**
+   * Templates Resend (identifiant ou alias d'un template publié). Par défaut,
+   * les alias `otp_email_verification` et `email_verified`.
+   */
+  MAIL_TEMPLATE_OTP_VERIFICATION: Env.schema.string.optional(),
+  MAIL_TEMPLATE_EMAIL_VERIFIED: Env.schema.string.optional(),
+  /** Variables `app_url` et `support_email` de l'email de confirmation. */
+  MAIL_APP_URL: Env.schema.string.optional(),
+  MAIL_SUPPORT_EMAIL: Env.schema.string.optional(),
+  RESEND_API_KEY: Env.schema.string.optional(),
+
   // Sélection du provider messaging (SMS / WhatsApp)
   MESSAGING_PROVIDER: Env.schema.enum.optional([
     'console',
