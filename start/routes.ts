@@ -66,6 +66,7 @@ router
     router
       .group(() => {
         router.post('register/init', [AuthController, 'registerInit'])
+        router.post('register/resend', [AuthController, 'registerResend'])
         router.post('register/verify', [AuthController, 'registerVerify'])
         router.post('login', [AuthController, 'login'])
         router.post('google', [AuthController, 'google'])
