@@ -5,23 +5,29 @@ import type { PropertyPriceTier, PropertyPricing } from '#models/property'
 import { HALF_DAY_RATIO } from './stay_type.ts'
 
 /**
- * Tarification d'un séjour : prix par jour, remisé selon la durée.
+ * Tarification d'un séjour : prix par nuit, remisé selon la durée.
  *
- * Une journée court d'une heure d'arrivée à la même heure le lendemain : entrer
- * à 12h et sortir le lendemain à 12h compte pour un jour. Le décompte se fait
- * donc en jours d'occupation, et non en nuits calendaires.
+ * Un séjour se compte en nuits, et chaque nuit se termine à l'heure de départ
+ * du bien (12h30 par défaut) le lendemain, quelle que soit l'heure d'arrivée :
+ * arriver à 10h ou à 22h et partir le lendemain à 12h30 fait une nuit. Le
+ * décompte en blocs de 24h depuis l'arrivée faisait varier l'heure de sortie
+ * — et le prix — avec l'heure d'entrée.
+ *
+ * Les champs restent nommés en jours (`days_count`, `daily_price`) : le mobile
+ * et le backoffice les lisent sous ce nom, et l'historique les porte.
  *
  * Partagé par la création et la prolongation de réservation : une prolongation
  * facturée sur une autre grille que la réservation initiale serait un bug de
  * facturation, pas une divergence acceptable.
  */
 
-const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24
+const MILLISECONDS_PER_MINUTE = 1000 * 60
+const MILLISECONDS_PER_DAY = MILLISECONDS_PER_MINUTE * 60 * 24
 
 export interface StayPrice {
-  /** Jours d'occupation facturés. */
+  /** Nuits facturées. */
   days: number
-  /** Tarif plein d'une journée, avant remise. */
+  /** Tarif plein d'une nuit, avant remise. */
   dailyPrice: number
   /** Remise appliquée, en pourcentage. `0` si aucun palier n'est atteint. */
   discountPercent: number
@@ -34,65 +40,132 @@ export interface StayPrice {
 /**
  * Jours d'occupation entre deux instants, arrondis au jour entamé supérieur.
  *
- * `Math.ceil` : une sortie à 14h le lendemain d'une entrée à 12h dépasse la
- * journée due et en entame une seconde. Sert au départ anticipé ; la
- * facturation d'un séjour passe par `resolveBilledStay`, qui tolère un léger
- * dépassement.
+ * Ne sert plus qu'au repli du départ anticipé sur l'historique sans
+ * `days_count` ; la facturation passe par `resolveBilledStay`.
  */
 export function countStayDays(startDate: Date, endDate: Date): number {
   return Math.ceil((endDate.getTime() - startDate.getTime()) / MILLISECONDS_PER_DAY)
 }
 
+/** Heure de départ par défaut, « HH:mm » à l'heure d'Abidjan. */
+export const DEFAULT_CHECKOUT_TIME = '12:30'
 /** Tolérance par défaut d'un départ tardif, en minutes. */
 export const DEFAULT_LATE_CHECKOUT_GRACE_MINUTES = 60
-/** Dépassement maximal facturé en demi-journée, en heures ; au-delà, un jour. */
+/** Dépassement maximal facturé en demi-nuit, en heures ; au-delà, une nuit. */
 export const DEFAULT_LATE_CHECKOUT_HALF_DAY_HOURS = 6
 
+/** « HH:mm » sur 24 h, de 00:00 à 23:59. */
+export const CHECKOUT_TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/
+
 export interface LateCheckoutPolicy {
+  /** Heure de départ, en minutes depuis minuit (12h30 → 750). */
+  checkoutMinutes: number
   graceMinutes: number
   halfDayHours: number
 }
 
 /**
- * Règle de départ tardif d'un bien.
+ * Heure de départ « HH:mm » en minutes depuis minuit.
  *
- * Les biens enregistrés avant cette règle n'en portent pas : ils prennent les
- * valeurs par défaut, si bien qu'un dépassement d'une minute ne fait plus
- * payer une journée entière sur aucun bien.
+ * Une valeur absente ou mal formée retombe sur l'heure par défaut : la
+ * validation l'écarte à l'écriture, mais un document écrit à la main ne doit
+ * pas rendre un séjour infacturable.
+ */
+export function parseCheckoutTime(value?: string | null): number {
+  const time = value && CHECKOUT_TIME_PATTERN.test(value) ? value : DEFAULT_CHECKOUT_TIME
+  const [hours, minutes] = time.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+/**
+ * Règle de départ d'un bien : heure de départ, puis départ tardif.
+ *
+ * Les biens enregistrés avant ces champs n'en portent pas : ils prennent les
+ * valeurs par défaut — 12h30, une heure de tolérance —, si bien qu'aucun bien
+ * existant ne reste sur l'ancien décompte en blocs de 24h.
  */
 export function resolveLateCheckoutPolicy(pricing: {
+  checkout_time?: string | null
   late_checkout_grace_minutes?: number | null
   late_checkout_half_day_hours?: number | null
 }): LateCheckoutPolicy {
   return {
+    checkoutMinutes: parseCheckoutTime(pricing.checkout_time),
     graceMinutes: pricing.late_checkout_grace_minutes ?? DEFAULT_LATE_CHECKOUT_GRACE_MINUTES,
     halfDayHours: pricing.late_checkout_half_day_hours ?? DEFAULT_LATE_CHECKOUT_HALF_DAY_HOURS,
   }
 }
 
+/**
+ * Fin de la `nights`-ième nuit d'un séjour : le jour d'arrivée plus `nights`
+ * jours, à l'heure de départ.
+ *
+ * Calculé sur le calendrier UTC : Abidjan est à UTC+0 sans heure d'été, si
+ * bien que la date UTC est la date locale du bien. Un pays à décalage
+ * demanderait de porter le fuseau sur le bien.
+ */
+export function checkoutDeadline(checkIn: Date, nights: number, checkoutMinutes: number): Date {
+  return new Date(
+    Date.UTC(checkIn.getUTCFullYear(), checkIn.getUTCMonth(), checkIn.getUTCDate() + nights) +
+      checkoutMinutes * MILLISECONDS_PER_MINUTE
+  )
+}
+
+/** Sortie prévue d'un séjour de `nights` nuits, selon la règle du bien. */
+export function plannedCheckOutFor(
+  checkIn: Date,
+  nights: number,
+  pricing: { checkout_time?: string | null }
+): Date {
+  return checkoutDeadline(checkIn, Math.max(1, nights), parseCheckoutTime(pricing.checkout_time))
+}
+
+/**
+ * Sortie d'une prolongation : l'heure de départ du bien, le jour demandé.
+ *
+ * Prolonger, c'est ajouter des nuits. Le mobile ajoute des jours à la sortie
+ * en cours ; sur une réservation antérieure aux nuits à heure fixe, celle-ci
+ * garde l'heure d'entrée — 15h —, et la prolongation serait facturée en
+ * départ tardif après 12h30.
+ */
+export function extensionCheckOutFor(
+  checkIn: Date,
+  requested: Date,
+  pricing: { checkout_time?: string | null }
+): Date {
+  const nights = Math.round(
+    (Date.UTC(requested.getUTCFullYear(), requested.getUTCMonth(), requested.getUTCDate()) -
+      Date.UTC(checkIn.getUTCFullYear(), checkIn.getUTCMonth(), checkIn.getUTCDate())) /
+      MILLISECONDS_PER_DAY
+  )
+  return plannedCheckOutFor(checkIn, nights, pricing)
+}
+
 export interface BilledStay {
-  /** Jours facturés, au minimum un. */
+  /** Nuits facturées, au minimum une. */
   days: number
-  /** Le dépassement des jours entiers se facture en demi-journée. */
+  /** Le dépassement de l'heure de départ se facture en demi-nuit. */
   lateCheckout: boolean
 }
 
 /**
- * Jours facturés d'un séjour complet, et départ tardif éventuel.
+ * Nuits facturées d'un séjour complet, et départ tardif éventuel.
  *
- * Les jours entiers écoulés sont dus ; le reste — le dépassement — se lit sur
- * la règle du bien :
+ * Les nuits dont l'heure de départ est passée sont dues, au minimum une ; le
+ * reste — le dépassement après la dernière heure de départ — se lit sur la
+ * règle du bien :
  * - jusqu'à la tolérance, il est offert ;
- * - jusqu'à `halfDayHours`, il se facture en demi-journée ;
- * - au-delà, il entame un jour de plus.
+ * - jusqu'à `halfDayHours`, il se facture en demi-nuit ;
+ * - au-delà, il entame une nuit de plus.
  *
- * Lundi 12h → mardi 16h : un jour, quatre heures de dépassement — un jour et
- * une demi-journée, là où le jour entamé en faisait payer deux.
+ * Lundi 22h → mardi 12h30 : une nuit. Lundi 10h → mardi 16h : une nuit, trois
+ * heures et demie de dépassement — une nuit et une demi-nuit.
  *
- * Un nombre de jours choisi au comptoir (`explicitDays`) remplace les jours
- * entiers : le dépassement se mesure alors au-delà de ces jours. Au-delà de la
- * demi-journée, le choix du propriétaire prime et aucun jour n'est ajouté —
- * il a fixé la durée en connaissance des heures.
+ * Un nombre de nuits choisi au comptoir (`explicitDays`) remplace les nuits
+ * écoulées : le dépassement se mesure alors après l'heure de départ de la
+ * dernière nuit choisie. Au-delà de la demi-nuit, le choix du propriétaire
+ * prime et aucune nuit n'est ajoutée — il a fixé la durée en connaissance des
+ * heures.
  */
 export function resolveBilledStay(
   checkIn: Date,
@@ -100,20 +173,35 @@ export function resolveBilledStay(
   policy: LateCheckoutPolicy,
   explicitDays?: number | null
 ): BilledStay {
-  const elapsed = Math.max(0, checkOut.getTime() - checkIn.getTime())
   const explicit =
     typeof explicitDays === 'number' && Number.isFinite(explicitDays) && explicitDays >= 1
       ? Math.round(explicitDays)
       : null
 
-  const base = explicit ?? Math.max(1, Math.floor(elapsed / MILLISECONDS_PER_DAY))
-  const overrun = elapsed - base * MILLISECONDS_PER_DAY
+  const base = explicit ?? Math.max(1, elapsedNights(checkIn, checkOut, policy.checkoutMinutes))
+  const overrun =
+    checkOut.getTime() - checkoutDeadline(checkIn, base, policy.checkoutMinutes).getTime()
 
-  if (overrun <= policy.graceMinutes * 60 * 1000) return { days: base, lateCheckout: false }
-  if (overrun <= policy.halfDayHours * 60 * 60 * 1000) return { days: base, lateCheckout: true }
+  if (overrun <= policy.graceMinutes * MILLISECONDS_PER_MINUTE) {
+    return { days: base, lateCheckout: false }
+  }
+  if (overrun <= policy.halfDayHours * 60 * MILLISECONDS_PER_MINUTE) {
+    return { days: base, lateCheckout: true }
+  }
   if (explicit !== null) return { days: base, lateCheckout: false }
 
   return { days: base + 1, lateCheckout: false }
+}
+
+/** Nuits dont l'heure de départ est atteinte à `checkOut`, éventuellement zéro. */
+function elapsedNights(checkIn: Date, checkOut: Date, checkoutMinutes: number): number {
+  const calendarDays = Math.round(
+    (Date.UTC(checkOut.getUTCFullYear(), checkOut.getUTCMonth(), checkOut.getUTCDate()) -
+      Date.UTC(checkIn.getUTCFullYear(), checkIn.getUTCMonth(), checkIn.getUTCDate())) /
+      MILLISECONDS_PER_DAY
+  )
+  const minuteOfDay = checkOut.getUTCHours() * 60 + checkOut.getUTCMinutes()
+  return minuteOfDay >= checkoutMinutes ? calendarDays : calendarDays - 1
 }
 
 /** Supplément d'un départ tardif : une demi-journée au prix unitaire en vigueur. */
@@ -175,7 +263,7 @@ export function calculateStayPrice(
   if (days < minimumStayDays) {
     throw new DomainError(
       'minimum_stay_not_reached',
-      `Séjour minimum de ${minimumStayDays} jour(s).`,
+      `Séjour minimum de ${minimumStayDays} nuit(s).`,
       422
     )
   }
@@ -183,7 +271,7 @@ export function calculateStayPrice(
   if (maximumStayDays && days > maximumStayDays) {
     throw new DomainError(
       'maximum_stay_exceeded',
-      `Séjour maximum de ${maximumStayDays} jour(s).`,
+      `Séjour maximum de ${maximumStayDays} nuit(s).`,
       422
     )
   }
@@ -252,7 +340,7 @@ export function assertExtensionBounds(
     // faire refuser une prolongation que le prix compterait en jours entiers.
     const { days } = resolveBilledStay(startDate, newEndDate, resolveLateCheckoutPolicy(pricing))
     if (days > maximum) {
-      throw new DomainError('maximum_stay_exceeded', `Séjour maximum de ${maximum} jour(s).`, 422)
+      throw new DomainError('maximum_stay_exceeded', `Séjour maximum de ${maximum} nuit(s).`, 422)
     }
   }
 }

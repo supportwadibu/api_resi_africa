@@ -1,5 +1,6 @@
 import vine from '@vinejs/vine'
 
+import { CHECKOUT_TIME_PATTERN } from '#features/bookings/stay_pricing'
 import { MAX_NEGOTIATION_STEPS } from '#features/negotiations/negotiation_rules'
 
 const PROPERTY_TYPES = ['apartment', 'studio', 'villa', 'duplex'] as const
@@ -99,6 +100,7 @@ const pricingSchema = vine.object({
   // qui couvrirait le jour entier, ne seraient plus un départ tardif.
   late_checkout_grace_minutes: vine.number().min(0).max(720).withoutDecimals().optional(),
   late_checkout_half_day_hours: vine.number().min(0).max(23).withoutDecimals().optional(),
+  checkout_time: vine.string().trim().regex(CHECKOUT_TIME_PATTERN).optional(),
 })
 
 /**

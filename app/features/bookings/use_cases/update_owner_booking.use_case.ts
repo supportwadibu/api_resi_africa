@@ -8,8 +8,12 @@ import { findOverlappingPeriod, toPeriods } from '../availability.ts'
 import type { BookingDto, UpdateOwnerBookingInput } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 import { syncReferrerCommissionExpense } from '../referrer_expense.ts'
-import { defaultCheckOutFor, type StayType } from '../stay_type.ts'
-import { computeOwnerBookingAmounts, resolveAgreedAmount } from './create_owner_booking.use_case.ts'
+import { type StayType } from '../stay_type.ts'
+import {
+  computeOwnerBookingAmounts,
+  resolveAgreedAmount,
+  resolveOwnerCheckOut,
+} from './create_owner_booking.use_case.ts'
 
 /**
  * Une réservation peut-elle encore être ressaisie ?
@@ -132,7 +136,7 @@ export class UpdateOwnerBookingUseCase {
     }
 
     const checkIn = input.check_in_at
-    const checkOut = input.check_out_at ?? defaultCheckOutFor(input.stay_type, checkIn)
+    const checkOut = resolveOwnerCheckOut(input, property.pricing)
 
     const amounts = computeOwnerBookingAmounts(
       property.pricing,

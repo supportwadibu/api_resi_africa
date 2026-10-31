@@ -223,4 +223,6 @@ export interface PropertyPricingInput {
   late_checkout_grace_minutes?: number
   /** Dépassement facturé en demi-journée, en heures ; au-delà, un jour. */
   late_checkout_half_day_hours?: number
+  /** Heure de départ « HH:mm », fin de chaque nuit. */
+  checkout_time?: string
 }

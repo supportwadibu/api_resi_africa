@@ -2,6 +2,7 @@ import { FieldPath } from 'firebase-admin/firestore'
 
 import { FIRESTORE_IN_LIMIT } from '#features/managers/scope'
 import {
+  DEFAULT_CHECKOUT_TIME,
   DEFAULT_LATE_CHECKOUT_GRACE_MINUTES,
   DEFAULT_LATE_CHECKOUT_HALF_DAY_HOURS,
 } from '#features/bookings/stay_pricing'
@@ -115,6 +116,12 @@ export interface PropertyPricing {
    */
   late_checkout_grace_minutes?: number
   late_checkout_half_day_hours?: number
+  /**
+   * Heure de départ « HH:mm » à l'heure d'Abidjan : chaque nuit se termine à
+   * cette heure le lendemain. Absente des biens antérieurs : voir
+   * `resolveLateCheckoutPolicy` pour le repli sur 12h30.
+   */
+  checkout_time?: string
 }
 
 /** Voir `negotiation_rules.ts`. */
@@ -281,6 +288,7 @@ function withDefaults(input: Partial<PropertyDocument>): PropertyDocument {
         input.pricing?.late_checkout_grace_minutes ?? DEFAULT_LATE_CHECKOUT_GRACE_MINUTES,
       late_checkout_half_day_hours:
         input.pricing?.late_checkout_half_day_hours ?? DEFAULT_LATE_CHECKOUT_HALF_DAY_HOURS,
+      checkout_time: input.pricing?.checkout_time ?? DEFAULT_CHECKOUT_TIME,
     },
     negotiation: {
       enabled: input.negotiation?.enabled ?? false,
