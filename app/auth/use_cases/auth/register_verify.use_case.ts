@@ -5,6 +5,7 @@ import { issueTokens } from '#auth/helpers/issue_tokens'
 import { otpReasonMessage } from '#auth/helpers/otp_reason'
 import { assertRateLimit } from '#auth/helpers/rate_limit'
 import User from '#models/user'
+import NotificationService from '#services/notification_service'
 import OtpService from '#services/otp_service'
 import { AuthError } from '#utils/auth_error'
 import logger from '@adonisjs/core/services/logger'
@@ -73,8 +74,23 @@ export class RegisterVerifyUseCase {
     // middleware `plan()` — jusqu'à la validation par un administrateur.
     if (user.role_id === 'proprio') await this.startTrial(user._id)
     await new AttachSponsorUseCase().atSignup(user._id, input.sponsorship_code)
+    if (input.channel === 'email') void this.confirmEmail(user._id, input.target)
 
     return issueTokens(user, input.device)
+  }
+
+  /**
+   * Sans `await` : la confirmation est une politesse, le compte est déjà
+   * vérifié. Attendre Resend retarderait l'ouverture de session — jusqu'à
+   * son délai d'expiration s'il ne répond pas — et un échec ne doit pas
+   * faire échouer une inscription aboutie.
+   */
+  private async confirmEmail(userId: string, email: string): Promise<void> {
+    try {
+      await NotificationService.sendEmailVerified({ to: email })
+    } catch (error) {
+      logger.error({ err: error, user_id: userId }, "Échec de l'email de confirmation d'adresse")
+    }
   }
 
   /**

@@ -22,8 +22,8 @@ import env from '#start/env'
  * - canal 'phone' → MessagingProvider (SMS et/ou WhatsApp selon les capacités
  *   du provider configuré et la variable MESSAGING_PREFERRED_CHANNEL)
  *
- * Le wiring du MessagingProvider est fait au boot via la factory et un
- * provider Adonis qui appelle `setMessagingProvider`.
+ * Les deux fournisseurs sont posés au boot par `NotificationsProvider`
+ * (`setMailProvider`, `setMessagingProvider`) selon l'environnement.
  */
 export class NotificationService {
   private static mailProvider: MailProvider = new ConsoleMailProvider()
@@ -66,6 +66,16 @@ export class NotificationService {
         subject,
         text,
         html,
+        // Le template parle de vérifier une adresse : il ne convient qu'à
+        // l'inscription. Connexion et réinitialisation gardent le HTML du code.
+        ...(input.purpose === 'register'
+          ? {
+              template: {
+                id: env.get('MAIL_TEMPLATE_OTP_VERIFICATION', 'otp_email_verification'),
+                variables: { ttl_minutes: ttl, code: input.code, email: input.target },
+              },
+            }
+          : {}),
       })
       return
     }
@@ -82,6 +92,34 @@ export class NotificationService {
       to: input.target,
       text,
       from: env.get('SMS_SENDER_ID', appName),
+    })
+  }
+
+  /**
+   * Confirme à l'utilisateur que son adresse email est vérifiée.
+   */
+  static async sendEmailVerified(input: { to: string }): Promise<void> {
+    const appName = env.get('APP_NAME', 'Resi')
+    const appUrl = env.get('MAIL_APP_URL')
+    const supportEmail = env.get('MAIL_SUPPORT_EMAIL')
+
+    await this.mailProvider.send({
+      to: input.to,
+      subject: `${appName} — Votre adresse email est vérifiée`,
+      text:
+        `Votre adresse ${input.to} est vérifiée : votre compte ${appName} est prêt.\n\n` +
+        `Vous n'avez pas créé ce compte ? Contactez le support.\n\n` +
+        `— L'équipe ${appName}`,
+      template: {
+        id: env.get('MAIL_TEMPLATE_EMAIL_VERIFIED', 'email_verified'),
+        // Une variable absente laisse Resend appliquer la valeur de repli du
+        // template ; sans repli, Resend refuse l'envoi et le log le dira.
+        variables: {
+          email: input.to,
+          ...(appUrl ? { app_url: appUrl } : {}),
+          ...(supportEmail ? { support_email: supportEmail } : {}),
+        },
+      },
     })
   }
 
@@ -115,7 +153,9 @@ export class NotificationService {
     appName: string
   }) {
     const action = this.purposeLabel(input.purpose)
-    const subject = `${input.appName} — Code de vérification : ${input.code}`
+    // Le code reste hors de l'objet : l'objet s'affiche dans les
+    // notifications de l'écran verrouillé, lisibles sans déverrouiller.
+    const subject = `${input.appName} — Votre code de vérification`
 
     const text =
       `Bonjour,\n\n` +
