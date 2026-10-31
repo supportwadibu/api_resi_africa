@@ -1,4 +1,5 @@
 import type { RegisterInitOutput, RegisterResendInput } from '#auth/dto/index'
+import { logAuthAttempt } from '#auth/helpers/auth_audit'
 import { generateAndSendOtp } from '#auth/helpers/otp_dispatch'
 import { assertRateLimit } from '#auth/helpers/rate_limit'
 import User from '#models/user'
@@ -18,6 +19,20 @@ export class RegisterResendUseCase {
     const query = input.channel === 'email' ? { email: input.target } : { phone: input.target }
     const user = await User.findOne(query)
 
+    // Les refus sont tracés comme ceux de `register/init` : sans trace, ils
+    // échapperaient à `assertRateLimit`, et la route se laisserait interroger
+    // sans fin. L'existence d'un compte n'est pas un secret de plus qu'à
+    // l'inscription, qui répond déjà `already_registered`.
+    if (!user || user.is_verified) {
+      await logAuthAttempt({
+        type: 'generate',
+        status: 'failed',
+        channel: input.channel,
+        target: input.target,
+        failure_reason: user ? 'already_registered' : 'registration_not_found',
+        device: input.device,
+      })
+    }
     if (!user) {
       throw new AuthError(
         'registration_not_found',
