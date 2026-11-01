@@ -8,6 +8,7 @@ export const listUsersValidator = vine.compile(
   vine.object({
     role: vine.enum(ROLE_NAMES).optional(),
     is_active: vine.boolean().optional(),
+    is_verified: vine.boolean().optional(),
     q: vine.string().trim().maxLength(120).optional(),
     page: vine.number().positive().withoutDecimals().optional(),
     per_page: vine.number().positive().withoutDecimals().max(100).optional(),

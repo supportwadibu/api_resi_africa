@@ -435,7 +435,7 @@ const User = {
    * filtres est couverte par un index de `firestore.indexes.json`.
    */
   async paginate(
-    filters: { role_id?: string; is_active?: boolean },
+    filters: { role_id?: string; is_active?: boolean; is_verified?: boolean },
     options: { limit: number; offset: number }
   ): Promise<{ data: UserRecord[]; total: number }> {
     let query = users() as FirebaseFirestore.Query<UserDocument>
@@ -443,6 +443,12 @@ const User = {
     if (filters.role_id) query = query.where('role_id', '==', filters.role_id)
     if (typeof filters.is_active === 'boolean') {
       query = query.where('is_active', '==', filters.is_active)
+    }
+    // Égalité stricte : un document sans `is_verified` n'apparaît sous aucune
+    // des deux valeurs. Tous les flux de création l'écrivent ; seul un compte
+    // antérieur au champ échapperait au filtre, et resterait visible sans lui.
+    if (typeof filters.is_verified === 'boolean') {
+      query = query.where('is_verified', '==', filters.is_verified)
     }
 
     const [snapshot, count] = await Promise.all([
