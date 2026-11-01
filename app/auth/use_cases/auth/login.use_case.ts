@@ -32,17 +32,6 @@ export class LoginUseCase {
       throw new AuthError('invalid_credentials', 'Identifiants invalides.', 401)
     }
 
-    if (!user.is_active) {
-      throw new AuthError('account_disabled', 'Compte désactivé.', 403)
-    }
-    if (!user.is_verified) {
-      throw new AuthError(
-        'account_not_verified',
-        "Compte non vérifié. Terminez l'inscription par OTP.",
-        403
-      )
-    }
-
     // Compte créé via un provider externe : aucun mot de passe n'a jamais été défini.
     if (!user.password) {
       await logAuthAttempt({
@@ -73,6 +62,20 @@ export class LoginUseCase {
         device: input.device,
       })
       throw new AuthError('invalid_credentials', 'Identifiants invalides.', 401)
+    }
+
+    // Après le mot de passe, jamais avant : seul le titulaire apprend que son
+    // compte attend une vérification ou a été désactivé. Les applications
+    // lisent `account_not_verified` pour renvoyer un code et ouvrir la saisie.
+    if (!user.is_verified) {
+      throw new AuthError(
+        'account_not_verified',
+        "Compte non vérifié. Saisissez le code envoyé pour finaliser l'inscription.",
+        403
+      )
+    }
+    if (!user.is_active) {
+      throw new AuthError('account_disabled', 'Compte désactivé.', 403)
     }
 
     user.last_login_at = new Date()

@@ -75,7 +75,11 @@ export class UserRepository {
   async paginate(input: ListUsersInput): Promise<{ data: UserDto[]; total: number }> {
     const page = Math.max(1, input.page ?? 1)
     const perPage = Math.min(100, Math.max(1, input.per_page ?? 20))
-    const filters = { role_id: input.role, is_active: input.is_active }
+    const filters = {
+      role_id: input.role,
+      is_active: input.is_active,
+      is_verified: input.is_verified,
+    }
     const term = input.q?.trim()
 
     if (!term) {

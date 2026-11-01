@@ -36,6 +36,12 @@ export interface RegisterVerifyInput {
   device: DeviceContext
 }
 
+export interface RegisterResendInput {
+  channel: OtpChannel
+  target: string
+  device: DeviceContext
+}
+
 export interface LoginInput {
   identifier: string
   password: string

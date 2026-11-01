@@ -5,6 +5,7 @@ import {
   LogoutUseCase,
   RefreshTokensUseCase,
   RegisterInitUseCase,
+  RegisterResendUseCase,
   RegisterVerifyUseCase,
 } from '#auth/use_cases/index'
 import { AuthError } from '#utils/auth_error'
@@ -14,6 +15,7 @@ import {
   logoutValidator,
   refreshValidator,
   registerInitValidator,
+  registerResendValidator,
   registerVerifyValidator,
 } from '#validators/auth/auth'
 
@@ -44,6 +46,17 @@ export default class AuthController {
     return ctx.response.created({
       message: 'OTP envoyé. Vérifiez pour finaliser votre inscription.',
       user_id: result.user_id,
+      target: result.otp_target,
+      ...(app.inProduction ? {} : { dev_otp_code: result.plain_code }),
+    })
+  }
+
+  async registerResend(ctx: HttpContext) {
+    const payload = await ctx.request.validateUsing(registerResendValidator)
+    const device = getDeviceContext(ctx)
+    const result = await new RegisterResendUseCase().execute({ ...payload, device })
+    return ctx.response.ok({
+      message: 'Nouveau code envoyé.',
       target: result.otp_target,
       ...(app.inProduction ? {} : { dev_otp_code: result.plain_code }),
     })

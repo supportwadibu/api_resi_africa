@@ -85,6 +85,8 @@ export interface CreateUserInput {
 export interface ListUsersInput {
   role?: RoleName
   is_active?: boolean
+  /** Inscription confirmée par OTP (ou compte créé vérifié). */
+  is_verified?: boolean
   /** Recherche sur le nom, l'e-mail ou le téléphone. */
   q?: string
   page?: number

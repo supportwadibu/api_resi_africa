@@ -52,6 +52,18 @@ export const registerVerifyValidator = vine.compile(
 )
 
 /**
+ * POST /auth/register/resend
+ * Mêmes `channel` et `target` que la vérification : l'écran de saisie du
+ * code les détient déjà, sans avoir à garder le mot de passe.
+ */
+export const registerResendValidator = vine.compile(
+  vine.object({
+    channel: vine.enum(['email', 'phone'] as const),
+    target: vine.string().trim().minLength(3).maxLength(254),
+  })
+)
+
+/**
  * POST /auth/login
  */
 export const loginValidator = vine.compile(
