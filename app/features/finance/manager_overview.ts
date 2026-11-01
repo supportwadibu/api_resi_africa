@@ -1,7 +1,11 @@
 import { elapsedWindow } from '#features/bookings/booking_stats'
 import { filterByScope } from '#features/managers/scope'
 
-import { aggregateGrossRevenue, aggregateRevenuePoints } from './repositories/finance_repository.ts'
+import {
+  aggregateGrossRevenue,
+  aggregateRevenuePoints,
+  retainedDepositsAsRevenue,
+} from './repositories/finance_repository.ts'
 import { occupancyRate } from './occupancy.ts'
 
 import type { RevenuePointDto } from './dto/finance.dto.ts'
@@ -20,6 +24,13 @@ export interface ScopedBooking {
   days_count?: number
   nights_count?: number
   stay_type?: string
+}
+
+/** Annulation dont l'acompte a été gardé : un encaissement sans séjour. */
+export interface ScopedRetainedCancellation {
+  property_id?: string | null
+  cancelled_at: Date | null
+  retained_amount?: number
 }
 
 export type { ScopedExpense }
@@ -46,24 +57,32 @@ export interface ManagerOverviewDto {
  * Part des jours-logement occupés sur la période.
  *
  * Rapport entre les jours réservés et la capacité du périmètre — le nombre de
- * logements confiés multiplié par la durée de la fenêtre. Le dénominateur peut
- * être nul : un gérant sans affectation, ou deux bornes confondues. Le taux
- * vaut alors zéro plutôt que l'infini ou `NaN`, qui remonteraient tels quels
- * jusqu'à l'écran.
+ * logements exploités multiplié par la durée de la fenêtre. Le dénominateur
+ * peut être nul : un gérant sans affectation, ou deux bornes confondues. Le
+ * taux vaut alors zéro plutôt que l'infini ou `NaN`, qui remonteraient tels
+ * quels jusqu'à l'écran.
+ *
+ * `exploitedUnits` est le parc compté comme chez le propriétaire
+ * (`exploitedUnits` de `occupancy.ts`) : les logements confiés, moins ceux mis
+ * hors service. Compter un logement `inactive` au dénominateur faisait lire au
+ * gérant un taux plus bas que celui du propriétaire sur le même parc. Les
+ * replis ne servent qu'à un appelant qui ne l'a pas lu.
  */
 export function computeOccupancyRate(
   bookings: readonly ScopedBooking[],
   scope: ActorScope,
   from: Date,
-  to: Date
+  to: Date,
+  exploitedUnits?: number
 ): number {
   // Le propriétaire n'a pas de liste de logements : le dénominateur se déduit
   // alors des logements apparaissant dans la période. Approximation assumée —
   // le parc complet ne se lit pas ici, et cette fonction ne contacte rien.
   const propertiesCount =
-    scope.propertyIds === null
+    exploitedUnits ??
+    (scope.propertyIds === null
       ? new Set(bookings.map((b) => b.property_id ?? '')).size
-      : scope.propertyIds.length
+      : scope.propertyIds.length)
 
   // Même formule que le relevé du propriétaire : voir `occupancy.ts`. Le
   // relevé gérant comptait chaque séjour pour un jour plein quel que soit son
@@ -84,6 +103,10 @@ export function buildManagerOverview(input: {
   scope: ActorScope
   bookings: readonly ScopedBooking[]
   expenses: readonly ScopedExpense[]
+  /** Annulations à acompte gardé de la fenêtre. */
+  retained?: readonly ScopedRetainedCancellation[]
+  /** Logements exploités du périmètre, dénominateur du taux d'occupation. */
+  exploitedUnits?: number
   from: Date
   to: Date
   /** Instant de référence du taux d'occupation ; injectable pour les tests. */
@@ -94,19 +117,34 @@ export function buildManagerOverview(input: {
 
   const range = { from: input.from, to: input.to }
 
+  // Acomptes gardés : encaissés, ils comptent au brut et au graphique, comme
+  // chez le propriétaire — jamais à l'occupation ni au nombre de séjours. Sans
+  // eux, un gérant qui annule en gardant l'acompte voyait l'argent encaissé
+  // manquer à son relevé alors que celui du propriétaire le portait.
+  const revenueBookings = [
+    ...bookings,
+    ...retainedDepositsAsRevenue(filterByScope(input.retained ?? [], input.scope)),
+  ]
+
   return {
     bookings_count: bookings.length,
     // Somme des tranches mensuelles, et non des `total_amount` entiers : un
     // séjour à cheval sur la borne n'impute à la fenêtre que sa part de jours,
     // et le chiffre clé reste ainsi égal au cumul du graphique.
-    gross_revenue: aggregateGrossRevenue(bookings, range),
+    gross_revenue: aggregateGrossRevenue(revenueBookings, range),
     expenses_total: expenses.reduce((sum, expense) => sum + expense.amount, 0),
     // Jours écoulés seulement, comme le relevé du propriétaire : voir
     // `elapsedWindow`.
     occupancy_rate: (() => {
       const elapsed = elapsedWindow(range, input.now ?? new Date())
-      return computeOccupancyRate(bookings, input.scope, elapsed.from, elapsed.to)
+      return computeOccupancyRate(
+        bookings,
+        input.scope,
+        elapsed.from,
+        elapsed.to,
+        input.exploitedUnits
+      )
     })(),
-    revenue_points: aggregateRevenuePoints(bookings, range),
+    revenue_points: aggregateRevenuePoints(revenueBookings, range),
   }
 }

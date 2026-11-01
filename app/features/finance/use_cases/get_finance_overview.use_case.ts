@@ -25,13 +25,13 @@ export class GetFinanceOverviewUseCase {
     scope: ActorScope,
     range: { from: Date; to: Date }
   ): Promise<ManagerOverviewDto> {
-    const { bookings, expenses } = await this.repo.managerInputs({
+    const inputs = await this.repo.managerInputs({
       owner_id: scope.ownerId,
       scope,
       ...range,
     })
 
-    return buildManagerOverview({ scope, bookings, expenses, ...range })
+    return buildManagerOverview({ scope, ...inputs, ...range })
   }
 
   async execute(

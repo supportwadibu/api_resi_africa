@@ -397,16 +397,26 @@ export class FinanceRepository {
     scope: ActorScope
     from: Date
     to: Date
-  }): Promise<{ bookings: BookingRecord[]; expenses: ExpenseRecord[] }> {
+  }): Promise<{
+    bookings: BookingRecord[]
+    retained: BookingRecord[]
+    expenses: ExpenseRecord[]
+    exploitedUnits: number
+  }> {
     const range = { from: filters.from, to: filters.to }
     const scopeIds = filters.scope.propertyIds
 
-    const [bookings, expenses] = await Promise.all([
+    // Mêmes sources que `overview` : acomptes gardés au brut, et parc compté
+    // par `exploitedUnits`. Le relevé du gérant doit reproduire celui du
+    // propriétaire sur les mêmes logements.
+    const [bookings, retained, expenses, propertyStats] = await Promise.all([
       Booking.findForRevenue(filters.owner_id, range, { property_ids: scopeIds }),
+      Booking.findRetainedCancellations(filters.owner_id, range, { property_ids: scopeIds }),
       Expense.findAllForOwner(filters.owner_id, range, scopeIds),
+      Property.statsByOwner(filters.owner_id, scopeIds),
     ])
 
-    return { bookings, expenses }
+    return { bookings, retained, expenses, exploitedUnits: exploitedUnits(propertyStats) }
   }
 }
 
