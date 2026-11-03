@@ -23,4 +23,10 @@ test.group('retour de paiement vers l’application', () => {
     )
     assert.include(html, 'Paiement reçu')
   })
+
+  test('le script porte le nonce de la politique CSP', ({ assert }) => {
+    // Sans lui, la CSP de l'API bloque la redirection automatique.
+    assert.include(subscriptionReturnPage('success', 'abc123'), '<script nonce="abc123">')
+    assert.include(subscriptionReturnPage('success'), '<script>')
+  })
 })

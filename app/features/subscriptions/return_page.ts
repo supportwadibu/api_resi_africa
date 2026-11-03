@@ -38,9 +38,15 @@ const MESSAGES: Record<ReturnOutcome, string> = {
   pending: 'Paiement en cours de vérification.',
 }
 
-export function subscriptionReturnPage(outcome: ReturnOutcome): string {
+/**
+ * [nonce] : celui de la politique CSP de la réponse (`response.nonce`), sans
+ * lequel le navigateur refuse le script de retour. Le lien du bouton reste
+ * utilisable sans script.
+ */
+export function subscriptionReturnPage(outcome: ReturnOutcome, nonce?: string): string {
   const appLink = appReturnLink(outcome)
   const intentLink = androidIntentLink(outcome)
+  const nonceAttr = nonce ? ` nonce="${nonce}"` : ''
 
   return (
     `<!doctype html><html lang="fr"><head><meta charset="utf-8">` +
@@ -50,7 +56,7 @@ export function subscriptionReturnPage(outcome: ReturnOutcome): string {
     `<h1 style="font-size:1.25rem">${MESSAGES[outcome]}</h1>` +
     `<p>Retour dans l'application RESI…</p>` +
     `<a id="open" href="${appLink}" style="display:inline-block;margin-top:1rem;padding:.75rem 1.25rem;background:#111;color:#fff;text-decoration:none;border-radius:12px">Revenir dans RESI</a>` +
-    `<script>` +
+    `<script${nonceAttr}>` +
     `var android=/android/i.test(navigator.userAgent);` +
     `if(android)document.getElementById('open').href=${JSON.stringify(intentLink)};` +
     `window.location.href=${JSON.stringify(appLink)};` +

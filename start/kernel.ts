@@ -23,6 +23,7 @@ server.errorHandler(() => import('#exceptions/handler'))
  * the request URL.
  */
 server.use([
+  () => import('#middleware/request_logger_middleware'),
   () => import('#middleware/force_json_response_middleware'),
   () => import('#middleware/container_bindings_middleware'),
   () => import('@adonisjs/cors/cors_middleware'),
@@ -48,4 +49,6 @@ export const middleware = router.named({
   scope: () => import('#middleware/scope_middleware'),
   plan: () => import('#middleware/plan_middleware'),
   cron: () => import('#middleware/cron_middleware'),
+  throttle: () => import('#middleware/throttle_middleware'),
+  audit: () => import('#middleware/audit_middleware'),
 })

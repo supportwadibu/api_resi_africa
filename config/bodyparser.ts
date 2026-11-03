@@ -49,9 +49,21 @@ const bodyParserConfig = defineConfig({
    */
   multipart: {
     /**
-     * Automatically process uploaded files into the system tmp directory.
+     * Routes dont les fichiers sont écrits dans le dossier temporaire.
+     *
+     * Liste fermée plutôt que `true` : le bodyparser tourne avant `auth()`,
+     * si bien que n'importe qui pouvait pousser 20 Mo de fichiers sur
+     * `/auth/login` et les voir écrits sur disque. Ailleurs, un corps
+     * multipart n'est pas lu. Une route qui reçoit un fichier s'ajoute ici.
      */
-    autoProcess: true,
+    autoProcess: [
+      '/api/v1/proprio/profile',
+      '/api/v1/proprio/properties/images',
+      '/api/v1/proprio/clients',
+      '/api/v1/proprio/clients/:id',
+      '/api/v1/gerant/clients',
+      '/api/v1/gerant/clients/:id',
+    ],
 
     /**
      * Normalize empty string values to null.

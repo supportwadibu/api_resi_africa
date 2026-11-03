@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 
 import env from '#start/env'
-import jwt, { type SignOptions } from 'jsonwebtoken'
+import jwt, { type SignOptions, type VerifyOptions } from 'jsonwebtoken'
 
 export interface AccessTokenPayload {
   sub: string // user_id
@@ -17,6 +17,13 @@ export interface RefreshTokenPayload {
 
 const ACCESS_TTL = env.get('JWT_ACCESS_TTL') ?? '15m'
 const REFRESH_TTL = env.get('JWT_REFRESH_TTL') ?? '30d'
+
+/**
+ * Algorithme épinglé : la bibliothèque déduit sinon les algorithmes admis du
+ * type de clé, et un changement de clé ou de version ne doit pas élargir ce
+ * qu'elle accepte.
+ */
+const VERIFY_OPTIONS: VerifyOptions = { algorithms: ['HS256'] }
 
 export class TokenService {
   /** Crée un access token JWT signé. */
@@ -48,12 +55,32 @@ export class TokenService {
     return { token, jti, expiresIn: REFRESH_TTL }
   }
 
+  /**
+   * Un refresh token est refusé ici même s'il est correctement signé : si les
+   * deux secrets venaient à être identiques, il passerait sinon pour un access
+   * token valable trente jours, que la déconnexion ne révoquerait pas — la
+   * révocation se lit sur le `jti` de l'access token.
+   */
   static verifyAccess(token: string): AccessTokenPayload {
-    return jwt.verify(token, env.get('JWT_ACCESS_SECRET')) as AccessTokenPayload
+    const payload = jwt.verify(token, env.get('JWT_ACCESS_SECRET'), VERIFY_OPTIONS) as
+      | AccessTokenPayload
+      | RefreshTokenPayload
+    if ('type' in payload && payload.type === 'refresh') {
+      throw new jwt.JsonWebTokenError('refresh token présenté comme access token')
+    }
+    return payload as AccessTokenPayload
   }
 
   static verifyRefresh(token: string): RefreshTokenPayload {
-    return jwt.verify(token, env.get('JWT_REFRESH_SECRET')) as RefreshTokenPayload
+    const payload = jwt.verify(
+      token,
+      env.get('JWT_REFRESH_SECRET'),
+      VERIFY_OPTIONS
+    ) as RefreshTokenPayload
+    if (payload.type !== 'refresh') {
+      throw new jwt.JsonWebTokenError('access token présenté comme refresh token')
+    }
+    return payload
   }
 
   /** Hash SHA-256 d'un refresh token pour stockage en base. */

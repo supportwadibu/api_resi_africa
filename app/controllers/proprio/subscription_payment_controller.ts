@@ -109,7 +109,12 @@ export default class ProprioSubscriptionPaymentController {
 
     return ctx.response
       .header('Content-Type', 'text/html; charset=utf-8')
-      .send(subscriptionReturnPage(succeeded ? 'success' : failed ? 'failure' : 'pending'))
+      .send(
+        subscriptionReturnPage(
+          succeeded ? 'success' : failed ? 'failure' : 'pending',
+          ctx.response.nonce
+        )
+      )
   }
 
   /**

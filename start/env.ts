@@ -11,6 +11,19 @@
 
 import { Env } from '@adonisjs/core/env'
 
+/**
+ * Secret de signature HS256 : 32 caractères au moins en production. Un secret
+ * court se retrouve hors ligne à partir d'un seul jeton intercepté, et qui le
+ * détient signe des jetons administrateur.
+ */
+function jwtSecret(key: string, value?: string): string {
+  if (!value) throw new Error(`Variable d'environnement manquante : ${key}`)
+  if (process.env.NODE_ENV === 'production' && value.length < 32) {
+    throw new Error(`${key} : 32 caractères au moins sont exigés en production.`)
+  }
+  return value
+}
+
 export default await Env.create(new URL('../', import.meta.url), {
   // Node
   NODE_ENV: Env.schema.enum(['development', 'production', 'test'] as const),
@@ -27,6 +40,19 @@ export default await Env.create(new URL('../', import.meta.url), {
    * Absent : l'API affiche sa propre page de retour, minimale.
    */
   SITE_URL: Env.schema.string.optional({ format: 'url', tld: false }),
+  /**
+   * Origines navigateur autorisées par CORS en production, séparées par des
+   * virgules (`https://app.resi.ci,https://admin.resi.ci`). Absent : aucune,
+   * ce qui convient tant que l'API n'a que des clients natifs ou serveur.
+   * Validée au démarrage par `parseCorsOrigins`.
+   */
+  CORS_ALLOWED_ORIGINS: Env.schema.string.optional(),
+  /**
+   * Proxys de l'hébergeur dont `X-Forwarded-For` fait foi : un nombre de sauts
+   * (`1`) ou une liste de plages (`loopback,uniquelocal`). Absent : loopback
+   * seulement. Validée au démarrage par `parseTrustProxy`.
+   */
+  TRUST_PROXY: Env.schema.string.optional(),
 
   // Session
   SESSION_DRIVER: Env.schema.enum(['cookie'] as const),
@@ -73,8 +99,8 @@ export default await Env.create(new URL('../', import.meta.url), {
   PUPPETEER_EXECUTABLE_PATH: Env.schema.string.optional(),
 
   // JWT
-  JWT_ACCESS_SECRET: Env.schema.string(),
-  JWT_REFRESH_SECRET: Env.schema.string(),
+  JWT_ACCESS_SECRET: jwtSecret,
+  JWT_REFRESH_SECRET: jwtSecret,
   JWT_ACCESS_TTL: Env.schema.string.optional(), // ex: "15m"
   JWT_REFRESH_TTL: Env.schema.string.optional(), // ex: "30d"
 
@@ -122,6 +148,12 @@ export default await Env.create(new URL('../', import.meta.url), {
   // API a été créée avec la signature activée.
   WAVE_API_SIGNING_SECRET: Env.schema.string.optional(),
   WAVE_CURRENCY: Env.schema.string.optional(),
+  /**
+   * Banc d'essai Wave (`/admin/wave-test`) en production. Il ouvre de vraies
+   * sessions de paiement et sait les rembourser : fermé par défaut, ouvert le
+   * temps d'un essai.
+   */
+  WAVE_TEST_ENABLED: Env.schema.boolean.optional(),
 
   // OTP / Auth rate limiting
   OTP_RATE_LIMIT_WINDOW_MINUTES: Env.schema.number.optional(),

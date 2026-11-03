@@ -1,4 +1,5 @@
 import env from '#start/env'
+import { parseTrustProxy } from '#utils/trust_proxy'
 import app from '@adonisjs/core/services/app'
 import { defineConfig } from '@adonisjs/core/http'
 
@@ -27,6 +28,13 @@ export const http = defineConfig({
    * Useful to correlate logs and debug a request flow.
    */
   generateRequestId: true,
+
+  /**
+   * Proxys dont `X-Forwarded-For` fait foi : voir `parseTrustProxy`. Sans
+   * réglage derrière le proxy de l'hébergeur, `request.ip()` renvoie l'adresse
+   * du proxy pour tous les clients.
+   */
+  trustProxy: parseTrustProxy(env.get('TRUST_PROXY')),
 
   /**
    * Allow HTTP method spoofing via the "_method" form/query parameter.
