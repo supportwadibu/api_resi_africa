@@ -23,6 +23,7 @@ server.errorHandler(() => import('#exceptions/handler'))
  * the request URL.
  */
 server.use([
+  () => import('#middleware/request_logger_middleware'),
   () => import('#middleware/force_json_response_middleware'),
   () => import('#middleware/container_bindings_middleware'),
   () => import('@adonisjs/cors/cors_middleware'),
@@ -31,8 +32,12 @@ server.use([
 /**
  * The router middleware stack runs middleware on all the HTTP
  * requests with a registered route.
+ *
+ * L'audit vient en tête : il enveloppe tout ce qui suit, si bien qu'un refus
+ * du bodyparser ou de l'authentification se trace comme le reste.
  */
 router.use([
+  () => import('#middleware/audit_middleware'),
   () => import('@adonisjs/core/bodyparser_middleware'),
   () => import('@adonisjs/session/session_middleware'),
   () => import('@adonisjs/shield/shield_middleware'),
@@ -48,4 +53,5 @@ export const middleware = router.named({
   scope: () => import('#middleware/scope_middleware'),
   plan: () => import('#middleware/plan_middleware'),
   cron: () => import('#middleware/cron_middleware'),
+  throttle: () => import('#middleware/throttle_middleware'),
 })

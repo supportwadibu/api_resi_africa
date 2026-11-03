@@ -7,14 +7,21 @@ const shieldConfig = defineConfig({
    */
   csp: {
     /**
-     * Enable the Content-Security-Policy header.
+     * L'API sert du JSON, et trois pages HTML minimales (retours Wave). Rien
+     * n'y doit charger de ressource : tout est refusé, sauf les styles inline
+     * de ces pages et le script de retour dans l'application, autorisé par
+     * nonce (`response.nonce`).
      */
-    enabled: false,
+    enabled: true,
 
-    /**
-     * Per-resource CSP directives.
-     */
-    directives: {},
+    directives: {
+      defaultSrc: [`'none'`],
+      styleSrc: [`'unsafe-inline'`],
+      scriptSrc: ['@nonce'],
+      baseUri: [`'none'`],
+      formAction: [`'none'`],
+      frameAncestors: [`'none'`],
+    },
 
     /**
      * Report violations without blocking resources.

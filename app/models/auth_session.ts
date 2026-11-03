@@ -1,6 +1,12 @@
 import { COLLECTIONS, collection, toDoc, toDocs, toPayload, type WithId } from '#firebase/firestore'
 
-export const REVOKE_REASONS = ['logout', 'admin', 'suspicious'] as const
+/**
+ * `rotated` : session remplacée par un rafraîchissement. Distinguée de
+ * `logout` pour reconnaître la réutilisation d'un refresh token déjà tourné —
+ * le signe d'un vol. Les sessions tournées avant son introduction portent
+ * `logout` et ne déclenchent donc jamais cette détection.
+ */
+export const REVOKE_REASONS = ['logout', 'admin', 'suspicious', 'rotated'] as const
 export type RevokeReason = (typeof REVOKE_REASONS)[number]
 
 export const DEVICE_PLATFORMS = ['ios', 'android', 'web', 'unknown'] as const

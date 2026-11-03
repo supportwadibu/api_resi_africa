@@ -14,6 +14,10 @@ export default class HttpExceptionHandler extends ExceptionHandler {
   protected debug = !app.inProduction
 
   async handle(error: unknown, ctx: HttpContext) {
+    // Une fois convertie en réponse, l'exception n'est plus visible du
+    // middleware d'audit : il y lit la cause et la pile d'une panne.
+    ctx.requestError = error
+
     if (error instanceof AuthError || error instanceof DomainError) {
       return ctx.response.status(error.status).send({
         code: error.code,

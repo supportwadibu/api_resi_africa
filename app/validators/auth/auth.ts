@@ -68,8 +68,17 @@ export const registerResendValidator = vine.compile(
  */
 export const loginValidator = vine.compile(
   vine.object({
-    identifier: vine.string().trim().minLength(3).maxLength(254),
-    password: vine.string().minLength(1),
+    // Un e-mail est abaissé comme à l'inscription : la recherche se fait par
+    // égalité stricte, et « Awa@… » ne trouverait pas le compte « awa@… ».
+    identifier: vine
+      .string()
+      .trim()
+      .minLength(3)
+      .maxLength(254)
+      .transform((value) => (value.includes('@') ? value.toLowerCase() : value)),
+    // Borne haute : bcrypt ne lit que 72 octets, et rien ne justifie de
+    // recevoir davantage.
+    password: vine.string().minLength(1).maxLength(128),
   })
 )
 
@@ -95,7 +104,7 @@ export const googleLoginValidator = vine.compile(
  */
 export const refreshValidator = vine.compile(
   vine.object({
-    refresh_token: vine.string().trim().minLength(10),
+    refresh_token: vine.string().trim().minLength(10).maxLength(2048),
   })
 )
 
@@ -104,6 +113,6 @@ export const refreshValidator = vine.compile(
  */
 export const logoutValidator = vine.compile(
   vine.object({
-    refresh_token: vine.string().trim().minLength(10),
+    refresh_token: vine.string().trim().minLength(10).maxLength(2048),
   })
 )

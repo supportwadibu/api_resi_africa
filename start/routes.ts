@@ -1,6 +1,35 @@
+import env from '#start/env'
 import { middleware } from '#start/kernel'
 
+import app from '@adonisjs/core/services/app'
 import router from '@adonisjs/core/services/router'
+
+const waveTestEnabled = !app.inProduction || env.get('WAVE_TEST_ENABLED') === true
+
+/**
+ * Limites de débit (voir `ThrottleMiddleware`).
+ *
+ * Par IP sur les routes publiques, par compte derrière `auth()`. Les seuils
+ * par IP restent larges : au comptoir comme sur le réseau mobile, beaucoup
+ * d'abonnés sortent par une même adresse. Le quota fin des connexions et des
+ * OTP, par identifiant, reste `assertRateLimit`.
+ */
+const throttle = {
+  /** Connexion, inscription, rafraîchissement : la cible du bourrage d'identifiants. */
+  auth: () => middleware.throttle({ name: 'auth', max: 20, window: 60 }),
+  /** Envoi d'un OTP : chaque SMS est facturé, et la fraude au SMS vise ces routes. */
+  otpSend: () => middleware.throttle({ name: 'otp_send', max: 10, window: 900 }),
+  /** Catalogue public et pages de retour Wave, qui relisent la session chez Wave. */
+  public: () => middleware.throttle({ name: 'public', max: 120, window: 60 }),
+  /** Vérification d'un code de parrainage : bornée contre l'énumération des codes. */
+  sponsorshipCode: () => middleware.throttle({ name: 'sponsorship_code', max: 20, window: 60 }),
+  /** Tout appel authentifié, un quota par compte, toutes routes confondues. */
+  api: () => middleware.throttle({ name: 'api', max: 300, window: 60, by: 'user' }),
+  /** Rapports PDF : un Chromium par rendu, la route la plus coûteuse de l'API. */
+  reports: () => middleware.throttle({ name: 'reports', max: 10, window: 600, by: 'user' }),
+  /** Photos d'annonce, envoyées à Cloudinary. */
+  uploads: () => middleware.throttle({ name: 'uploads', max: 30, window: 600, by: 'user' }),
+}
 
 const AuthController = () => import('#controllers/auth/auth_controller')
 const CronController = () => import('#controllers/cron_controller')
@@ -11,6 +40,7 @@ const ProprioWalletController = () => import('#controllers/proprio/wallet_contro
 const WaveWebhookController = () => import('#controllers/wave_webhook_controller')
 const AdminPlansController = () => import('#controllers/admin/plans_controller')
 const AdminFeedbackController = () => import('#controllers/admin/feedback_controller')
+const AdminAuditLogsController = () => import('#controllers/admin/audit_logs_controller')
 const AdminStatsController = () => import('#controllers/admin/stats_controller')
 const AdminUsersController = () => import('#controllers/admin/users_controller')
 const AdminOwnersController = () => import('#controllers/admin/owners_controller')
@@ -65,8 +95,8 @@ router
   .group(() => {
     router
       .group(() => {
-        router.post('register/init', [AuthController, 'registerInit'])
-        router.post('register/resend', [AuthController, 'registerResend'])
+        router.post('register/init', [AuthController, 'registerInit']).use(throttle.otpSend())
+        router.post('register/resend', [AuthController, 'registerResend']).use(throttle.otpSend())
         router.post('register/verify', [AuthController, 'registerVerify'])
         router.post('login', [AuthController, 'login'])
         router.post('google', [AuthController, 'google'])
@@ -74,6 +104,7 @@ router
       })
       .prefix('auth')
       .as('auth')
+      .use(throttle.auth())
 
     router
       .group(() => {
@@ -85,7 +116,7 @@ router
       })
       .prefix('auth')
       .as('auth.protected')
-      .use(middleware.auth())
+      .use([middleware.auth(), throttle.api()])
 
     router
       .group(() => {
@@ -99,6 +130,16 @@ router
           })
           .prefix('plans')
           .as('plans')
+
+        // Journal d'audit. Ses lectures ne sont pas elles-mêmes tracées (voir
+        // `AuditMiddleware`).
+        router
+          .group(() => {
+            router.get('/', [AdminAuditLogsController, 'index'])
+            router.get(':id', [AdminAuditLogsController, 'show'])
+          })
+          .prefix('audit-logs')
+          .as('audit_logs')
 
         router
           .group(() => {
@@ -130,17 +171,20 @@ router
           .as('withdrawal_settings')
 
         // Banc d'essai Wave, pour Postman : de vraies sessions, sans écriture
-        // en base.
-        router
-          .group(() => {
-            router.get('config', [AdminWaveTestController, 'config'])
-            router.post('checkout', [AdminWaveTestController, 'checkout'])
-            router.get('checkout/:id', [AdminWaveTestController, 'show'])
-            router.post('checkout/:id/refund', [AdminWaveTestController, 'refund'])
-            router.post('checkout/:id/expire', [AdminWaveTestController, 'expire'])
-          })
-          .prefix('wave-test')
-          .as('wave_test')
+        // en base. Absent en production sauf `WAVE_TEST_ENABLED` : un outil
+        // de mise au point qui sait rembourser n'a pas à rester ouvert.
+        if (waveTestEnabled) {
+          router
+            .group(() => {
+              router.get('config', [AdminWaveTestController, 'config'])
+              router.post('checkout', [AdminWaveTestController, 'checkout'])
+              router.get('checkout/:id', [AdminWaveTestController, 'show'])
+              router.post('checkout/:id/refund', [AdminWaveTestController, 'refund'])
+              router.post('checkout/:id/expire', [AdminWaveTestController, 'expire'])
+            })
+            .prefix('wave-test')
+            .as('wave_test')
+        }
 
         // Notifications push aux propriétaires : groupées ou ciblées.
         router
@@ -180,7 +224,9 @@ router
             router.get(':id/portfolio', [AdminOwnersController, 'portfolio'])
             router.post(':id/validate', [AdminOwnersController, 'validate'])
             router.post(':id/reject', [AdminOwnersController, 'reject'])
-            router.post(':id/reports/police', [AdminReportsController, 'police'])
+            router
+              .post(':id/reports/police', [AdminReportsController, 'police'])
+              .use(throttle.reports())
           })
           .prefix('owners')
           .as('owners')
@@ -255,7 +301,7 @@ router
       })
       .prefix('admin')
       .as('admin')
-      .use([middleware.auth(), middleware.role(['admin'])])
+      .use([middleware.auth(), middleware.role(['admin']), throttle.api()])
 
     /**
      * Espace du propriétaire, par palier : RESI Basic (gratuit), Pro, Pro+.
@@ -365,6 +411,7 @@ router
               })
               .prefix('reports')
               .as('reports')
+              .use(throttle.reports())
 
             router
               .group(() => {
@@ -411,7 +458,9 @@ router
                 // Avant `:id`, sinon « availability » serait pris pour un identifiant.
                 router.get('availability', [ProprioPropertyController, 'availability'])
                 router.post('/', [ProprioPropertyController, 'store'])
-                router.post('images', [ProprioPropertyImageController, 'store'])
+                router
+                  .post('images', [ProprioPropertyImageController, 'store'])
+                  .use(throttle.uploads())
                 router.get(':id', [ProprioPropertyController, 'show'])
                 router.patch(':id', [ProprioPropertyController, 'update'])
                 router.delete(':id', [ProprioPropertyController, 'destroy'])
@@ -461,7 +510,7 @@ router
       })
       .prefix('proprio')
       .as('proprio')
-      .use([middleware.auth(), middleware.role(['proprio'])])
+      .use([middleware.auth(), middleware.role(['proprio']), throttle.api()])
 
     /**
      * Espace du gérant.
@@ -573,6 +622,7 @@ router
       .use([
         middleware.auth(),
         middleware.role(['gerant']),
+        throttle.api(),
         middleware.scope(),
         middleware.plan({ tier: 'pro_plus' }),
       ])
@@ -591,6 +641,7 @@ router
           })
           .prefix('properties')
           .as('properties')
+          .use(throttle.public())
 
         // Le groupe n'avait aucun middleware : `ctx.authUser` restait vide et
         // chaque appel rendait 401, connecté ou non.
@@ -625,7 +676,7 @@ router
               .prefix('bookings')
               .as('bookings')
           })
-          .use([middleware.auth(), middleware.role(['client'])])
+          .use([middleware.auth(), middleware.role(['client']), throttle.api()])
       })
       .prefix('client')
       .as('client')
@@ -638,7 +689,9 @@ router
     router
       .group(() => {
         // Public : le formulaire d'inscription vérifie le code avant l'OTP.
-        router.get('codes/:code', [SponsorshipController, 'checkCode'])
+        router
+          .get('codes/:code', [SponsorshipController, 'checkCode'])
+          .use(throttle.sponsorshipCode())
 
         router
           .group(() => {
@@ -649,7 +702,7 @@ router
             router.get('redemptions', [SponsorshipController, 'redemptions'])
             router.post('redemptions', [SponsorshipController, 'requestRedemption'])
           })
-          .use([middleware.auth(), middleware.role(['client', 'proprio'])])
+          .use([middleware.auth(), middleware.role(['client', 'proprio']), throttle.api()])
       })
       .prefix('sponsorship')
       .as('sponsorship')
@@ -662,6 +715,7 @@ router
         'waveReturn',
       ])
       .as('booking_wave_return')
+      .use(throttle.public())
     // Ancienne URL des abonnements, gardée pour un webhook Wave déjà déclaré
     // dessus : elle mène au même traitement.
     router
@@ -673,11 +727,14 @@ router
         'waveReturn',
       ])
       .as('subscription_wave_return')
+      .use(throttle.public())
     // Retour des essais du banc Wave (`admin/wave-test`) : publique, Wave y
     // renvoie le navigateur du payeur sans jeton.
-    router
-      .get('payments/wave/test/return', [AdminWaveTestController, 'waveReturn'])
-      .as('wave_test_return')
+    if (waveTestEnabled) {
+      router
+        .get('payments/wave/test/return', [AdminWaveTestController, 'waveReturn'])
+        .as('wave_test_return')
+    }
 
     router
       .group(() => {

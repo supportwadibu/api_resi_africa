@@ -31,6 +31,39 @@ const loggerConfig = defineConfig({
       destination: !app.inProduction ? await syncDestination() : undefined,
 
       /**
+       * Secrets masqués où qu'ils apparaissent dans un objet journalisé : un
+       * `logger.error({ err, payload })` écrit à la hâte ne doit pas recopier
+       * un mot de passe ou un jeton dans des journaux lus par l'hébergeur.
+       * Chemins à un niveau de profondeur — pino ne sait pas masquer à toute
+       * profondeur sans coût par ligne.
+       */
+      redact: {
+        paths: [
+          'password',
+          '*.password',
+          'password_confirmation',
+          '*.password_confirmation',
+          'current_password',
+          '*.current_password',
+          'new_password',
+          '*.new_password',
+          'refresh_token',
+          '*.refresh_token',
+          'access_token',
+          '*.access_token',
+          'id_token',
+          '*.id_token',
+          'secret',
+          '*.secret',
+          'headers.authorization',
+          '*.headers.authorization',
+          'headers["x-cron-secret"]',
+          '*.headers["x-cron-secret"]',
+        ],
+        censor: '[masqué]',
+      },
+
+      /**
        * Configure where logs are written.
        */
       transport: {

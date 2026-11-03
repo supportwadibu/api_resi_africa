@@ -127,6 +127,23 @@ export async function renderPdf(html: string, options: RenderPdfOptions = {}): P
   const page = await activeBrowser.newPage()
 
   try {
+    // Le document embarque des saisies libres — noms de clients, de
+    // résidences. Les renderers les échappent ; ce verrou couvre l'oubli :
+    // sans script ni réseau, une balise injectée ne peut ni joindre le réseau
+    // interne de l'hébergeur ni lire un fichier local dans le PDF. Le
+    // document n'a besoin de rien de tout cela — styles et polices sont
+    // inlinés.
+    await page.setJavaScriptEnabled(false)
+    await page.setRequestInterception(true)
+    page.on('request', (request) => {
+      const url = request.url()
+      if (url.startsWith('data:') || url === 'about:blank') {
+        void request.continue()
+      } else {
+        void request.abort()
+      }
+    })
+
     // `domcontentloaded` et non `networkidle0` : le document n'a aucune
     // ressource externe — polices et styles sont inlinés — et attendre le
     // silence réseau ajouterait une demi-seconde à chaque rapport.

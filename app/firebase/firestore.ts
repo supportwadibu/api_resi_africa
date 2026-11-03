@@ -58,6 +58,7 @@ export const COLLECTIONS = {
   sponsorshipTransactions: 'sponsorship_transactions',
   sponsorshipRedemptions: 'sponsorship_redemptions',
   negotiations: 'negotiations',
+  auditLogs: 'audit_logs',
 } as const
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS]

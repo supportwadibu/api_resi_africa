@@ -1,50 +1,46 @@
 import app from '@adonisjs/core/services/app'
 import { defineConfig } from '@adonisjs/cors'
 
+import env from '#start/env'
+import { parseCorsOrigins } from '#utils/cors_origins'
+
 /**
- * Configuration options to tweak the CORS policy. The following
- * options are documented on the official documentation website.
+ * CORS ne protège que des navigateurs : un appel natif ou serveur l'ignore,
+ * et l'accès reste gardé par le jeton JWT. La règle se borne donc à n'ouvrir
+ * l'API qu'aux pages web explicitement listées.
  *
  * https://docs.adonisjs.com/guides/security/cors
  */
 const corsConfig = defineConfig({
-  /**
-   * Enable or disable CORS handling globally.
-   */
   enabled: true,
 
   /**
-   * In development, allow every origin to simplify local front/backend setup.
-   * In production, keep an explicit allowlist (empty by default, so no
-   * cross-origin browser access is allowed until configured).
+   * En développement, toute origine : le front local change de port. Ailleurs,
+   * la liste de `CORS_ALLOWED_ORIGINS`, vide par défaut — aucun client actuel
+   * n'appelle l'API depuis un navigateur (voir `parseCorsOrigins`).
    */
-  origin: app.inDev ? true : [],
+  origin: app.inDev ? true : parseCorsOrigins(env.get('CORS_ALLOWED_ORIGINS')),
 
-  /**
-   * HTTP methods accepted for cross-origin requests.
-   */
   methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
 
   /**
-   * Reflect request headers by default. Use a string array to restrict
-   * allowed headers.
+   * En-têtes reflétés : `Authorization` porte le jeton, et une liste figée
+   * casserait le prochain en-tête ajouté par un client sans le dire.
    */
   headers: true,
 
-  /**
-   * Response headers exposed to the browser.
-   */
   exposeHeaders: [],
 
   /**
-   * Allow cookies/authorization headers on cross-origin requests.
+   * Sans cookies : l'authentification passe par l'en-tête `Authorization`,
+   * que le mode `credentials` ne concerne pas. L'activer laissait une origine
+   * autorisée envoyer les cookies du domaine avec ses requêtes, sans aucun
+   * usage côté API.
    */
-  credentials: true,
+  credentials: false,
 
-  /**
-   * Cache CORS preflight response for N seconds.
-   */
-  maxAge: 90,
+  /** Préflight mis en cache une heure : la liste ne change qu'au déploiement. */
+  maxAge: 3600,
 })
 
 export default corsConfig

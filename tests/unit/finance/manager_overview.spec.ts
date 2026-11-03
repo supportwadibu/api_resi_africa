@@ -172,6 +172,40 @@ test.group('buildManagerOverview', () => {
 
     assert.equal(overview.expenses_total, 0)
   })
+
+  test('un acompte gardé compte au brut, comme chez le propriétaire', ({ assert }) => {
+    const overview = buildManagerOverview({
+      scope: SCOPE,
+      bookings: [],
+      expenses: [],
+      retained: [
+        {
+          property_id: 'unit-0',
+          cancelled_at: new Date('2026-10-12T10:00:00Z'),
+          retained_amount: 15000,
+        },
+        // Hors périmètre : l'acompte d'un logement non confié reste au seul
+        // propriétaire.
+        {
+          property_id: 'unit-9',
+          cancelled_at: new Date('2026-10-12T10:00:00Z'),
+          retained_amount: 40000,
+        },
+      ],
+      from: new Date('2026-10-01T00:00:00Z'),
+      to: new Date('2026-10-31T23:59:59Z'),
+      now: new Date('2026-11-15T00:00:00Z'),
+    })
+
+    assert.equal(overview.gross_revenue, 15000)
+    assert.equal(
+      overview.revenue_points.reduce((sum, point) => sum + point.value, 0),
+      15000
+    )
+    // Aucun séjour n'a eu lieu : ni réservation comptée, ni occupation.
+    assert.equal(overview.bookings_count, 0)
+    assert.equal(overview.occupancy_rate, 0)
+  })
 })
 
 test.group('computeOccupancyRate', () => {
@@ -301,6 +335,28 @@ test.group('computeOccupancyRate', () => {
 
     assert.equal(rate, 1)
     assert.notEqual(rate, 0)
+  })
+
+  test('un logement hors service sort de la capacité, comme chez le propriétaire', ({ assert }) => {
+    // Deux logements confiés, dont un `inactive` : le parc exploité en compte
+    // un. Un séjour de 5 jours sur une fenêtre de 10 occupe alors la moitié,
+    // et non le quart que donnerait la liste brute des affectations.
+    const rate = computeOccupancyRate(
+      [
+        {
+          property_id: 'unit-0',
+          start_date: new Date('2026-10-01T12:00:00Z'),
+          end_date: new Date('2026-10-06T12:00:00Z'),
+          total_amount: 50000,
+        },
+      ],
+      { ownerId: 'o', actorId: 'g', propertyIds: ['unit-0', 'unit-1'] },
+      new Date('2026-10-01T00:00:00Z'),
+      new Date('2026-10-11T00:00:00Z'),
+      1
+    )
+
+    assert.equal(rate, 0.5)
   })
 
   test('sans périmètre borné, la capacité vient des logements réservés', ({ assert }) => {

@@ -170,6 +170,10 @@ export default class GerantBookingController {
         stay_type: payload.stay_type,
         check_in_at: payload.check_in_at.toJSDate(),
         check_out_at: payload.check_out_at?.toJSDate(),
+        // Nuits choisies au comptoir : sans elles, la ressaisie d'un gérant
+        // refacturait le séjour sur les nuits écoulées entre les deux dates,
+        // là où celle du propriétaire garde la durée convenue.
+        days_count: payload.days_count,
         received_amount: payload.received_amount,
         agreed_unit_price: payload.agreed_unit_price,
         deposit_amount: payload.deposit_amount,

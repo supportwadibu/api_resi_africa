@@ -6,6 +6,21 @@ import { assertRateLimit } from '#auth/helpers/rate_limit'
 import { AuthError } from '#utils/auth_error'
 import type { AuthTokensOutput, LoginInput } from '#auth/dto/index'
 
+let dummyHash: Promise<string> | null = null
+
+/**
+ * Comparaison bcrypt à blanc quand le compte n'existe pas.
+ *
+ * Sans elle, un identifiant inconnu répond en quelques millisecondes et un
+ * identifiant existant en ~250 ms (coût 12) : le chronomètre suffirait à
+ * dresser la liste des comptes, malgré un message d'erreur identique. Le
+ * condensat de référence est calculé une fois, au premier besoin.
+ */
+async function burnPasswordCheck(password: string): Promise<void> {
+  dummyHash ??= HashService.make('resi-compte-inexistant')
+  await HashService.verify(password, await dummyHash)
+}
+
 /**
  * Use case : authentifie un utilisateur par email/phone + password
  * et délivre une nouvelle paire access/refresh.
@@ -21,6 +36,7 @@ export class LoginUseCase {
     const user = await User.findOne(query)
 
     if (!user) {
+      await burnPasswordCheck(input.password)
       await logAuthAttempt({
         type: 'verify',
         status: 'failed',
