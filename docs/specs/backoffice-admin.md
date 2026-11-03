@@ -42,12 +42,37 @@ les lectures unitaires `{ data }`, les erreurs `{ code, message }`.
 | GET | `sponsorship-redemptions?status&type&page&per_page` | Retraits et conversions des gains |
 | PATCH | `sponsorship-redemptions/:id/paid` · `:id/reject` | Retrait de gains versé (`payout_reference` facultative) · refusé (`rejection_reason`), le montant revient au solde |
 | GET · PUT | `settings/sponsorships` | Réglages du parrainage, remplacés en entier |
+| GET | `audit-logs?actor_id&actor_role&method&outcome&from&to&page&per_page` | Journal d'audit, du plus récent au plus ancien. Voir « Journal d'audit » plus bas |
+| GET | `audit-logs/:id` | Trace : acteur, requête, issue, cause de l'échec et pile d'une panne serveur |
 
 `plans` et `feedbacks` préexistaient. Depuis les forfaits, un plan porte un
 `tier` (`basic` 3 000 F, `full` 5 000 F), requis à la création, et un
 abonnement le `plan_tier` figé à la souscription ; une réservation porte son
 apporteur d'affaire (`referrer`, `referrer_commission_*`). Voir
 [forfaits, apporteur et facture](../superpowers/specs/2026-09-26-forfaits-apporteur-facture-design.md).
+
+## Journal d'audit
+
+`AuditMiddleware`, en tête du middleware de routeur, trace dans
+`audit_logs` **chaque requête routée** : lecture comme écriture, tous rôles,
+anonyme compris, réussie ou refusée. Seuls échappent le prévol `OPTIONS`, les
+sondes `/health` et la lecture du journal lui-même.
+
+Une trace porte l'acteur (`actor_id`, `actor_role` et `actor_snapshot`, nom
+et contact figés), `method`, `route` (motif), `path` (sans chaîne de
+requête), `params`, `status`, `outcome` (`success`, `client_error`,
+`server_error`), `duration_ms`, l'IP, l'agent et le `request_id` des journaux
+applicatifs. Un échec y ajoute `error` : `code` et `message` envoyés au
+client, champs refusés par la validation (`details`) ; pour une panne
+serveur, le message réel de l'exception et sa pile.
+
+Le corps et la chaîne de requête ne sont jamais recopiés (mot de passe,
+pièce d'identité, secret cron). L'écriture n'est pas attendue par la réponse
+et son échec ne fait pas échouer la requête.
+
+Conservation : `AUDIT_LOG_RETENTION_DAYS` (180 jours par défaut) fixe
+`expires_at`, purgé par la politique TTL déclarée dans `firestore.indexes.json`.
+`from` et `to` sont des jours inclus (`AAAA-MM-JJ`).
 
 ## Logements et résidences
 

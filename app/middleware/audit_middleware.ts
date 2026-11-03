@@ -1,52 +1,87 @@
-import AuditLog from '#models/audit_log'
+import AuditLog, { type AuditLogDocument } from '#models/audit_log'
+import env from '#start/env'
+import { buildAuditEntry } from '#utils/audit_entry'
+import app from '@adonisjs/core/services/app'
 import logger from '@adonisjs/core/services/logger'
 
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
 
-const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+declare module '@adonisjs/core/http' {
+  export interface HttpContext {
+    /** Exception convertie en réponse par le handler, gardée pour l'audit. */
+    requestError?: unknown
+  }
+}
+
+/** Durée de conservation par défaut, en jours, avant purge par le TTL Firestore. */
+const DEFAULT_RETENTION_DAYS = 180
 
 /**
- * Piste d'audit des écritures sensibles. À placer après `auth()`.
+ * Requêtes qui ne disent rien de l'activité : le prévol CORS, les sondes de
+ * santé appelées chaque minute, et la consultation du journal lui-même —
+ * chaque page lue dans le back-office ajouterait des lignes à la page suivante.
+ */
+function isIgnored(ctx: HttpContext): boolean {
+  const method = ctx.request.method()
+  if (method === 'OPTIONS' || method === 'HEAD') return true
+
+  const route = ctx.route?.pattern ?? ''
+  if (route === '/health' || route === '/api/v1/health') return true
+  return method === 'GET' && route.startsWith('/api/v1/admin/audit-logs')
+}
+
+/**
+ * Piste d'audit de toute l'API : chaque requête routée, lecture comme
+ * écriture, réussie ou refusée, de n'importe quel rôle ou anonyme.
  *
- * Seules les écritures sont tracées : une lecture ne change rien, et la
- * tracer multiplierait les documents sans répondre à une question utile. Un
- * refus est tracé lui aussi — une suite de 403 sur des retraits dit autant
- * qu'un succès.
+ * Posé en tête du middleware de routeur, il enveloppe l'authentification, la
+ * limite de débit et la validation : un 401, un 429 ou un 422 se tracent comme
+ * un succès. Une URL sans route n'est pas tracée — un robot qui sonde des
+ * chemins au hasard remplirait la collection pour rien.
  */
 export default class AuditMiddleware {
-  async handle(ctx: HttpContext, next: NextFn) {
-    if (READ_METHODS.has(ctx.request.method())) return next()
+  constructor(
+    // En test, aucune écriture : les tests ne contactent pas Firebase.
+    private write: ((entry: AuditLogDocument) => Promise<void>) | null = app.inTest
+      ? null
+      : AuditLog.create
+  ) {}
 
-    // Une `DomainError` levée plus bas est déjà convertie en réponse quand
-    // `next()` rend la main : le statut lu ici est celui du client.
-    await next()
-    await this.record(ctx, ctx.response.getStatus())
+  async handle(ctx: HttpContext, next: NextFn) {
+    if (isIgnored(ctx)) return next()
+
+    const startedAt = process.hrtime.bigint()
+
+    try {
+      await next()
+    } finally {
+      // Le handler d'exceptions a déjà posé le statut quand `next()` rend la
+      // main, y compris après une exception.
+      this.record(ctx, Number((process.hrtime.bigint() - startedAt) / 1_000_000n))
+    }
   }
 
   /**
-   * Une panne d'écriture de la trace ne doit pas annuler l'opération, déjà
-   * faite : elle est signalée dans les journaux, où la même information
-   * subsiste.
+   * L'écriture n'est pas attendue : la réponse n'a pas à patienter pour
+   * Firestore. Une panne d'écriture ne doit pas non plus annuler une
+   * opération déjà faite : elle est signalée dans les journaux, où la même
+   * information subsiste.
    */
-  private async record(ctx: HttpContext, status: number): Promise<void> {
-    const entry = {
-      actor_id: ctx.authUser?.id ?? null,
-      actor_role: ctx.authUser?.role ?? null,
-      action: `${ctx.request.method()} ${ctx.route?.pattern ?? ctx.request.url()}`,
-      params: Object.fromEntries(
-        Object.entries(ctx.params ?? {}).map(([key, value]) => [key, String(value)])
-      ),
-      status,
-      ip_address: ctx.request.ip(),
-      user_agent: ctx.request.header('user-agent') ?? 'unknown',
-      request_id: ctx.request.id() ?? null,
-    }
+  private record(ctx: HttpContext, durationMs: number): void {
+    if (!this.write) return
 
-    try {
-      await AuditLog.create(entry)
-    } catch (error) {
-      logger.error({ err: error, audit: entry }, "Échec d'écriture de la piste d'audit")
-    }
+    const entry = buildAuditEntry(ctx, {
+      durationMs,
+      error: ctx.requestError,
+      retentionDays: env.get('AUDIT_LOG_RETENTION_DAYS') ?? DEFAULT_RETENTION_DAYS,
+    })
+
+    this.write(entry).catch((error) => {
+      logger.error(
+        { err: error, audit: { ...entry, error: entry.error?.code ?? null } },
+        "Échec d'écriture de la piste d'audit"
+      )
+    })
   }
 }

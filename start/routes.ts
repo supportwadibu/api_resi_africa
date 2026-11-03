@@ -40,6 +40,7 @@ const ProprioWalletController = () => import('#controllers/proprio/wallet_contro
 const WaveWebhookController = () => import('#controllers/wave_webhook_controller')
 const AdminPlansController = () => import('#controllers/admin/plans_controller')
 const AdminFeedbackController = () => import('#controllers/admin/feedback_controller')
+const AdminAuditLogsController = () => import('#controllers/admin/audit_logs_controller')
 const AdminStatsController = () => import('#controllers/admin/stats_controller')
 const AdminUsersController = () => import('#controllers/admin/users_controller')
 const AdminOwnersController = () => import('#controllers/admin/owners_controller')
@@ -129,6 +130,16 @@ router
           })
           .prefix('plans')
           .as('plans')
+
+        // Journal d'audit. Ses lectures ne sont pas elles-mêmes tracées (voir
+        // `AuditMiddleware`).
+        router
+          .group(() => {
+            router.get('/', [AdminAuditLogsController, 'index'])
+            router.get(':id', [AdminAuditLogsController, 'show'])
+          })
+          .prefix('audit-logs')
+          .as('audit_logs')
 
         router
           .group(() => {
@@ -290,9 +301,7 @@ router
       })
       .prefix('admin')
       .as('admin')
-      // `audit()` trace chaque écriture d'un administrateur : validations,
-      // retraits payés, abonnements prolongés, comptes désactivés.
-      .use([middleware.auth(), middleware.role(['admin']), throttle.api(), middleware.audit()])
+      .use([middleware.auth(), middleware.role(['admin']), throttle.api()])
 
     /**
      * Espace du propriétaire, par palier : RESI Basic (gratuit), Pro, Pro+.
@@ -419,8 +428,6 @@ router
               })
               .prefix('managers')
               .as('managers')
-              // Un gérant est un compte qui agit sur l'argent du propriétaire.
-              .use(middleware.audit())
           })
           .as('pro_plus')
           .use(middleware.plan({ tier: 'pro_plus' }))
@@ -429,8 +436,6 @@ router
         // portefeuille.
         router
           .group(() => {
-            // Retraits et numéros de versement : là où un compte volé se
-            // monnaie. Chaque écriture est tracée.
             router
               .group(() => {
                 router.get('/', [ProprioWalletController, 'index'])
@@ -439,7 +444,6 @@ router
               })
               .prefix('wallets')
               .as('wallets')
-              .use(middleware.audit())
             router.get('withdrawals', [ProprioWalletController, 'withdrawals']).as('withdrawals')
             router
               .get('payout-settings', [ProprioWalletController, 'payoutSettings'])
@@ -447,7 +451,6 @@ router
             router
               .put('payout-numbers', [ProprioWalletController, 'savePayoutNumbers'])
               .as('payout_numbers')
-              .use(middleware.audit())
 
             router
               .group(() => {
@@ -697,9 +700,7 @@ router
             router.get('sponsored', [SponsorshipController, 'sponsored'])
             router.get('transactions', [SponsorshipController, 'transactions'])
             router.get('redemptions', [SponsorshipController, 'redemptions'])
-            router
-              .post('redemptions', [SponsorshipController, 'requestRedemption'])
-              .use(middleware.audit())
+            router.post('redemptions', [SponsorshipController, 'requestRedemption'])
           })
           .use([middleware.auth(), middleware.role(['client', 'proprio']), throttle.api()])
       })

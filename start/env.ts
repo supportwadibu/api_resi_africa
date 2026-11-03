@@ -155,6 +155,14 @@ export default await Env.create(new URL('../', import.meta.url), {
    */
   WAVE_TEST_ENABLED: Env.schema.boolean.optional(),
 
+  /**
+   * Conservation du journal d'audit, en jours (180 par défaut). Chaque trace
+   * porte son échéance, que la politique TTL de Firestore sur `expires_at`
+   * purge : sans elle, une trace par requête ferait grossir la collection
+   * sans fin.
+   */
+  AUDIT_LOG_RETENTION_DAYS: Env.schema.number.optional(),
+
   // OTP / Auth rate limiting
   OTP_RATE_LIMIT_WINDOW_MINUTES: Env.schema.number.optional(),
   OTP_RATE_LIMIT_MAX: Env.schema.number.optional(),
