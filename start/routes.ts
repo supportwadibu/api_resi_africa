@@ -747,6 +747,7 @@ router
         router.route('stay-statuses', ['GET', 'POST'], [CronController, 'stayStatuses'])
         router.route('sponsorship-rewards', ['GET', 'POST'], [CronController, 'sponsorshipRewards'])
         router.route('purge-sessions', ['GET', 'POST'], [CronController, 'purgeSessions'])
+        router.route('purge-audit-logs', ['GET', 'POST'], [CronController, 'purgeAuditLogs'])
         // Ancienne sonde, gardée pour un moniteur déjà configuré avec le
         // secret. La sonde publique est `/health`.
         router.get('health', [CronController, 'health'])

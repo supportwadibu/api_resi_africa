@@ -71,7 +71,9 @@ pièce d'identité, secret cron). L'écriture n'est pas attendue par la réponse
 et son échec ne fait pas échouer la requête.
 
 Conservation : `AUDIT_LOG_RETENTION_DAYS` (180 jours par défaut) fixe
-`expires_at`, purgé par la politique TTL déclarée dans `firestore.indexes.json`.
+`expires_at` ; la tâche `purge-audit-logs` (cron interne ou
+`/api/v1/cron/purge-audit-logs`) supprime les traces échues. Pas de
+politique TTL Firestore : elle exige un projet avec facturation activée.
 `from` et `to` sont des jours inclus (`AAAA-MM-JJ`).
 
 ## Logements et résidences
