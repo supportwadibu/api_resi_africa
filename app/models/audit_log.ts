@@ -67,7 +67,7 @@ export interface AuditLogDocument {
   user_agent: string
   request_id: string | null
   created_at: Date
-  /** Échéance de la politique TTL de Firestore, qui purge la collection. */
+  /** Échéance de conservation, après laquelle la tâche `purge-audit-logs` supprime la trace. */
   expires_at: Date
 }
 
@@ -115,6 +115,20 @@ const AuditLog = {
     ])
 
     return { data: toDocs<AuditLogDocument>(snapshot.docs), total }
+  },
+
+  /** Supprime un lot de traces échues ; `0` quand il n'en reste plus. */
+  async deleteExpired(limit = 500): Promise<number> {
+    const snapshot = await auditLogs().where('expires_at', '<=', new Date()).limit(limit).get()
+    if (snapshot.empty) return 0
+
+    const batch = auditLogs().firestore.batch()
+    for (const doc of snapshot.docs) {
+      batch.delete(doc.ref)
+    }
+    await batch.commit()
+
+    return snapshot.size
   },
 }
 

@@ -52,4 +52,15 @@ export function registerCronTasks(scheduler: CronScheduler): void {
       return new PurgeExpiredSessionsUseCase().execute()
     },
   })
+
+  // 5. Purge des traces d'audit échues
+  scheduler.register({
+    name: 'purge-audit-logs',
+    cronExpression: cronConfig.schedules.purgeAuditLogs,
+    handler: async () => {
+      const { PurgeExpiredAuditLogsUseCase } =
+        await import('#features/audit_logs/use_cases/purge_expired_audit_logs.use_case')
+      return new PurgeExpiredAuditLogsUseCase().execute()
+    },
+  })
 }

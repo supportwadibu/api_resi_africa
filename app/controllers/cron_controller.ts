@@ -1,3 +1,4 @@
+import { PurgeExpiredAuditLogsUseCase } from '#features/audit_logs/use_cases/index'
 import logger from '@adonisjs/core/services/logger'
 
 import type { HttpContext } from '@adonisjs/core/http'
@@ -119,6 +120,25 @@ export default class CronController {
 
     return ctx.response.ok({
       task: 'purge-sessions',
+      ...result,
+      duration_ms: Date.now() - startedAt,
+    })
+  }
+
+  /**
+   * POST|GET /api/v1/cron/purge-audit-logs
+   *
+   * Supprime les traces d'audit échues. Idempotent : purge par lots jusqu'à
+   * épuisement.
+   */
+  async purgeAuditLogs(ctx: HttpContext) {
+    const startedAt = Date.now()
+    const result = await new PurgeExpiredAuditLogsUseCase().execute()
+
+    logger.info({ ...result, duration_ms: Date.now() - startedAt }, "Cron : traces d'audit échues")
+
+    return ctx.response.ok({
+      task: 'purge-audit-logs',
       ...result,
       duration_ms: Date.now() - startedAt,
     })

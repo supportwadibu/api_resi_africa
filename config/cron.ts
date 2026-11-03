@@ -40,6 +40,12 @@ const cronConfig = {
      * Tous les jours à 02:00.
      */
     purgeSessions: env.get('CRON_PURGE_SESSIONS_SCHEDULE', '0 2 * * *'),
+
+    /**
+     * Purge des traces d'audit échues dans Firestore.
+     * Tous les jours à 02:30.
+     */
+    purgeAuditLogs: env.get('CRON_PURGE_AUDIT_LOGS_SCHEDULE', '30 2 * * *'),
   },
 }
 

@@ -14,7 +14,7 @@ declare module '@adonisjs/core/http' {
   }
 }
 
-/** Durée de conservation par défaut, en jours, avant purge par le TTL Firestore. */
+/** Durée de conservation par défaut, en jours, avant purge par `purge-audit-logs`. */
 const DEFAULT_RETENTION_DAYS = 180
 
 /**

@@ -130,6 +130,7 @@ export default await Env.create(new URL('../', import.meta.url), {
   CRON_SUBSCRIPTION_REMINDERS_SCHEDULE: Env.schema.string.optional(),
   CRON_EXPIRE_TRIALS_SCHEDULE: Env.schema.string.optional(),
   CRON_PURGE_SESSIONS_SCHEDULE: Env.schema.string.optional(),
+  CRON_PURGE_AUDIT_LOGS_SCHEDULE: Env.schema.string.optional(),
 
   /**
    * Administrateurs garantis au démarrage du serveur HTTP : tableau JSON de
@@ -157,8 +158,8 @@ export default await Env.create(new URL('../', import.meta.url), {
 
   /**
    * Conservation du journal d'audit, en jours (180 par défaut). Chaque trace
-   * porte son échéance, que la politique TTL de Firestore sur `expires_at`
-   * purge : sans elle, une trace par requête ferait grossir la collection
+   * porte son échéance (`expires_at`), que la tâche `purge-audit-logs`
+   * supprime : sans elle, une trace par requête ferait grossir la collection
    * sans fin.
    */
   AUDIT_LOG_RETENTION_DAYS: Env.schema.number.optional(),
