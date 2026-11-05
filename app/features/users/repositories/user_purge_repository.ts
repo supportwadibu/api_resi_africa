@@ -1,12 +1,4 @@
-import {
-  COLLECTIONS,
-  collection,
-  countQuery,
-  db,
-  deleteQuery,
-  sumQuery,
-  toDoc,
-} from '#firebase/firestore'
+import { COLLECTIONS, collection, countQuery, db, deleteQuery, toDoc } from '#firebase/firestore'
 import AuthAttempt from '#models/auth_attempt'
 import OtpCode from '#models/otp_code'
 import User from '#models/user'
@@ -182,12 +174,25 @@ export class UserPurgeRepository {
     return missing.length
   }
 
+  /**
+   * Solde cumulé des portefeuilles du propriétaire.
+   *
+   * Lu et additionné ici plutôt que par un agrégat `sum` : Firestore exige
+   * pour celui-ci un index composite (`owner_id`, `balance`), et un
+   * propriétaire n'a qu'un portefeuille par résidence plus le général —
+   * quelques documents.
+   */
+  private async walletBalance(userId: string): Promise<number> {
+    const snapshot = await collection(COLLECTIONS.wallets).where('owner_id', '==', userId).get()
+    // `balance` toujours écrit à la création, repli par prudence.
+    return snapshot.docs.reduce((sum, doc) => sum + (Number(doc.get('balance')) || 0), 0)
+  }
+
   /** Argent encore dû et séjours en cours, à signaler avant d'effacer. */
   async warnings(userId: string): Promise<PurgeWarningDto[]> {
-    const wallets = collection(COLLECTIONS.wallets).where('owner_id', '==', userId)
     const [walletBalance, pendingWithdrawals, ownerStays, clientStays, sponsorship] =
       await Promise.all([
-        sumQuery(wallets, 'balance'),
+        this.walletBalance(userId),
         countQuery(
           collection(COLLECTIONS.withdrawalRequests)
             .where('owner_id', '==', userId)
