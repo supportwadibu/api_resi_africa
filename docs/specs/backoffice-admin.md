@@ -12,10 +12,14 @@ les lectures unitaires `{ data }`, les erreurs `{ code, message }`.
 | GET | `stats/subscriptions?months_back&months_ahead` | Revenu de RESI : paiements d'abonnement encaissés par mois, revenu mensuel récurrent par forfait, renouvellements attendus, potentiel des essais |
 | GET | `stats` | Tableau de bord : comptes, propriétaires, catalogue, réservations, revenu du mois, occupation, abonnements, retours |
 | GET | `stats/revenue?months=12` | Série mensuelle du revenu (1 à 24 mois) |
-| GET | `users?role&is_active&q&page&per_page` | Comptes, tous rôles |
+| GET | `users?role&is_active&is_verified&deleted&q&page&per_page` | Comptes, tous rôles. `deleted=true` : comptes supprimés seulement (`false` n'est pas filtrable) ; chaque compte porte `deleted_at` |
 | POST | `users` | Création, tous rôles : `role`, `full_name`, `email` et/ou `phone`, `password` initial ; `owner_id` pour un `gerant`. Compte vérifié d'office, réponse `201 { data }` |
 | GET | `users/:id` | Fiche : sessions actives, bloc `owner` (proprio), `manager_assignment` (gérant) |
-| PATCH | `users/:id` | `full_name`, `email`, `phone`, `is_active` |
+| PATCH | `users/:id` | `full_name`, `email`, `phone`, `is_active`. `409 user_deleted` sur un compte supprimé |
+| DELETE | `users/:id` | Suppression douce : désactivé, marqué supprimé, sessions fermées, restaurable. `409 cannot_delete_self`, `user_already_deleted` |
+| POST | `users/:id/restore` | Restaure un compte supprimé dans son état d'avant (`is_active` compris). `409 user_not_deleted` |
+| GET | `users/:id/purge` | Aperçu de la suppression définitive : `items` effacés, `kept` (réservations prises comme client, conservées au nom figé), `warnings`. Compte supprimé seulement |
+| DELETE | `users/:id/purge` | Suppression définitive en cascade (plan dans `app/features/users/purge_plan.ts`) et fichiers Cloudinary ; rejouable après une panne. Compte supprimé seulement, limite de débit dédiée |
 | GET | `owners?status` · `owners/pending` | Propriétaires par statut de validation |
 | GET | `owners/:id` | Propriétaire |
 | GET | `owners/:id/profile` | Dossier de validation, pièces en URLs signées |

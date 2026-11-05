@@ -186,3 +186,20 @@ test.group('UpdateUserUseCase', () => {
     )
   })
 })
+
+test.group('UpdateUserUseCase — compte supprimé', () => {
+  test('refuse de modifier un compte supprimé, qu’il faut restaurer', async ({ assert }) => {
+    const { repo, calls } = fakeRepo({ is_active: false, is_deleted: true })
+
+    await expectDomainError(
+      new UpdateUserUseCase(repo).execute({
+        user_id: 'user-1',
+        admin_id: 'admin-1',
+        patch: { is_active: true },
+      }),
+      'user_deleted',
+      409
+    )
+    assert.equal(calls.saved, 0)
+  })
+})

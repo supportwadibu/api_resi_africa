@@ -9,6 +9,8 @@ export const listUsersValidator = vine.compile(
     role: vine.enum(ROLE_NAMES).optional(),
     is_active: vine.boolean().optional(),
     is_verified: vine.boolean().optional(),
+    // `accepted` : seul « comptes supprimés » se filtre, voir `User.paginate`.
+    deleted: vine.accepted().optional(),
     q: vine.string().trim().maxLength(120).optional(),
     page: vine.number().positive().withoutDecimals().optional(),
     per_page: vine.number().positive().withoutDecimals().max(100).optional(),

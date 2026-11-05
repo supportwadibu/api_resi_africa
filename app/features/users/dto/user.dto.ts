@@ -29,6 +29,8 @@ export interface UserDto {
    */
   owner_status: OwnerValidationStatus | null
   last_login_at: Date | null
+  /** Renseignée tant que le compte est supprimé (restaurable) ; `null` sinon. */
+  deleted_at: Date | null
   created_at: Date
   updated_at: Date
 }
@@ -87,6 +89,8 @@ export interface ListUsersInput {
   is_active?: boolean
   /** Inscription confirmée par OTP (ou compte créé vérifié). */
   is_verified?: boolean
+  /** `true` : comptes supprimés seulement. L'absence ne filtre pas. */
+  deleted?: boolean
   /** Recherche sur le nom, l'e-mail ou le téléphone. */
   q?: string
   page?: number
@@ -110,4 +114,37 @@ export interface UpdateUserInput {
   email?: string
   phone?: string
   is_active?: boolean
+}
+
+/** Ensemble de données effacé avec le compte, et son volume. */
+export interface PurgeItemDto {
+  key: string
+  label: string
+  count: number
+}
+
+/**
+ * Point d'attention avant une suppression définitive : de l'argent encore dû,
+ * des séjours en cours. Signalé, jamais bloquant — l'administrateur décide.
+ */
+export interface PurgeWarningDto {
+  code: string
+  message: string
+}
+
+/** Aperçu d'une suppression définitive (`GET /admin/users/:id/purge`). */
+export interface PurgePreviewDto {
+  /** Ensembles effacés, vides exclus. */
+  items: PurgeItemDto[]
+  /** Données d'autres comptes qui citent celui-ci, conservées avec un nom figé. */
+  kept: PurgeItemDto[]
+  warnings: PurgeWarningDto[]
+}
+
+/** Bilan d'une suppression définitive (`DELETE /admin/users/:id/purge`). */
+export interface PurgeReportDto {
+  user_id: string
+  items: PurgeItemDto[]
+  /** Photos et pièces d'identité effacées chez l'hébergeur de fichiers. */
+  files_deleted: number
 }

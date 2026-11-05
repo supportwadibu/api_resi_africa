@@ -113,3 +113,47 @@ export async function deleteDocument(publicId: string | null): Promise<void> {
     invalidate: true,
   })
 }
+
+/**
+ * Supprime tous les justificatifs rangés sous un préfixe ; rend leur nombre.
+ *
+ * Sert à la suppression définitive d'un compte. L'API d'administration de
+ * Cloudinary traite au plus 1000 fichiers par appel et signale `partial` s'il
+ * en reste : on reprend jusqu'à épuisement.
+ */
+export async function deleteDocumentsByPrefix(prefix: string): Promise<number> {
+  return deleteByPrefix(client(), `${cloudinaryConfig.documentsFolder}/${prefix}`, 'authenticated')
+}
+
+/**
+ * Cloudinary est-il configuré ?
+ *
+ * Sans configuration, aucun fichier n'a jamais pu être envoyé : il n'y a rien
+ * à effacer, et la suppression d'un compte n'a pas à échouer pour autant.
+ */
+export function isFileStorageConfigured(): boolean {
+  const { cloudName, apiKey, apiSecret } = cloudinaryConfig
+  return Boolean(cloudName && apiKey && apiSecret)
+}
+
+/** Boucle commune aux deux types de stockage (`upload` public, `authenticated` privé). */
+export async function deleteByPrefix(
+  sdk: typeof cloudinary,
+  prefix: string,
+  type: 'upload' | 'authenticated'
+): Promise<number> {
+  let deleted = 0
+
+  for (;;) {
+    const result = await sdk.api.delete_resources_by_prefix(prefix, {
+      type,
+      resource_type: 'image',
+      invalidate: true,
+    })
+    const statuses = Object.values((result.deleted ?? {}) as Record<string, string>)
+    deleted += statuses.filter((status) => status === 'deleted').length
+    if (!result.partial) break
+  }
+
+  return deleted
+}

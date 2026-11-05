@@ -50,6 +50,8 @@ export class UserRepository {
       is_active: doc.is_active ?? true,
       owner_status: role === 'proprio' ? doc.owner_status : null,
       last_login_at: doc.last_login_at ?? null,
+      // Absent sur l'historique : non supprimé.
+      deleted_at: doc.is_deleted ? (doc.deleted_at ?? null) : null,
       created_at: doc.metadata.created_at,
       updated_at: doc.metadata.updated_at,
     }
@@ -79,6 +81,7 @@ export class UserRepository {
       role_id: input.role,
       is_active: input.is_active,
       is_verified: input.is_verified,
+      deleted: input.deleted,
     }
     const term = input.q?.trim()
 
@@ -132,6 +135,36 @@ export class UserRepository {
 
   async save(user: UserEntity): Promise<void> {
     await user.save()
+  }
+
+  /**
+   * Met le compte de côté : désactivé, marqué supprimé, restaurable.
+   *
+   * L'accès est coupé par `is_active`, que la connexion, le rafraîchissement
+   * et le middleware d'authentification contrôlent déjà : aucun de ces flux
+   * n'a à connaître la suppression.
+   */
+  async markDeleted(user: UserEntity, adminId: string): Promise<UserEntity | null> {
+    return User.findByIdAndUpdate(user._id, {
+      is_active: false,
+      is_deleted: true,
+      deleted_at: new Date(),
+      deleted_by: adminId,
+      active_before_deletion: user.is_active,
+    })
+  }
+
+  /** Annule la suppression douce et rend au compte l'état d'avant. */
+  async markRestored(user: UserEntity): Promise<UserEntity | null> {
+    return User.findByIdAndUpdate(user._id, {
+      // Repli sur actif : une suppression écrit toujours ce champ, son absence
+      // ne peut venir que d'une écriture manuelle.
+      is_active: user.raw.active_before_deletion ?? true,
+      is_deleted: false,
+      deleted_at: null,
+      deleted_by: null,
+      active_before_deletion: null,
+    })
   }
 
   /** Ferme toutes les sessions du compte ; rend le nombre de sessions fermées. */
