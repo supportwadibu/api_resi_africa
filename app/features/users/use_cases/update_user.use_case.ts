@@ -35,6 +35,15 @@ export class UpdateUserUseCase {
     if (!user) {
       throw new DomainError('user_not_found', 'Utilisateur introuvable.', 404)
     }
+    // Réactiver un compte supprimé par cette voie le laisserait marqué
+    // supprimé tout en lui rendant l'accès : la restauration seule le sort.
+    if (user.raw.is_deleted) {
+      throw new DomainError(
+        'user_deleted',
+        'Ce compte est supprimé : restaurez-le avant de le modifier.',
+        409
+      )
+    }
 
     if (patch.email !== undefined && patch.email !== user.email) {
       if (await this.repo.isEmailTaken(patch.email, userId)) {

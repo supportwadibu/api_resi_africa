@@ -153,6 +153,11 @@ const AuthAttempt = {
 
     return stale.length
   },
+
+  /** Efface toutes les tentatives d'une cible (suppression définitive d'un compte). */
+  async deleteForTarget(target: string): Promise<void> {
+    await targetRef(target).remove()
+  },
 }
 
 export default AuthAttempt

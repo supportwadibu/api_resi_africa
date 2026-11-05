@@ -29,6 +29,8 @@ const throttle = {
   reports: () => middleware.throttle({ name: 'reports', max: 10, window: 600, by: 'user' }),
   /** Photos d'annonce, envoyées à Cloudinary. */
   uploads: () => middleware.throttle({ name: 'uploads', max: 30, window: 600, by: 'user' }),
+  /** Suppression définitive d'un compte : des milliers d'effacements Firestore et Cloudinary. */
+  purge: () => middleware.throttle({ name: 'purge', max: 10, window: 600, by: 'user' }),
 }
 
 const AuthController = () => import('#controllers/auth/auth_controller')
@@ -210,6 +212,10 @@ router
             router.post('/', [AdminUsersController, 'store'])
             router.get(':id', [AdminUsersController, 'show'])
             router.patch(':id', [AdminUsersController, 'update'])
+            router.delete(':id', [AdminUsersController, 'destroy'])
+            router.post(':id/restore', [AdminUsersController, 'restore'])
+            router.get(':id/purge', [AdminUsersController, 'purgePreview'])
+            router.delete(':id/purge', [AdminUsersController, 'purge']).use(throttle.purge())
           })
           .prefix('users')
           .as('users')

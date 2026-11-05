@@ -107,6 +107,25 @@ export interface UserDocument {
    */
   auth_provider_keys: string[]
 
+  /**
+   * Suppression douce par un administrateur : le compte est désactivé et mis
+   * de côté, restaurable, jusqu'à sa suppression définitive.
+   *
+   * Optionnels en lecture : les comptes antérieurs ne les portent pas, et
+   * l'absence vaut « non supprimé ». C'est aussi pourquoi le back-office ne
+   * filtre que sur `is_deleted == true` — Firestore écarte d'une égalité les
+   * documents privés du champ, et `is_deleted == false` cacherait tout
+   * l'historique.
+   */
+  is_deleted?: boolean
+  deleted_at?: Date | null
+  deleted_by?: string | null
+  /**
+   * `is_active` d'avant la suppression, rétabli par la restauration : restaurer
+   * un compte que l'équipe avait désactivé ne doit pas lui rendre l'accès.
+   */
+  active_before_deletion?: boolean | null
+
   metadata: UserMetadata
 }
 
@@ -435,12 +454,14 @@ const User = {
    * filtres est couverte par un index de `firestore.indexes.json`.
    */
   async paginate(
-    filters: { role_id?: string; is_active?: boolean; is_verified?: boolean },
+    filters: { role_id?: string; is_active?: boolean; is_verified?: boolean; deleted?: boolean },
     options: { limit: number; offset: number }
   ): Promise<{ data: UserRecord[]; total: number }> {
     let query = users() as FirebaseFirestore.Query<UserDocument>
 
     if (filters.role_id) query = query.where('role_id', '==', filters.role_id)
+    // Seul `true` se filtre : voir `UserDocument.is_deleted`.
+    if (filters.deleted === true) query = query.where('is_deleted', '==', true)
     if (typeof filters.is_active === 'boolean') {
       query = query.where('is_active', '==', filters.is_active)
     }
@@ -468,6 +489,11 @@ const User = {
     const user = await User.findById(id)
     if (!user || user.role_id !== roleId) return null
     return user
+  },
+
+  /** Efface le document du compte. Dernière étape d'une suppression définitive. */
+  async destroy(id: string): Promise<void> {
+    await users().doc(id).delete()
   },
 
   /** Horodate la dernière connexion sans relire le document. */

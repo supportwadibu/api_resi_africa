@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import cloudinaryConfig from '#config/cloudinary'
+import { deleteByPrefix } from '#services/document_storage'
 import { v2 as cloudinary } from 'cloudinary'
 
 import type { MultipartFile } from '@adonisjs/core/bodyparser'
@@ -70,4 +71,14 @@ export function publicIdFromUrl(url: string | null): string | null {
 
   const publicId = match[1]
   return publicId.startsWith(cloudinaryConfig.propertiesFolder) ? publicId : null
+}
+
+/**
+ * Supprime toutes les photos d'un propriétaire ; rend leur nombre.
+ *
+ * Les photos sont rangées par propriétaire (`uploadPropertyImage`), logements
+ * et résidences confondus : un préfixe suffit, sans relire chaque annonce.
+ */
+export async function deletePropertyImagesByPrefix(prefix: string): Promise<number> {
+  return deleteByPrefix(client(), `${cloudinaryConfig.propertiesFolder}/${prefix}`, 'upload')
 }
