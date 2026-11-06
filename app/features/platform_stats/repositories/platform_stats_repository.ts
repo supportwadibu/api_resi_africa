@@ -12,6 +12,7 @@ import { readPaidPlanTier } from '#features/plans/plan_tier'
 
 import type { StatsBooking } from '#features/bookings/booking_stats'
 import type { PlatformStatsDto } from '../dto/platform_stats.dto.ts'
+import type { StayBreakdownBooking } from '../stay_type_breakdown.ts'
 import type { EarnedPayment, PaidSubscription, TrialSubscription } from '../subscription_revenue.ts'
 
 type Counters = Omit<PlatformStatsDto, 'generated_at' | 'revenue' | 'occupancy_rate'>
@@ -157,6 +158,22 @@ export class PlatformStatsRepository {
     // Même projection que le tableau de bord propriétaire : `days_count`,
     // `stay_type` et les montants y reçoivent leurs replis historiques.
     return docs.map((doc) => BookingRepository.toDto(doc))
+  }
+
+  /**
+   * Réservations non annulées commencées depuis `from`, d'un propriétaire ou
+   * de toute la plateforme.
+   *
+   * Lues par `end_date` — la requête existante, sans index composite — puis
+   * restreintes au début de séjour : une réservation commencée depuis `from`
+   * finit forcément après.
+   */
+  async bookingsStartedSince(from: Date, ownerId?: string | null): Promise<StayBreakdownBooking[]> {
+    const docs = await Booking.findEndingAfter(from)
+
+    return docs
+      .map((doc) => BookingRepository.toDto(doc))
+      .filter((b) => b.start_date >= from && (!ownerId || b.owner_id === ownerId))
   }
 }
 

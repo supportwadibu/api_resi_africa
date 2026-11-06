@@ -341,3 +341,47 @@ export async function deleteQuery(query: Query, batchSize = 500): Promise<number
 
   return total
 }
+
+/**
+ * Document Firestore rendu transportable en JSON, pour un export rejouable.
+ *
+ * Un `Timestamp` sérialisé deviendrait une chaîne, impossible à distinguer
+ * d'un texte à la relecture : il est marqué `{ $timestamp: ISO }` pour
+ * revenir `Timestamp`. Seuls ce type et les valeurs JSON natives circulent ;
+ * un autre type Firestore lève, plutôt que de partir déformé dans le fichier.
+ */
+export function encodeDocument(data: DocumentData): Record<string, unknown> {
+  const encode = (value: unknown): unknown => {
+    if (value instanceof Timestamp) return { $timestamp: value.toDate().toISOString() }
+    if (value instanceof Date) return { $timestamp: value.toISOString() }
+    if (Array.isArray(value)) return value.map(encode)
+    if (value !== null && typeof value === 'object') {
+      if (!isPlainObject(value)) {
+        throw new Error(`Type Firestore non exportable : ${value.constructor?.name ?? 'inconnu'}.`)
+      }
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, encode(v)]))
+    }
+    return value
+  }
+
+  return encode(data) as Record<string, unknown>
+}
+
+/** Inverse d'`encodeDocument` : les marques `$timestamp` redeviennent des `Timestamp`. */
+export function decodeDocument(data: Record<string, unknown>): DocumentData {
+  const decode = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(decode)
+    if (value !== null && typeof value === 'object') {
+      const entries = Object.entries(value)
+      if (entries.length === 1 && entries[0][0] === '$timestamp') {
+        const date = new Date(String(entries[0][1]))
+        if (Number.isNaN(date.getTime())) throw new Error('Horodatage illisible dans le fichier.')
+        return Timestamp.fromDate(date)
+      }
+      return Object.fromEntries(entries.map(([k, v]) => [k, decode(v)]))
+    }
+    return value
+  }
+
+  return decode(data) as DocumentData
+}

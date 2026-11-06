@@ -24,3 +24,11 @@ export const revenueSeriesValidator = vine.compile(
     months: vine.number().positive().withoutDecimals().max(24).optional(),
   })
 )
+
+/** GET /admin/stats/stay-types — même plafond de deux ans que la série du revenu. */
+export const stayTypeBreakdownValidator = vine.compile(
+  vine.object({
+    months: vine.number().positive().withoutDecimals().max(24).optional(),
+    owner_id: vine.string().trim().minLength(1).maxLength(128).optional(),
+  })
+)

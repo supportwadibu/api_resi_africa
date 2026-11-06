@@ -2,6 +2,7 @@ import {
   COLLECTIONS,
   collection,
   countQuery,
+  db,
   toDoc,
   toDocs,
   toPayload,
@@ -257,6 +258,61 @@ const Client = {
    */
   async updateStats(id: string, stats: ClientStats): Promise<void> {
     await clients().doc(id).update(toPayload({ stats }))
+  },
+
+  /**
+   * Toutes les fiches, tous carnets confondus — l'export du back-office.
+   *
+   * Lecture par pages sur l'identifiant de document : une seule requête sur une
+   * collection volumineuse finirait par dépasser le délai d'un appel RPC.
+   */
+  async findAll(pageSize = 1000): Promise<ClientRecord[]> {
+    const out: ClientRecord[] = []
+    let last: FirebaseFirestore.QueryDocumentSnapshot | undefined
+
+    for (;;) {
+      let query = clients().orderBy('__name__').limit(pageSize)
+      if (last) query = query.startAfter(last)
+
+      const snapshot = await query.get()
+      out.push(...toDocs<ClientDocument>(snapshot.docs))
+      if (snapshot.size < pageSize) break
+      last = snapshot.docs[snapshot.docs.length - 1]
+    }
+
+    return out
+  },
+
+  /** Fiches de plusieurs carnets. `in` plafonne à 30 valeurs, d'où les lots. */
+  async findByOwners(ownerIds: readonly string[]): Promise<ClientRecord[]> {
+    const unique = [...new Set(ownerIds)]
+    const out: ClientRecord[] = []
+
+    for (let i = 0; i < unique.length; i += 30) {
+      const snapshot = await clients()
+        .where('owner_id', 'in', unique.slice(i, i + 30))
+        .get()
+      out.push(...toDocs<ClientDocument>(snapshot.docs))
+    }
+
+    return out
+  },
+
+  /**
+   * Écrit des fiches sous leur identifiant d'origine — la reprise d'un export.
+   *
+   * Par lots de 500, plafond d'un batch Firestore. Un lot échoué n'annule pas
+   * les précédents : l'import étant rejouable, le relancer reprend où il
+   * s'est arrêté.
+   */
+  async insertMany(records: readonly ClientRecord[]): Promise<void> {
+    for (let i = 0; i < records.length; i += 500) {
+      const batch = db().batch()
+      for (const record of records.slice(i, i + 500)) {
+        batch.set(clients().doc(record._id), toPayload(record) as unknown as ClientDocument)
+      }
+      await batch.commit()
+    }
   },
 }
 

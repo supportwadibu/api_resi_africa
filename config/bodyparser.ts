@@ -63,6 +63,8 @@ const bodyParserConfig = defineConfig({
       '/api/v1/proprio/clients/:id',
       '/api/v1/gerant/clients',
       '/api/v1/gerant/clients/:id',
+      '/api/v1/admin/clients/import',
+      '/api/v1/admin/users/import',
     ],
 
     /**

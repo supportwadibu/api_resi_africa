@@ -11,6 +11,12 @@ les lectures unitaires `{ data }`, les erreurs `{ code, message }`.
 |---|---|---|
 | GET | `stats/subscriptions?months_back&months_ahead` | Revenu de RESI : paiements d'abonnement encaissés par mois, revenu mensuel récurrent par forfait, renouvellements attendus, potentiel des essais |
 | GET | `stats` | Tableau de bord : comptes, propriétaires, catalogue, réservations, revenu du mois, occupation, abonnements, retours |
+| GET | `stats/stay-types?months&owner_id` | Réservations non annulées commencées sur les `months` derniers mois (1 à 24, 12 par défaut), par tranche : `passage`, `half_day`, puis séjours complets `one_day`, `two_to_six_days`, `seven_to_twenty_nine_days`, `thirty_days_plus`. Par tranche : nombre, part, chiffre d'affaires, jours occupés pondérés |
+| GET | `clients/export` | Carnet clients de toute la plateforme, format `resi.clients` v1 : chaque fiche avec l'identité de son propriétaire (e-mail, téléphone), sans les statistiques |
+| POST | `clients/import` | Multipart, champ `file` (JSON, 10 Mo). Rattache chaque fiche au propriétaire retrouvé par identifiant, e-mail puis téléphone ; garde l'identifiant de la fiche ; rejouable. Rapport `total`, `created`, `skipped[]` (`owner_not_found`, `already_exists`, `duplicate_phone`) |
+| GET | `users/:id/export/preview` | Sections exportables d'un compte avec leur volume, et celles cochées d'office pour son rôle |
+| GET | `users/:id/export?sections=a,b` | Compte (mot de passe chiffré compris) et sections choisies, format `resi.account` v1. Documents bruts sous leur identifiant d'origine, horodatages marqués `$timestamp`. Plan : `app/features/users/account_transfer.ts` |
+| POST | `users/import` | Multipart, champ `file` (JSON, 20 Mo). Compte présent (identifiant, e-mail, téléphone) conservé et complété, sinon recréé ; documents absents ajoutés, rattachement réécrit vers le compte d'arrivée ; documents d'un autre compte écartés. Rapport par section : `created`, `existing`, `rejected` |
 | GET | `stats/revenue?months=12` | Série mensuelle du revenu (1 à 24 mois) |
 | GET | `users?role&is_active&is_verified&deleted&q&page&per_page` | Comptes, tous rôles. `deleted=true` : comptes supprimés seulement (`false` n'est pas filtrable) ; chaque compte porte `deleted_at` |
 | POST | `users` | Création, tous rôles : `role`, `full_name`, `email` et/ou `phone`, `password` initial ; `owner_id` pour un `gerant`. Compte vérifié d'office, réponse `201 { data }` |
@@ -133,6 +139,10 @@ Non paginée : un agrégat calculé sur une page serait faux.
 | `sponsorship_not_found` · `redemption_not_found` | 404 | Parrainage ou demande introuvable |
 | `sponsorship_already_cancelled` · `redemption_already_processed` | 409 | Déjà traité |
 | `invalid_sponsorship_settings` | 422 | Gain en pourcentage supérieur à 100 |
+| `invalid_import_file` | 422 | Fichier d'import illisible ou d'un autre format |
+| `unsupported_import_version` | 422 | Version d'export inconnue |
+| `account_role_mismatch` | 409 | Import d'un compte dont l'e-mail ou le téléphone appartient à un compte d'un autre rôle |
+| `role_not_found` | 422 | Rôle du compte importé absent de la base (`seed:roles` non lancé) |
 
 ## Limites connues
 
