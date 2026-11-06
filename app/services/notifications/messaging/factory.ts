@@ -2,6 +2,7 @@
 import { AfricasTalkingProvider } from '#services/notifications/messaging/africas_talking_provider'
 import { BottomLineProvider } from '#services/notifications/messaging/bottom_line_provider'
 import { ConsoleMessagingProvider } from '#services/notifications/messaging/console_provider'
+import { DuguSenderProvider } from '#services/notifications/messaging/dugu_sender_provider'
 import { InfobipProvider } from '#services/notifications/messaging/infobip_provider'
 import { OrangeProvider } from '#services/notifications/messaging/orange_provider'
 import {
@@ -62,6 +63,13 @@ export function buildMessagingProvider(): MessagingProvider {
         baseUrl: requireEnv('BOTTOMLINE_BASE_URL'),
         apiKey: requireEnv('BOTTOMLINE_API_KEY'),
         whatsappFrom: requireEnv('BOTTOMLINE_WHATSAPP_FROM'),
+      })
+
+    case 'dugu_sender':
+      return new DuguSenderProvider({
+        apiKey: requireEnv('DUGU_API_KEY'),
+        projectId: env.get('DUGU_PROJECT_ID'),
+        baseUrl: env.get('DUGU_BASE_URL'),
       })
 
     default: {

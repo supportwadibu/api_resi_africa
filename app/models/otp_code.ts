@@ -17,8 +17,16 @@ export const OTP_DEFAULT_MAX_ATTEMPTS = 3
  */
 interface OtpCodeRaw {
   user_id: string
-  /** Hash bcrypt du code OTP (jamais stocké en clair). */
-  code: string
+  /**
+   * Hash bcrypt du code OTP (jamais stocké en clair). `null` quand le
+   * fournisseur garde le code (`external_id`) : RESI ne l'a jamais vu.
+   */
+  code: string | null
+  /**
+   * Identifiant du code chez un fournisseur qui le génère et le vérifie
+   * (DUGU Sender). Absent des codes générés par RESI, historique compris.
+   */
+  external_id?: string
   channel: OtpChannel
   target: string
   purpose: OtpPurpose
@@ -34,7 +42,8 @@ interface OtpCodeRaw {
 export interface OtpCodeRecord {
   _id: string
   user_id: string
-  code: string
+  code: string | null
+  external_id: string | null
   channel: OtpChannel
   target: string
   purpose: OtpPurpose
@@ -63,6 +72,7 @@ function toRecord(userId: string, purpose: OtpPurpose, raw: OtpCodeRaw): OtpCode
     _id: `${userId}:${purpose}`,
     user_id: raw.user_id,
     code: raw.code,
+    external_id: raw.external_id ?? null,
     channel: raw.channel,
     target: raw.target,
     purpose: raw.purpose,
@@ -90,7 +100,8 @@ const OtpCode = {
    */
   async create(input: {
     user_id: string
-    code: string
+    code: string | null
+    external_id?: string
     channel: OtpChannel
     target: string
     purpose: OtpPurpose
@@ -101,6 +112,8 @@ const OtpCode = {
     const raw: OtpCodeRaw = {
       user_id: input.user_id,
       code: input.code,
+      // La RTDB refuse une valeur `undefined` : la clé n'existe que si elle sert.
+      ...(input.external_id ? { external_id: input.external_id } : {}),
       channel: input.channel,
       target: input.target,
       purpose: input.purpose,

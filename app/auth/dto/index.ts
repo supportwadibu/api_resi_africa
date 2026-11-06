@@ -77,7 +77,8 @@ export interface LogoutInput {
 export interface RegisterInitOutput {
   user_id: string
   otp_target: string
-  plain_code: string
+  /** `null` quand le fournisseur garde le code (DUGU Sender, clé de production). */
+  plain_code: string | null
 }
 
 export interface AuthTokensOutput {
