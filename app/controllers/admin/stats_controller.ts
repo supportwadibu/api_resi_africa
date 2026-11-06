@@ -1,9 +1,14 @@
 import {
   GetPlatformStatsUseCase,
   GetRevenueSeriesUseCase,
+  GetStayTypeBreakdownUseCase,
   GetSubscriptionRevenueUseCase,
 } from '#features/platform_stats/use_cases/index'
-import { revenueSeriesValidator, subscriptionRevenueValidator } from '#validators/stats/stats'
+import {
+  revenueSeriesValidator,
+  stayTypeBreakdownValidator,
+  subscriptionRevenueValidator,
+} from '#validators/stats/stats'
 
 import type { HttpContext } from '@adonisjs/core/http'
 
@@ -30,5 +35,14 @@ export default class AdminStatsController {
     })
     const series = await new GetRevenueSeriesUseCase().execute(payload)
     return ctx.response.ok({ data: series })
+  }
+
+  /** GET /admin/stats/stay-types — réservations par type et durée de séjour. */
+  async stayTypes(ctx: HttpContext) {
+    const payload = await ctx.request.validateUsing(stayTypeBreakdownValidator, {
+      data: ctx.request.qs(),
+    })
+    const breakdown = await new GetStayTypeBreakdownUseCase().execute(payload)
+    return ctx.response.ok({ data: breakdown })
   }
 }

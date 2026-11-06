@@ -31,6 +31,9 @@ const throttle = {
   uploads: () => middleware.throttle({ name: 'uploads', max: 30, window: 600, by: 'user' }),
   /** Suppression définitive d'un compte : des milliers d'effacements Firestore et Cloudinary. */
   purge: () => middleware.throttle({ name: 'purge', max: 10, window: 600, by: 'user' }),
+  /** Exports et imports (carnet clients, compte) : chacun lit ou écrit des milliers de documents. */
+  dataTransfer: () =>
+    middleware.throttle({ name: 'data_transfer', max: 10, window: 600, by: 'user' }),
 }
 
 const AuthController = () => import('#controllers/auth/auth_controller')
@@ -52,6 +55,9 @@ const AdminBookingsController = () => import('#controllers/admin/bookings_contro
 const AdminSubscriptionsController = () => import('#controllers/admin/subscriptions_controller')
 const AdminPromoCodesController = () => import('#controllers/admin/promo_codes_controller')
 const AdminReportsController = () => import('#controllers/admin/reports_controller')
+const AdminClientsController = () => import('#controllers/admin/clients_controller')
+const AdminAccountTransferController = () =>
+  import('#controllers/admin/account_transfer_controller')
 const AdminNotificationsController = () => import('#controllers/admin/notifications_controller')
 const DeviceTokenController = () => import('#controllers/auth/device_token_controller')
 const ProprioProfileController = () => import('#controllers/proprio/profile_controller')
@@ -202,6 +208,7 @@ router
             router.get('/', [AdminStatsController, 'overview'])
             router.get('revenue', [AdminStatsController, 'revenue'])
             router.get('subscriptions', [AdminStatsController, 'subscriptions'])
+            router.get('stay-types', [AdminStatsController, 'stayTypes'])
           })
           .prefix('stats')
           .as('stats')
@@ -210,6 +217,14 @@ router
           .group(() => {
             router.get('/', [AdminUsersController, 'index'])
             router.post('/', [AdminUsersController, 'store'])
+            // Avant `:id`. Export et import d'un compte avec ses données.
+            router
+              .post('import', [AdminAccountTransferController, 'import'])
+              .use(throttle.dataTransfer())
+            router.get(':id/export/preview', [AdminAccountTransferController, 'preview'])
+            router
+              .get(':id/export', [AdminAccountTransferController, 'export'])
+              .use(throttle.dataTransfer())
             router.get(':id', [AdminUsersController, 'show'])
             router.patch(':id', [AdminUsersController, 'update'])
             router.delete(':id', [AdminUsersController, 'destroy'])
@@ -236,6 +251,17 @@ router
           })
           .prefix('owners')
           .as('owners')
+
+        // Carnet clients de toute la plateforme, exporté avant une remise à
+        // zéro de la base puis réimporté.
+        router
+          .group(() => {
+            router.get('export', [AdminClientsController, 'export'])
+            router.post('import', [AdminClientsController, 'import'])
+          })
+          .prefix('clients')
+          .as('clients')
+          .use(throttle.dataTransfer())
 
         router
           .group(() => {
