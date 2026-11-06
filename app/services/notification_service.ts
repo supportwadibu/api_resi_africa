@@ -10,6 +10,8 @@ import {
 import { ConsoleMessagingProvider } from '#services/notifications/messaging/console_provider'
 import {
   type DeliveryChannel,
+  type HostedOtpProvider,
+  isHostedOtpProvider,
   MessagingError,
   type MessagingProvider,
 } from '#services/notifications/messaging/types'
@@ -39,6 +41,15 @@ export class NotificationService {
 
   static getMessagingProvider(): MessagingProvider {
     return this.messagingProvider
+  }
+
+  /**
+   * Le fournisseur téléphonique s'il génère et vérifie lui-même ses codes :
+   * l'OTP par téléphone passe alors par lui de bout en bout, `sendOtp` ne
+   * sert plus qu'à l'email.
+   */
+  static getHostedOtpProvider(): HostedOtpProvider | null {
+    return isHostedOtpProvider(this.messagingProvider) ? this.messagingProvider : null
   }
 
   /**
@@ -80,7 +91,7 @@ export class NotificationService {
       return
     }
 
-    const deliveryChannel = this.resolveDeliveryChannel()
+    const deliveryChannel = this.resolvePhoneChannel()
     const text = this.buildPhoneOtp({
       code: input.code,
       purpose: input.purpose,
@@ -129,7 +140,7 @@ export class NotificationService {
    * - sinon, prend le premier canal supporté par le provider
    * - lève si le provider ne supporte aucun canal valide
    */
-  private static resolveDeliveryChannel(): DeliveryChannel {
+  static resolvePhoneChannel(): DeliveryChannel {
     const preferred = (env.get('MESSAGING_PREFERRED_CHANNEL', 'sms') ?? 'sms') as DeliveryChannel
     const supports = this.messagingProvider.supports
 

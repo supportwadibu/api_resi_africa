@@ -198,6 +198,7 @@ export default await Env.create(new URL('../', import.meta.url), {
     'bottom_line',
     'infobip',
     'orange',
+    'dugu_sender',
   ] as const),
   /** Canal préféré quand le user_channel est 'phone'. Défaut: sms. */
   MESSAGING_PREFERRED_CHANNEL: Env.schema.enum.optional(['sms', 'whatsapp'] as const),
@@ -227,4 +228,9 @@ export default await Env.create(new URL('../', import.meta.url), {
   BOTTOMLINE_BASE_URL: Env.schema.string.optional(),
   BOTTOMLINE_API_KEY: Env.schema.string.optional(),
   BOTTOMLINE_WHATSAPP_FROM: Env.schema.string.optional(),
+
+  // DUGU Sender (OTP SMS / WhatsApp générés et vérifiés par DUGU)
+  DUGU_API_KEY: Env.schema.string.optional(),
+  DUGU_PROJECT_ID: Env.schema.string.optional(),
+  DUGU_BASE_URL: Env.schema.string.optional(),
 })
