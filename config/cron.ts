@@ -42,6 +42,12 @@ const cronConfig = {
     purgeSessions: env.get('CRON_PURGE_SESSIONS_SCHEDULE', '0 2 * * *'),
 
     /**
+     * Libération des gains de parrainage échus.
+     * Tous les jours à 01:00.
+     */
+    sponsorshipRewards: env.get('CRON_SPONSORSHIP_REWARDS_SCHEDULE', '0 1 * * *'),
+
+    /**
      * Purge des traces d'audit échues dans Firestore.
      * Tous les jours à 02:30.
      */

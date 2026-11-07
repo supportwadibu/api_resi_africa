@@ -53,7 +53,20 @@ export function registerCronTasks(scheduler: CronScheduler): void {
     },
   })
 
-  // 5. Purge des traces d'audit échues
+  // 5. Libération des gains de parrainage sortis du délai d'attente. Sans
+  // elle, un gain échu reste bloqué tant que le parrain n'ouvre pas son
+  // écran Parrainage — seul autre déclencheur de la libération.
+  scheduler.register({
+    name: 'sponsorship-rewards',
+    cronExpression: cronConfig.schedules.sponsorshipRewards,
+    handler: async () => {
+      const { ReleaseSponsorshipRewardsUseCase } =
+        await import('#features/sponsorships/use_cases/release_sponsorship_rewards.use_case')
+      return new ReleaseSponsorshipRewardsUseCase().execute()
+    },
+  })
+
+  // 6. Purge des traces d'audit échues
   scheduler.register({
     name: 'purge-audit-logs',
     cronExpression: cronConfig.schedules.purgeAuditLogs,
