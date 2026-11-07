@@ -1,0 +1,138 @@
+# Blueprint Render de l'API RESI (Dashboard > New > Blueprint, sur ce dépôt).
+#
+# Les valeurs non secrètes sont posées ici ; les secrets sont soit générés par
+# Render (`generateValue`), soit demandés à la création du blueprint
+# (`sync: false`) et jamais écrits dans ce fichier. Modèle commenté :
+# `.env.production.example`.
+
+services:
+  - type: web
+    name: resi-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # Région Render la plus proche d'Abidjan.
+    region: frankfurt
+    # Pas d'offre gratuite : elle met l'instance en veille après 15 minutes,
+    # ce qui arrête l'ordonnanceur interne et impose ~1 minute de réveil au
+    # premier appel du mobile. 512 Mo suffisent à Node, mais Chromium (rapports
+    # PDF) en consomme autant : passer à `standard` si les rapports tombent
+    # en erreur mémoire.
+    plan: starter
+    # Une seule instance : chaque instance lance son propre node-cron, et deux
+    # instances enverraient chaque relance en double.
+    numInstances: 1
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: TZ
+        value: UTC
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: '3333'
+      - key: LOG_LEVEL
+        value: info
+
+      - key: APP_KEY
+        generateValue: true
+      - key: APP_URL
+        value: https://api.resi.africa
+      - key: APP_NAME
+        value: RESI
+      - key: SITE_URL
+        value: https://resi.africa
+
+      - key: CORS_ALLOWED_ORIGINS
+        value: ''
+      - key: TRUST_PROXY
+        value: '1'
+      - key: AUDIT_LOG_RETENTION_DAYS
+        value: '180'
+      - key: SESSION_DRIVER
+        value: cookie
+
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_TTL
+        value: 15m
+      - key: JWT_REFRESH_TTL
+        value: 30d
+
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      - key: FIREBASE_DATABASE_URL
+        value: https://resi-5c32a-default-rtdb.firebaseio.com
+      - key: FIREBASE_PROJECT_ID
+        value: resi-5c32a
+
+      - key: GOOGLE_CLIENT_IDS
+        value: 985472923092-22afjagqr55i117gtq2cl6hp0n2mma75.apps.googleusercontent.com
+
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_DOCUMENTS_FOLDER
+        value: resi/owner-documents
+      - key: CLOUDINARY_PROPERTIES_FOLDER
+        value: resi/properties
+
+      - key: CRON_SECRET
+        generateValue: true
+      - key: ENABLE_CRON_JOBS
+        value: 'true'
+      - key: CRON_TIMEZONE
+        value: Africa/Abidjan
+
+      - key: BOOTSTRAP_ADMINS
+        sync: false
+
+      - key: WAVE_API_KEY
+        sync: false
+      - key: WAVE_BASE_URL
+        value: https://api.wave.com
+      - key: WAVE_WEBHOOK_SECRET
+        sync: false
+      - key: WAVE_API_SIGNING_SECRET
+        sync: false
+      - key: WAVE_CURRENCY
+        value: XOF
+      - key: WAVE_TEST_ENABLED
+        value: 'false'
+
+      - key: OTP_RATE_LIMIT_WINDOW_MINUTES
+        value: '15'
+      - key: OTP_RATE_LIMIT_MAX
+        value: '5'
+
+      - key: MAIL_PROVIDER
+        value: resend
+      - key: MAIL_FROM
+        value: Resi <no-reply@resi.africa>
+      - key: MAIL_REPLY_TO
+        value: support@resi.africa
+      - key: MAIL_TEMPLATE_OTP_VERIFICATION
+        value: otp_email_verification
+      - key: MAIL_TEMPLATE_EMAIL_VERIFIED
+        value: email_verified
+      - key: MAIL_APP_URL
+        value: https://resi.africa
+      - key: MAIL_SUPPORT_EMAIL
+        value: support@resi.africa
+      - key: RESEND_API_KEY
+        sync: false
+
+      - key: MESSAGING_PROVIDER
+        value: dugu_sender
+      - key: MESSAGING_PREFERRED_CHANNEL
+        value: whatsapp
+      - key: DUGU_API_KEY
+        sync: false
+      - key: DUGU_PROJECT_ID
+        sync: false
