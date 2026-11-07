@@ -42,10 +42,10 @@ export function resolvePlanAccess(
   if (!subscription) return null
   if (subscription.end_date.getTime() <= now.getTime()) return null
 
-  // L'essai fait découvrir le forfait complet.
-  if (subscription.status === 'trial') return 'pro_plus'
-  if (subscription.status !== 'active') return null
-  if (subscription.is_trial) return 'pro_plus'
+  // L'essai ouvre le palier choisi par le propriétaire. Un essai ouvert avant
+  // ce choix ne porte aucun palier : `readPlanTier` le lit `pro_plus`, le
+  // forfait complet qu'on lui avait promis jusqu'à son terme.
+  if (subscription.status !== 'trial' && subscription.status !== 'active') return null
 
   return readPlanTier(subscription.plan_tier)
 }

@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { readPlanTier, type PlanTier } from '#features/plans/plan_tier'
+import { readPlanTier, type PaidPlanTier, type PlanTier } from '#features/plans/plan_tier'
 import Subscription, { type SubscriptionRecord } from '#models/subscription'
 import SubscriptionEvent from '#models/subscription_event'
 import { type SubscriptionStatus } from '#utils/enums/subscription_status'
@@ -15,7 +15,9 @@ export class SubscriptionRepository {
       is_trial: doc.is_trial,
       status: doc.status,
       amount: Number(doc.amount),
-      plan_tier: doc.is_trial ? 'pro_plus' : readPlanTier(doc.plan_tier),
+      // Un essai ouvert avant le choix du palier n'en porte aucun :
+      // `readPlanTier` le lit `pro_plus`, le forfait complet qu'il ouvrait.
+      plan_tier: readPlanTier(doc.plan_tier),
       start_date: doc.start_date,
       end_date: doc.end_date,
       trial_ends_at: doc.trial_ends_at ?? null,
@@ -75,6 +77,12 @@ export class SubscriptionRepository {
     return doc ? SubscriptionRepository.toDto(doc) : null
   }
 
+  /** Tout l'historique d'abonnements de l'owner, le plus récent d'abord. */
+  async findHistoryByUser(userId: string): Promise<SubscriptionDto[]> {
+    const docs = await Subscription.findByUser(userId)
+    return docs.map((doc) => SubscriptionRepository.toDto(doc))
+  }
+
   /** Abonnements vivants de l'owner, bruts : voir `Subscription.findLiveByUser`. */
   async findLiveByUser(userId: string) {
     return Subscription.findLiveByUser(userId)
@@ -115,8 +123,12 @@ export class SubscriptionRepository {
   }
 
   /** Ouvre l'essai une seule fois ; `null` s'il existait déjà. */
-  async startTrialOnce(userId: string, days: number): Promise<SubscriptionDto | null> {
-    const doc = await Subscription.startTrialOnce(userId, days)
+  async startTrialOnce(
+    userId: string,
+    days: number,
+    tier: PaidPlanTier
+  ): Promise<SubscriptionDto | null> {
+    const doc = await Subscription.startTrialOnce(userId, days, tier)
     return doc ? SubscriptionRepository.toDto(doc) : null
   }
 

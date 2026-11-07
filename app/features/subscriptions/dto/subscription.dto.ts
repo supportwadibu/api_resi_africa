@@ -1,5 +1,5 @@
 import type { SubscriptionStatus } from '#utils/enums/subscription_status'
-import type { PlanTier } from '#features/plans/plan_tier'
+import type { PaidPlanTier, PlanTier } from '#features/plans/plan_tier'
 import type { CancellationMode } from '#features/subscriptions/cancellation_policy'
 
 /**
@@ -72,6 +72,8 @@ export interface SubscriptionOptionsDto {
 
 export interface StartTrialInput {
   user_id: string
+  /** Palier choisi par le propriétaire pour son essai. */
+  tier: PaidPlanTier
   duration_days?: number
 }
 

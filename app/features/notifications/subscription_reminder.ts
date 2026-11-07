@@ -1,3 +1,5 @@
+import { planTierLabel, readPlanTier } from '#features/plans/plan_tier'
+
 import type { PushMessage } from './push_delivery.ts'
 
 /**
@@ -72,11 +74,17 @@ const DATE = new Intl.DateTimeFormat('fr-FR', {
 })
 
 export function buildReminderMessage(
-  subscription: { id: string; is_trial: boolean; end_date: Date },
+  subscription: { id: string; is_trial: boolean; plan_tier?: string | null; end_date: Date },
   now: Date
 ): PushMessage {
   const left = Math.max(0, daysLeft(subscription.end_date, now))
-  const subject = subscription.is_trial ? 'Votre essai gratuit' : 'Votre abonnement'
+  // Un essai ouvert avant le choix du forfait n'en porte aucun : il garde
+  // l'intitulé générique plutôt qu'un nom de forfait deviné.
+  const subject = !subscription.is_trial
+    ? 'Votre abonnement'
+    : subscription.plan_tier
+      ? `Votre essai ${planTierLabel(readPlanTier(subscription.plan_tier))}`
+      : 'Votre essai gratuit'
   const verb = subscription.is_trial ? 'se termine' : 'expire'
 
   const when = left === 0 ? 'aujourd’hui' : left === 1 ? 'demain' : `dans ${left} jours`

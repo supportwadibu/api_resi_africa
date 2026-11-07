@@ -37,11 +37,20 @@ test.group('resolvePlanAccess', () => {
     )
   })
 
-  test("l'essai ouvre le forfait complet", ({ assert }) => {
+  test('un essai sans palier (ouvert avant le choix du plan) ouvre le forfait complet', ({
+    assert,
+  }) => {
     assert.equal(
       resolvePlanAccess({ status: 'trial', is_trial: true, plan_tier: null, end_date: LATER }, NOW),
       'pro_plus'
     )
+  })
+
+  test("l'essai ouvre le palier choisi par le propriétaire", ({ assert }) => {
+    const base = { status: 'trial' as const, is_trial: true, end_date: LATER }
+
+    assert.equal(resolvePlanAccess({ ...base, plan_tier: 'pro' }, NOW), 'pro')
+    assert.equal(resolvePlanAccess({ ...base, plan_tier: 'pro_plus' }, NOW), 'pro_plus')
   })
 
   test("un abonnement échu n'ouvre plus rien, même avant le passage du cron", ({ assert }) => {

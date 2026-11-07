@@ -353,6 +353,11 @@ router
         // Ouvertes même à un compte suspendu : ce qu'il faut pour souscrire,
         // déposer son dossier et joindre le support.
         router.get('subscription', [ProprioSubscriptionController, 'show']).as('subscription')
+        // Le quota général du groupe suffit : l'essai ne s'ouvre qu'une fois
+        // par compte (clé `trial_<id>`), un rejeu n'écrit rien.
+        router
+          .post('subscription/trial', [ProprioSubscriptionController, 'startTrial'])
+          .as('subscription_trial')
         router
           .post('subscription/checkout', [ProprioSubscriptionPaymentController, 'checkout'])
           .as('subscription_checkout')

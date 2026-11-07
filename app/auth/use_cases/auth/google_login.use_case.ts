@@ -6,10 +6,8 @@ import Role from '#models/role'
 import User, { type UserEntity } from '#models/user'
 import GoogleAuthService, { type GoogleIdentity } from '#services/google_auth_service'
 import { AuthError } from '#utils/auth_error'
-import logger from '@adonisjs/core/services/logger'
 
 import { AttachSponsorUseCase } from '../../../features/sponsorships/use_cases/attach_sponsor.use_case.ts'
-import { StartTrialForOwnerUseCase } from '../../../features/subscriptions/use_cases/start_trial_for_owner.use_case.ts'
 
 /**
  * Rôle d'un compte créé par Google.
@@ -166,32 +164,12 @@ export class GoogleLoginUseCase {
       device: input.device,
     })
 
-    // Le compte naît `owner_status: 'pending'` : inscrit, dossier non validé.
-    // L'essai démarre malgré tout, pour que le propriétaire puisse découvrir
-    // l'application pendant l'examen de sa pièce d'identité. Un client n'a
-    // pas d'abonnement : pas d'essai.
-    if (roleName === 'proprio') await this.startTrial(user._id)
+    // Pas d'essai ici : le propriétaire choisit le palier qu'il essaie, depuis
+    // l'application (`StartTrialForOwnerUseCase`).
     await new AttachSponsorUseCase().atSignup(user._id, input.sponsorship_code)
 
     const tokens = await issueTokens(user, input.device)
     return { ...tokens, is_new_user: true }
-  }
-
-  /**
-   * Ouvre l'essai gratuit du nouveau propriétaire.
-   *
-   * Volontairement non bloquant : l'essai est un avantage commercial, pas une
-   * condition d'inscription. Le faire échouer ici priverait l'utilisateur de
-   * son compte alors qu'il vient de s'authentifier avec succès — et le use case
-   * refuse déjà les doublons, ce qui rend l'appel sûr à rejouer. La commande
-   * `subscriptions:expire-trials` rattrape les essais manquants.
-   */
-  private async startTrial(userId: string): Promise<void> {
-    try {
-      await new StartTrialForOwnerUseCase().execute({ user_id: userId })
-    } catch (error) {
-      logger.error({ err: error, user_id: userId }, "Échec du démarrage de l'essai gratuit")
-    }
   }
 
   /** Refuse les comptes désactivés, quel que soit le chemin d'entrée. */
