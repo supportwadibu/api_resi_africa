@@ -196,6 +196,11 @@ export class UserRepository {
     await DeviceToken.removeByIds(tokens.map((token) => token._id))
   }
 
+  /** Reporte l'effacement d'un compte dont la purge est bloquée. */
+  async postponePurge(id: string, at: Date): Promise<void> {
+    await User.findByIdAndUpdate(id, { purge_scheduled_at: at })
+  }
+
   /** Comptes dont la suppression demandée par l'utilisateur est échue. */
   async findDuePurges(now: Date, limit: number): Promise<UserRecord[]> {
     return User.findDuePurges(now, limit)
