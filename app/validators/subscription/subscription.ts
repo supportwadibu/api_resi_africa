@@ -2,6 +2,7 @@ import { SUBSCRIPTION_STATUSES } from '#utils/enums/subscription_status'
 
 import vine from '@vinejs/vine'
 
+import { PAID_PLAN_TIERS } from '#features/plans/plan_tier'
 import { MAX_EXTENSION_DAYS } from '#features/subscriptions/subscription_extension'
 
 export const subscribeToPlanValidator = vine.compile(
@@ -21,6 +22,13 @@ export const subscribeToPlanValidator = vine.compile(
 export const subscriptionCheckoutValidator = vine.compile(
   vine.object({
     plan_id: vine.string().trim().minLength(1).maxLength(128),
+  })
+)
+
+/** POST /proprio/subscription/trial — palier choisi pour l'essai gratuit. */
+export const startTrialValidator = vine.compile(
+  vine.object({
+    tier: vine.enum(PAID_PLAN_TIERS),
   })
 )
 

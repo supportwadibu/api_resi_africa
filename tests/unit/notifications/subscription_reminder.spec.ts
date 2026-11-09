@@ -80,6 +80,20 @@ test.group('buildReminderMessage', () => {
     assert.equal(message.data?.days_left, '0')
   })
 
+  test('un essai nomme le forfait choisi', ({ assert }) => {
+    const end = d('2026-10-03T12:00:00Z')
+
+    assert.equal(
+      buildReminderMessage({ id: 's', is_trial: true, plan_tier: 'pro', end_date: end }, now).title,
+      'Votre essai RESI Pro se termine dans 3 jours'
+    )
+    assert.equal(
+      buildReminderMessage({ id: 's', is_trial: true, plan_tier: 'pro_plus', end_date: end }, now)
+        .title,
+      'Votre essai RESI Pro+ se termine dans 3 jours'
+    )
+  })
+
   test('la veille s’écrit « demain »', ({ assert }) => {
     const message = buildReminderMessage(
       { id: 'sub-3', is_trial: false, end_date: d('2026-10-01T10:00:00Z') },

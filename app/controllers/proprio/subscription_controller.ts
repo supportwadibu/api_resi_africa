@@ -4,8 +4,11 @@ import OwnerRepository from '../../features/owners/repositories/owner_repository
 import { legacyPlanAccess } from '../../features/subscriptions/plan_access.ts'
 import {
   GetCurrentSubscriptionUseCase,
+  GetTrialStatusUseCase,
   ResolvePlanAccessUseCase,
+  StartTrialForOwnerUseCase,
 } from '../../features/subscriptions/use_cases/index.ts'
+import { startTrialValidator } from '#validators/subscription/subscription'
 
 /** Millisecondes dans une journée. */
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -31,15 +34,14 @@ export default class ProprioSubscriptionController {
     // Le repository est appelé directement plutôt que `FindOwnerUseCase`, qui
     // lève un 404 : ici l'absence de fiche propriétaire n'est pas une erreur,
     // elle laisse simplement le statut à `null`.
-    // Résolu d'abord : il ouvre l'essai d'un propriétaire qui n'en a jamais
-    // eu, et l'abonnement relu ensuite doit le montrer. Même décision que le
-    // middleware `plan()` : l'écran ne peut pas annoncer un accès que l'API
-    // refuserait.
-    const planAccess = await new ResolvePlanAccessUseCase().execute(userId)
-    const [subscription, owner] = await Promise.all([
+    // Même décision que le middleware `plan()` : l'écran ne peut pas annoncer
+    // un accès que l'API refuserait.
+    const [planAccess, subscription, owner] = await Promise.all([
+      new ResolvePlanAccessUseCase().execute(userId),
       new GetCurrentSubscriptionUseCase().execute(userId),
       new OwnerRepository().findById(userId),
     ])
+    const trial = await new GetTrialStatusUseCase().execute(userId, owner?.owner_status ?? null)
 
     const daysRemaining = subscription ? this.daysUntil(subscription.end_date) : 0
 
@@ -72,8 +74,29 @@ export default class ProprioSubscriptionController {
          * bien avant que son titulaire ait quoi que ce soit à examiner.
          */
         profile_submitted: owner?.profile_submitted ?? false,
+        /**
+         * Rien essayé ni souscrit : l'application retient le propriétaire sur
+         * l'écran de choix du palier d'essai.
+         */
+        trial_choice_required: trial.trial_choice_required,
+        /** Palier de l'essai terminé, sans abonnement depuis ; `null` sinon. */
+        ended_trial_tier: trial.ended_trial_tier,
       },
     })
+  }
+
+  /**
+   * POST /proprio/subscription/trial
+   *
+   * Ouvre l'essai gratuit sur le palier choisi (`pro` ou `pro_plus`).
+   */
+  async startTrial(ctx: HttpContext) {
+    const { tier } = await ctx.request.validateUsing(startTrialValidator)
+    const subscription = await new StartTrialForOwnerUseCase().execute({
+      user_id: ctx.authUser?.id ?? '',
+      tier,
+    })
+    return ctx.response.created({ data: subscription })
   }
 
   /**

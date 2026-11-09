@@ -53,6 +53,20 @@ export interface LoginInput {
  * `id_token` est l'ID token OIDC obtenu côté mobile — jamais l'access token,
  * qui n'est pas vérifiable hors appel réseau et ne prouve pas l'identité.
  */
+/** Demande d'un code de réinitialisation du mot de passe. */
+export interface PasswordForgotInput {
+  identifier: string
+  device: DeviceContext
+}
+
+/** Réinitialisation du mot de passe avec le code reçu. */
+export interface PasswordResetInput {
+  identifier: string
+  code: string
+  password: string
+  device: DeviceContext
+}
+
 export interface GoogleLoginInput {
   id_token: string
   device: DeviceContext
@@ -78,6 +92,18 @@ export interface RegisterInitOutput {
   user_id: string
   otp_target: string
   /** `null` quand le fournisseur garde le code (DUGU Sender, clé de production). */
+  plain_code: string | null
+}
+
+/**
+ * Réponse à une demande de code. Identique que le compte existe ou non :
+ * la route est publique, et une réponse différente permettrait de dresser
+ * la liste des numéros inscrits.
+ */
+export interface PasswordForgotOutput {
+  /** Canal d'envoi déduit de l'identifiant. */
+  channel: OtpChannel
+  /** `null` quand aucun code n'est parti, ou que le fournisseur le garde. */
   plain_code: string | null
 }
 

@@ -18,12 +18,12 @@ les lectures unitaires `{ data }`, les erreurs `{ code, message }`.
 | GET | `users/:id/export?sections=a,b` | Compte (mot de passe chiffré compris) et sections choisies, format `resi.account` v1. Documents bruts sous leur identifiant d'origine, horodatages marqués `$timestamp`. Plan : `app/features/users/account_transfer.ts` |
 | POST | `users/import` | Multipart, champ `file` (JSON, 20 Mo). Compte présent (identifiant, e-mail, téléphone) conservé et complété, sinon recréé ; documents absents ajoutés, rattachement réécrit vers le compte d'arrivée ; documents d'un autre compte écartés. Rapport par section : `created`, `existing`, `rejected` |
 | GET | `stats/revenue?months=12` | Série mensuelle du revenu (1 à 24 mois) |
-| GET | `users?role&is_active&is_verified&deleted&q&page&per_page` | Comptes, tous rôles. `deleted=true` : comptes supprimés seulement (`false` n'est pas filtrable) ; chaque compte porte `deleted_at` |
+| GET | `users?role&is_active&is_verified&deleted&q&page&per_page` | Comptes, tous rôles. `deleted=true` : comptes supprimés seulement (`false` n'est pas filtrable) ; chaque compte porte `deleted_at`, et `deletion_requested_by_user`, `purge_scheduled_at`, `deletion_reason` quand son titulaire a demandé lui-même la suppression (`DELETE /auth/account`, purge automatique à l'échéance par la tâche `purge-deleted-accounts`) |
 | POST | `users` | Création, tous rôles : `role`, `full_name`, `email` et/ou `phone`, `password` initial ; `owner_id` pour un `gerant`. Compte vérifié d'office, réponse `201 { data }` |
 | GET | `users/:id` | Fiche : sessions actives, bloc `owner` (proprio), `manager_assignment` (gérant) |
 | PATCH | `users/:id` | `full_name`, `email`, `phone`, `is_active`. `409 user_deleted` sur un compte supprimé |
 | DELETE | `users/:id` | Suppression douce : désactivé, marqué supprimé, sessions fermées, restaurable. `409 cannot_delete_self`, `user_already_deleted` |
-| POST | `users/:id/restore` | Restaure un compte supprimé dans son état d'avant (`is_active` compris). `409 user_not_deleted` |
+| POST | `users/:id/restore` | Restaure un compte supprimé dans son état d'avant (`is_active` compris) ; annule une suppression demandée par l'utilisateur et sa purge programmée. `409 user_not_deleted` |
 | GET | `users/:id/purge` | Aperçu de la suppression définitive : `items` effacés, `kept` (réservations prises comme client, conservées au nom figé), `warnings`. Compte supprimé seulement |
 | DELETE | `users/:id/purge` | Suppression définitive en cascade (plan dans `app/features/users/purge_plan.ts`) et fichiers Cloudinary ; rejouable après une panne. Compte supprimé seulement, limite de débit dédiée |
 | GET | `owners?status` · `owners/pending` | Propriétaires par statut de validation |

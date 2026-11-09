@@ -3,6 +3,8 @@ import {
   GoogleLoginUseCase,
   LoginUseCase,
   LogoutUseCase,
+  PasswordForgotUseCase,
+  PasswordResetUseCase,
   RefreshTokensUseCase,
   RegisterInitUseCase,
   RegisterResendUseCase,
@@ -13,6 +15,8 @@ import {
   googleLoginValidator,
   loginValidator,
   logoutValidator,
+  passwordForgotValidator,
+  passwordResetValidator,
   refreshValidator,
   registerInitValidator,
   registerResendValidator,
@@ -66,6 +70,38 @@ export default class AuthController {
     const payload = await ctx.request.validateUsing(registerVerifyValidator)
     const device = getDeviceContext(ctx)
     const tokens = await new RegisterVerifyUseCase().execute({ ...payload, device })
+    return ctx.response.ok(tokens)
+  }
+
+  /**
+   * POST /auth/password/forgot — envoie un code de réinitialisation.
+   * Même réponse que le compte existe ou non (voir `PasswordForgotUseCase`).
+   */
+  async passwordForgot(ctx: HttpContext) {
+    const payload = await ctx.request.validateUsing(passwordForgotValidator)
+    const device = getDeviceContext(ctx)
+    // Hors production seulement : attendre l'envoi pour rendre le code de test.
+    const result = await new PasswordForgotUseCase().execute(
+      { ...payload, device },
+      { waitForDelivery: !app.inProduction }
+    )
+    return ctx.response.ok({
+      message: 'Si un compte correspond, un code de réinitialisation vient d’être envoyé.',
+      channel: result.channel,
+      ...(app.inProduction ? {} : { dev_otp_code: result.plain_code }),
+    })
+  }
+
+  /** POST /auth/password/reset — nouveau mot de passe, puis session ouverte. */
+  async passwordReset(ctx: HttpContext) {
+    const payload = await ctx.request.validateUsing(passwordResetValidator)
+    const device = getDeviceContext(ctx)
+    const tokens = await new PasswordResetUseCase().execute({
+      identifier: payload.identifier,
+      code: payload.code,
+      password: payload.password,
+      device,
+    })
     return ctx.response.ok(tokens)
   }
 

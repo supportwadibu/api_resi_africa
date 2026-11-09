@@ -1,4 +1,6 @@
+import { monthWindow } from '#features/bookings/booking_stats'
 import { stayTypeOccupancyDays, type StayType } from '#features/bookings/stay_type'
+import { DomainError } from '#utils/domain_error'
 
 /**
  * Répartition des réservations par type de séjour, pour l'équipe RESI.
@@ -37,11 +39,67 @@ export interface StayBucketDto {
 }
 
 export interface StayTypeBreakdownDto {
-  months: number
+  /** Nombre de mois glissants ; `null` quand la période a été choisie par dates. */
+  months: number | null
   from: Date
+  /** Dernier jour compté, inclus ; `null` pour les mois glissants (jusqu'à maintenant). */
+  to: Date | null
   owner_id: string | null
   total_bookings: number
   buckets: StayBucketDto[]
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Deux ans au plus, comme les mois glissants : chaque jour ajouté élargit la
+ * lecture des réservations, faite en mémoire.
+ */
+const MAX_PERIOD_DAYS = 731
+
+export interface StayBreakdownWindow {
+  from: Date
+  /** Borne exclue : lendemain du dernier jour compté. `null` : sans borne. */
+  until: Date | null
+  months: number | null
+}
+
+/**
+ * Période de la répartition : les `months` derniers mois, mois en cours
+ * compris, ou une période libre entre deux dates.
+ *
+ * Les dates sont des jours entiers, en UTC — l'heure d'Abidjan. Le dernier
+ * jour est inclus ; sans fin, la période court jusqu'à aujourd'hui.
+ */
+export function stayBreakdownWindow(
+  input: { months?: number; from?: Date; to?: Date },
+  now: Date = new Date()
+): StayBreakdownWindow {
+  if (!input.from) {
+    const months = Math.min(24, Math.max(1, input.months ?? 12))
+    return { from: monthWindow(now, -(months - 1)).from, until: null, months }
+  }
+
+  const from = startOfDay(input.from)
+  const last = startOfDay(input.to ?? now)
+  if (last.getTime() < from.getTime()) {
+    throw new DomainError(
+      'invalid_period',
+      'La date de fin est antérieure à la date de début.',
+      422
+    )
+  }
+
+  const until = new Date(last.getTime() + DAY_MS)
+  if ((until.getTime() - from.getTime()) / DAY_MS > MAX_PERIOD_DAYS) {
+    throw new DomainError('period_too_long', 'La période ne peut pas dépasser deux ans.', 422)
+  }
+
+  return { from, until, months: null }
+}
+
+function startOfDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
 }
 
 export function stayBucketOf(booking: Pick<StayBreakdownBooking, 'stay_type' | 'days_count'>) {

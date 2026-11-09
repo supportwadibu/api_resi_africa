@@ -60,6 +60,7 @@ const AdminAccountTransferController = () =>
   import('#controllers/admin/account_transfer_controller')
 const AdminNotificationsController = () => import('#controllers/admin/notifications_controller')
 const DeviceTokenController = () => import('#controllers/auth/device_token_controller')
+const AccountController = () => import('#controllers/auth/account_controller')
 const ProprioProfileController = () => import('#controllers/proprio/profile_controller')
 const ProprioPropertyController = () => import('#controllers/proprio/property_controller')
 const ProprioPropertyImageController = () =>
@@ -109,6 +110,11 @@ router
         router.post('login', [AuthController, 'login'])
         router.post('google', [AuthController, 'google'])
         router.post('refresh', [AuthController, 'refresh'])
+        // Mot de passe oublié : code par WhatsApp (DUGU) ou e-mail, puis
+        // nouveau mot de passe. L'envoi a sa propre limite, comme l'OTP
+        // d'inscription.
+        router.post('password/forgot', [AuthController, 'passwordForgot']).use(throttle.otpSend())
+        router.post('password/reset', [AuthController, 'passwordReset'])
       })
       .prefix('auth')
       .as('auth')
@@ -121,6 +127,9 @@ router
         // Appareils recevant les notifications push, tous rôles confondus.
         router.post('device-tokens', [DeviceTokenController, 'store'])
         router.delete('device-tokens', [DeviceTokenController, 'destroy'])
+        // Suppression du compte par son titulaire, tous rôles sauf admin.
+        router.get('account/deletion', [AccountController, 'deletionPreview'])
+        router.delete('account', [AccountController, 'destroy']).use(throttle.purge())
       })
       .prefix('auth')
       .as('auth.protected')
@@ -353,6 +362,11 @@ router
         // Ouvertes même à un compte suspendu : ce qu'il faut pour souscrire,
         // déposer son dossier et joindre le support.
         router.get('subscription', [ProprioSubscriptionController, 'show']).as('subscription')
+        // Le quota général du groupe suffit : l'essai ne s'ouvre qu'une fois
+        // par compte (clé `trial_<id>`), un rejeu n'écrit rien.
+        router
+          .post('subscription/trial', [ProprioSubscriptionController, 'startTrial'])
+          .as('subscription_trial')
         router
           .post('subscription/checkout', [ProprioSubscriptionPaymentController, 'checkout'])
           .as('subscription_checkout')
@@ -780,6 +794,11 @@ router
         router.route('sponsorship-rewards', ['GET', 'POST'], [CronController, 'sponsorshipRewards'])
         router.route('purge-sessions', ['GET', 'POST'], [CronController, 'purgeSessions'])
         router.route('purge-audit-logs', ['GET', 'POST'], [CronController, 'purgeAuditLogs'])
+        router.route(
+          'purge-deleted-accounts',
+          ['GET', 'POST'],
+          [CronController, 'purgeDeletedAccounts']
+        )
         // Ancienne sonde, gardée pour un moniteur déjà configuré avec le
         // secret. La sonde publique est `/health`.
         router.get('health', [CronController, 'health'])

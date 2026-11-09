@@ -61,6 +61,7 @@ export class SendSubscriptionRemindersUseCase {
         {
           id: subscription._id,
           is_trial: subscription.is_trial,
+          plan_tier: subscription.plan_tier,
           end_date: subscription.end_date,
         },
         now

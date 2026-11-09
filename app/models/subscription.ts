@@ -10,7 +10,7 @@ import {
 import { ACTIVE_SUBSCRIPTION_STATUSES } from '#utils/enums/subscription_status'
 
 import type { SubscriptionStatus } from '#utils/enums/subscription_status'
-import type { PlanTier } from '#features/plans/plan_tier'
+import type { PaidPlanTier, PlanTier } from '#features/plans/plan_tier'
 
 export interface SubscriptionDocument {
   user_id: string
@@ -21,8 +21,9 @@ export interface SubscriptionDocument {
   /**
    * Palier copié du plan à la souscription, jamais recalculé : repasser un
    * plan de `full` à `basic` ne doit pas retirer des fonctions à qui a payé
-   * l'accès complet. Absent sur l'historique et sur les essais — lu via
-   * `resolvePlanAccess`.
+   * l'accès complet. Sur un essai, le palier choisi par le propriétaire.
+   * Absent sur l'historique et sur les essais ouverts avant ce choix — lu
+   * via `readPlanTier`, qui les tient pour `pro_plus`.
    */
   plan_tier?: PlanTier | null
 
@@ -80,13 +81,17 @@ const Subscription = {
    *
    * L'identifiant du document est dérivé de l'utilisateur (`trial_<id>`) et
    * écrit par `create`, qui échoue si le document existe : deux ouvertures
-   * concurrentes — l'inscription et le premier appel de l'application, par
-   * exemple — ne produisent qu'un essai. Firestore n'ayant pas d'index unique,
-   * c'est la clé qui porte l'unicité, comme pour `roles`.
+   * concurrentes — deux choix de palier envoyés coup sur coup, par exemple —
+   * ne produisent qu'un essai. Firestore n'ayant pas d'index unique, c'est la
+   * clé qui porte l'unicité, comme pour `roles`.
    *
    * `null` si l'essai existait déjà.
    */
-  async startTrialOnce(userId: string, days: number): Promise<SubscriptionRecord | null> {
+  async startTrialOnce(
+    userId: string,
+    days: number,
+    tier: PaidPlanTier
+  ): Promise<SubscriptionRecord | null> {
     const now = new Date()
     const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
     const payload: SubscriptionDocument = {
@@ -95,7 +100,8 @@ const Subscription = {
       is_trial: true,
       status: 'trial',
       amount: 0,
-      plan_tier: null,
+      // On essaie un palier, pas une durée : aucun `plan_id`.
+      plan_tier: tier,
       start_date: now,
       end_date: end,
       trial_ends_at: end,

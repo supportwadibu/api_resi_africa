@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import {
   buildStayBuckets,
+  stayBreakdownWindow,
   stayBucketOf,
   type StayBreakdownBooking,
 } from '#features/platform_stats/stay_type_breakdown'
@@ -62,5 +63,56 @@ test.group('buildStayBuckets', () => {
     assert.equal(byKey.seven_to_twenty_nine_days.occupancy_days, 22)
     assert.equal(byKey.passage.occupancy_days, 0.25)
     assert.equal(byKey.half_day.occupancy_days, 0.5)
+  })
+})
+
+test.group('stayBreakdownWindow', () => {
+  const now = new Date('2026-11-07T15:00:00Z')
+
+  test('sans dates : les 12 derniers mois, mois en cours compris', ({ assert }) => {
+    const window = stayBreakdownWindow({}, now)
+
+    assert.equal(window.from.toISOString(), '2025-12-01T00:00:00.000Z')
+    assert.isNull(window.until)
+    assert.equal(window.months, 12)
+  })
+
+  test('entre deux dates : du premier jour au dernier, inclus', ({ assert }) => {
+    const window = stayBreakdownWindow(
+      { from: new Date('2026-03-01T00:00:00Z'), to: new Date('2026-03-31T00:00:00Z') },
+      now
+    )
+
+    assert.equal(window.from.toISOString(), '2026-03-01T00:00:00.000Z')
+    assert.equal(window.until?.toISOString(), '2026-04-01T00:00:00.000Z')
+    assert.isNull(window.months)
+  })
+
+  test('début seul : jusqu’à aujourd’hui inclus', ({ assert }) => {
+    const window = stayBreakdownWindow({ from: new Date('2026-10-15T00:00:00Z') }, now)
+
+    assert.equal(window.until?.toISOString(), '2026-11-08T00:00:00.000Z')
+  })
+
+  test('refuse une fin antérieure au début', ({ assert }) => {
+    assert.throws(
+      () =>
+        stayBreakdownWindow(
+          { from: new Date('2026-05-01T00:00:00Z'), to: new Date('2026-04-30T00:00:00Z') },
+          now
+        ),
+      /antérieure/
+    )
+  })
+
+  test('refuse une période de plus de deux ans', ({ assert }) => {
+    assert.throws(
+      () =>
+        stayBreakdownWindow(
+          { from: new Date('2024-01-01T00:00:00Z'), to: new Date('2026-01-02T00:00:00Z') },
+          now
+        ),
+      /deux ans/
+    )
   })
 })

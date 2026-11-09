@@ -1,6 +1,7 @@
 import { SCOPE_READ_LIMIT } from '#features/managers/scope'
 import { COLLECTIONS, getByIds } from '#firebase/firestore'
-import AuthSession from '#models/auth_session'
+import AuthSession, { type RevokeReason } from '#models/auth_session'
+import DeviceToken from '#models/device_token'
 import ManagerAssignment, { type ManagerAssignmentRecord } from '#models/manager_assignment'
 import Role from '#models/role'
 import User, { type UserDocument, type UserEntity, type UserRecord } from '#models/user'
@@ -52,6 +53,10 @@ export class UserRepository {
       last_login_at: doc.last_login_at ?? null,
       // Absent sur l'historique : non supprimé.
       deleted_at: doc.is_deleted ? (doc.deleted_at ?? null) : null,
+      // Absents sur l'historique et sur une suppression par l'équipe.
+      deletion_requested_by_user: Boolean(doc.is_deleted && doc.purge_scheduled_at),
+      purge_scheduled_at: doc.is_deleted ? (doc.purge_scheduled_at ?? null) : null,
+      deletion_reason: doc.is_deleted ? (doc.deletion_reason ?? null) : null,
       created_at: doc.metadata.created_at,
       updated_at: doc.metadata.updated_at,
     }
@@ -144,13 +149,19 @@ export class UserRepository {
    * et le middleware d'authentification contrôlent déjà : aucun de ces flux
    * n'a à connaître la suppression.
    */
-  async markDeleted(user: UserEntity, adminId: string): Promise<UserEntity | null> {
+  async markDeleted(
+    user: UserEntity,
+    actorId: string,
+    request?: { purge_scheduled_at: Date; reason: string | null }
+  ): Promise<UserEntity | null> {
     return User.findByIdAndUpdate(user._id, {
       is_active: false,
       is_deleted: true,
       deleted_at: new Date(),
-      deleted_by: adminId,
+      deleted_by: actorId,
       active_before_deletion: user.is_active,
+      purge_scheduled_at: request?.purge_scheduled_at ?? null,
+      deletion_reason: request?.reason ?? null,
     })
   }
 
@@ -164,12 +175,35 @@ export class UserRepository {
       deleted_at: null,
       deleted_by: null,
       active_before_deletion: null,
+      // Restaurer annule aussi une suppression demandée par l'utilisateur :
+      // sans échéance, la tâche de purge ne le voit plus.
+      purge_scheduled_at: null,
+      deletion_reason: null,
     })
   }
 
   /** Ferme toutes les sessions du compte ; rend le nombre de sessions fermées. */
-  async revokeSessions(id: string): Promise<number> {
-    return AuthSession.revokeAllForUser(id, 'admin')
+  async revokeSessions(id: string, reason: RevokeReason = 'admin'): Promise<number> {
+    return AuthSession.revokeAllForUser(id, reason)
+  }
+
+  /**
+   * Retire tous les appareils du compte : un compte en attente de purge ne
+   * doit plus recevoir de notification, envoi groupé compris.
+   */
+  async removeDeviceTokens(id: string): Promise<void> {
+    const tokens = await DeviceToken.findByUsers([id])
+    await DeviceToken.removeByIds(tokens.map((token) => token._id))
+  }
+
+  /** Reporte l'effacement d'un compte dont la purge est bloquée. */
+  async postponePurge(id: string, at: Date): Promise<void> {
+    await User.findByIdAndUpdate(id, { purge_scheduled_at: at })
+  }
+
+  /** Comptes dont la suppression demandée par l'utilisateur est échue. */
+  async findDuePurges(now: Date, limit: number): Promise<UserRecord[]> {
+    return User.findDuePurges(now, limit)
   }
 
   async countActiveSessions(id: string): Promise<number> {

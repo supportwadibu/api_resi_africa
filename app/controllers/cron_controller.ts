@@ -1,4 +1,5 @@
 import { PurgeExpiredAuditLogsUseCase } from '#features/audit_logs/use_cases/index'
+import { PurgeScheduledAccountsUseCase } from '#features/users/use_cases/index'
 import logger from '@adonisjs/core/services/logger'
 
 import type { HttpContext } from '@adonisjs/core/http'
@@ -139,6 +140,29 @@ export default class CronController {
 
     return ctx.response.ok({
       task: 'purge-audit-logs',
+      ...result,
+      duration_ms: Date.now() - startedAt,
+    })
+  }
+
+  /**
+   * POST|GET /api/v1/cron/purge-deleted-accounts
+   *
+   * Efface définitivement les comptes dont la suppression demandée par
+   * l'utilisateur a dépassé son délai de grâce. Rejouable : un compte en
+   * échec reste programmé et sera repris.
+   */
+  async purgeDeletedAccounts(ctx: HttpContext) {
+    const startedAt = Date.now()
+    const result = await new PurgeScheduledAccountsUseCase().execute()
+
+    logger.info(
+      { ...result, duration_ms: Date.now() - startedAt },
+      'Cron : comptes supprimés échus'
+    )
+
+    return ctx.response.ok({
+      task: 'purge-deleted-accounts',
       ...result,
       duration_ms: Date.now() - startedAt,
     })

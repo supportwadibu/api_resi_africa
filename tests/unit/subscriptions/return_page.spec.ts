@@ -19,7 +19,7 @@ test.group('retour de paiement vers l’application', () => {
     assert.include(html, 'resi://abonnement?statut=succes')
     assert.include(
       html,
-      'intent://abonnement?statut=succes#Intent;scheme=resi;package=africa.resi.app;end'
+      'intent://abonnement?statut=succes#Intent;scheme=resi;package=africa.resi.pro;end'
     )
     assert.include(html, 'Paiement reçu')
   })

@@ -168,12 +168,22 @@ export class PlatformStatsRepository {
    * restreintes au début de séjour : une réservation commencée depuis `from`
    * finit forcément après.
    */
-  async bookingsStartedSince(from: Date, ownerId?: string | null): Promise<StayBreakdownBooking[]> {
+  /** Réservations commencées à partir de `from`, et avant `until` (exclu) s'il est donné. */
+  async bookingsStartedSince(
+    from: Date,
+    ownerId?: string | null,
+    until?: Date | null
+  ): Promise<StayBreakdownBooking[]> {
     const docs = await Booking.findEndingAfter(from)
 
     return docs
       .map((doc) => BookingRepository.toDto(doc))
-      .filter((b) => b.start_date >= from && (!ownerId || b.owner_id === ownerId))
+      .filter(
+        (b) =>
+          b.start_date >= from &&
+          (!until || b.start_date < until) &&
+          (!ownerId || b.owner_id === ownerId)
+      )
   }
 }
 

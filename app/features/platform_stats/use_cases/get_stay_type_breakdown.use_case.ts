@@ -1,11 +1,14 @@
-import { monthWindow } from '#features/bookings/booking_stats'
-
 import PlatformStatsRepository from '../repositories/platform_stats_repository.ts'
-import { buildStayBuckets, type StayTypeBreakdownDto } from '../stay_type_breakdown.ts'
+import {
+  buildStayBuckets,
+  stayBreakdownWindow,
+  type StayTypeBreakdownDto,
+} from '../stay_type_breakdown.ts'
 
 /**
  * Types de séjour les plus vendus sur les `months` derniers mois, mois en
- * cours compris — de toute la plateforme ou d'un seul propriétaire.
+ * cours compris, ou entre deux dates — de toute la plateforme ou d'un seul
+ * propriétaire.
  *
  * Une réservation compte au mois où le séjour commence : c'est le choix du
  * client qu'on mesure, pas l'occupation, que le prorata du chiffre d'affaires
@@ -15,18 +18,18 @@ export class GetStayTypeBreakdownUseCase {
   constructor(private repo: PlatformStatsRepository = new PlatformStatsRepository()) {}
 
   async execute(
-    input: { months?: number; owner_id?: string },
+    input: { months?: number; from?: Date; to?: Date; owner_id?: string },
     now: Date = new Date()
   ): Promise<StayTypeBreakdownDto> {
-    const months = Math.min(24, Math.max(1, input.months ?? 12))
-    const from = monthWindow(now, -(months - 1)).from
+    const window = stayBreakdownWindow(input, now)
     const ownerId = input.owner_id ?? null
 
-    const bookings = await this.repo.bookingsStartedSince(from, ownerId)
+    const bookings = await this.repo.bookingsStartedSince(window.from, ownerId, window.until)
 
     return {
-      months,
-      from,
+      months: window.months,
+      from: window.from,
+      to: window.until ? new Date(window.until.getTime() - 24 * 60 * 60 * 1000) : null,
       owner_id: ownerId,
       total_bookings: bookings.length,
       buckets: buildStayBuckets(bookings),

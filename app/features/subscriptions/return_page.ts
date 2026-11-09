@@ -11,7 +11,7 @@
 export type ReturnOutcome = 'success' | 'failure' | 'pending'
 
 /** Identifiant Android de l'application, pour le lien `intent://`. */
-const ANDROID_PACKAGE = 'africa.resi.app'
+const ANDROID_PACKAGE = 'africa.resi.pro'
 
 function statut(outcome: ReturnOutcome): 'succes' | 'echec' {
   // En vérification : Wave ne renvoie ici qu'après un paiement réussi, et

@@ -126,6 +126,19 @@ export interface UserDocument {
    */
   active_before_deletion?: boolean | null
 
+  /**
+   * Suppression demandée par l'utilisateur lui-même (`DELETE /auth/account`).
+   * Le compte passe aussitôt en suppression douce ; `purge_scheduled_at`
+   * marque l'échéance à laquelle la tâche `purge-deleted-accounts` l'efface
+   * définitivement. D'ici là, une restauration par l'équipe annule tout.
+   *
+   * Optionnels en lecture, comme la suppression douce : absents sur les
+   * comptes antérieurs et sur une suppression décidée par un administrateur,
+   * que l'équipe purge elle-même.
+   */
+  purge_scheduled_at?: Date | null
+  deletion_reason?: string | null
+
   metadata: UserMetadata
 }
 
@@ -489,6 +502,18 @@ const User = {
     const user = await User.findById(id)
     if (!user || user.role_id !== roleId) return null
     return user
+  },
+
+  /**
+   * Comptes dont la suppression demandée par l'utilisateur est échue.
+   *
+   * Une seule inégalité, sur un seul champ : pas d'index composite. Le filtre
+   * `is_deleted` se fait en mémoire chez l'appelant — une restauration remet
+   * l'échéance à `null`, qu'une inégalité écarte déjà.
+   */
+  async findDuePurges(now: Date, limit: number): Promise<UserRecord[]> {
+    const snapshot = await users().where('purge_scheduled_at', '<=', now).limit(limit).get()
+    return toDocs<UserDocument>(snapshot.docs)
   },
 
   /** Efface le document du compte. Dernière étape d'une suppression définitive. */

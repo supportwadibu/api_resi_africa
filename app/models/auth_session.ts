@@ -5,8 +5,19 @@ import { COLLECTIONS, collection, toDoc, toDocs, toPayload, type WithId } from '
  * `logout` pour reconnaître la réutilisation d'un refresh token déjà tourné —
  * le signe d'un vol. Les sessions tournées avant son introduction portent
  * `logout` et ne déclenchent donc jamais cette détection.
+ *
+ * `account_deleted` : sessions fermées par la suppression que l'utilisateur
+ * a demandée lui-même. `password_reset` : sessions fermées par une
+ * réinitialisation du mot de passe — un appareil volé ne garde pas l'accès.
  */
-export const REVOKE_REASONS = ['logout', 'admin', 'suspicious', 'rotated'] as const
+export const REVOKE_REASONS = [
+  'logout',
+  'admin',
+  'suspicious',
+  'rotated',
+  'account_deleted',
+  'password_reset',
+] as const
 export type RevokeReason = (typeof REVOKE_REASONS)[number]
 
 export const DEVICE_PLATFORMS = ['ios', 'android', 'web', 'unknown'] as const

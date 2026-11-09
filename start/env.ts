@@ -131,6 +131,8 @@ export default await Env.create(new URL('../', import.meta.url), {
   CRON_EXPIRE_TRIALS_SCHEDULE: Env.schema.string.optional(),
   CRON_PURGE_SESSIONS_SCHEDULE: Env.schema.string.optional(),
   CRON_PURGE_AUDIT_LOGS_SCHEDULE: Env.schema.string.optional(),
+  CRON_SPONSORSHIP_REWARDS_SCHEDULE: Env.schema.string.optional(),
+  CRON_PURGE_DELETED_ACCOUNTS_SCHEDULE: Env.schema.string.optional(),
 
   /**
    * Administrateurs garantis au démarrage du serveur HTTP : tableau JSON de

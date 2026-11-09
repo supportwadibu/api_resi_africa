@@ -53,7 +53,20 @@ export function registerCronTasks(scheduler: CronScheduler): void {
     },
   })
 
-  // 5. Purge des traces d'audit échues
+  // 5. Libération des gains de parrainage sortis du délai d'attente. Sans
+  // elle, un gain échu reste bloqué tant que le parrain n'ouvre pas son
+  // écran Parrainage — seul autre déclencheur de la libération.
+  scheduler.register({
+    name: 'sponsorship-rewards',
+    cronExpression: cronConfig.schedules.sponsorshipRewards,
+    handler: async () => {
+      const { ReleaseSponsorshipRewardsUseCase } =
+        await import('#features/sponsorships/use_cases/release_sponsorship_rewards.use_case')
+      return new ReleaseSponsorshipRewardsUseCase().execute()
+    },
+  })
+
+  // 6. Purge des traces d'audit échues
   scheduler.register({
     name: 'purge-audit-logs',
     cronExpression: cronConfig.schedules.purgeAuditLogs,
@@ -61,6 +74,17 @@ export function registerCronTasks(scheduler: CronScheduler): void {
       const { PurgeExpiredAuditLogsUseCase } =
         await import('#features/audit_logs/use_cases/purge_expired_audit_logs.use_case')
       return new PurgeExpiredAuditLogsUseCase().execute()
+    },
+  })
+
+  // 7. Suppression définitive des comptes dont la demande est échue
+  scheduler.register({
+    name: 'purge-deleted-accounts',
+    cronExpression: cronConfig.schedules.purgeDeletedAccounts,
+    handler: async () => {
+      const { PurgeScheduledAccountsUseCase } =
+        await import('#features/users/use_cases/account_deletion.use_case')
+      return new PurgeScheduledAccountsUseCase().execute()
     },
   })
 }
