@@ -5,3 +5,5 @@ export { RefreshTokensUseCase } from '#auth/use_cases/auth/refresh_tokens.use_ca
 export { RegisterInitUseCase } from '#auth/use_cases/auth/register_init.use_case'
 export { RegisterResendUseCase } from '#auth/use_cases/auth/register_resend.use_case'
 export { RegisterVerifyUseCase } from '#auth/use_cases/auth/register_verify.use_case'
+export { PasswordForgotUseCase } from '#auth/use_cases/auth/password_forgot.use_case'
+export { PasswordResetUseCase } from '#auth/use_cases/auth/password_reset.use_case'

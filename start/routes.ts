@@ -110,6 +110,11 @@ router
         router.post('login', [AuthController, 'login'])
         router.post('google', [AuthController, 'google'])
         router.post('refresh', [AuthController, 'refresh'])
+        // Mot de passe oublié : code par WhatsApp (DUGU) ou e-mail, puis
+        // nouveau mot de passe. L'envoi a sa propre limite, comme l'OTP
+        // d'inscription.
+        router.post('password/forgot', [AuthController, 'passwordForgot']).use(throttle.otpSend())
+        router.post('password/reset', [AuthController, 'passwordReset'])
       })
       .prefix('auth')
       .as('auth')

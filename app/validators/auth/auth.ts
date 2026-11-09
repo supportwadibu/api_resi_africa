@@ -130,3 +130,40 @@ export const deleteAccountValidator = vine.compile(
     reason: vine.string().trim().maxLength(500).optional(),
   })
 )
+
+/**
+ * Identifiant de connexion tel que la connexion le lit : un e-mail est
+ * abaissé, un numéro gardé tel quel — le mobile le met déjà au format
+ * international, comme pour `login`.
+ */
+const loginIdentifier = () =>
+  vine
+    .string()
+    .trim()
+    .minLength(3)
+    .maxLength(254)
+    .transform((value) => (value.includes('@') ? value.toLowerCase() : value))
+
+/**
+ * POST /auth/password/forgot
+ * Envoie un code de réinitialisation : WhatsApp (DUGU) pour un numéro,
+ * e-mail sinon.
+ */
+export const passwordForgotValidator = vine.compile(
+  vine.object({
+    identifier: loginIdentifier(),
+  })
+)
+
+/**
+ * POST /auth/password/reset
+ * Mêmes règles de mot de passe qu'à l'inscription.
+ */
+export const passwordResetValidator = vine.compile(
+  vine.object({
+    identifier: loginIdentifier(),
+    code: vine.string().trim().fixedLength(6),
+    password: password(),
+    password_confirmation: password().sameAs('password'),
+  })
+)

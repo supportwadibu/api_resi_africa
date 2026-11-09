@@ -7,7 +7,8 @@ import { COLLECTIONS, collection, toDoc, toDocs, toPayload, type WithId } from '
  * `logout` et ne déclenchent donc jamais cette détection.
  *
  * `account_deleted` : sessions fermées par la suppression que l'utilisateur
- * a demandée lui-même.
+ * a demandée lui-même. `password_reset` : sessions fermées par une
+ * réinitialisation du mot de passe — un appareil volé ne garde pas l'accès.
  */
 export const REVOKE_REASONS = [
   'logout',
@@ -15,6 +16,7 @@ export const REVOKE_REASONS = [
   'suspicious',
   'rotated',
   'account_deleted',
+  'password_reset',
 ] as const
 export type RevokeReason = (typeof REVOKE_REASONS)[number]
 
