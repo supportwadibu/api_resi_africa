@@ -31,8 +31,41 @@ export interface UserDto {
   last_login_at: Date | null
   /** Renseignée tant que le compte est supprimé (restaurable) ; `null` sinon. */
   deleted_at: Date | null
+  /** Supprimé à la demande de l'utilisateur, et non par l'équipe. */
+  deletion_requested_by_user: boolean
+  /** Échéance de la suppression définitive automatique ; `null` sinon. */
+  purge_scheduled_at: Date | null
+  /** Motif laissé par l'utilisateur à sa demande, facultatif. */
+  deletion_reason: string | null
   created_at: Date
   updated_at: Date
+}
+
+/**
+ * Ce que l'utilisateur doit savoir avant de supprimer son compte
+ * (`GET /auth/account/deletion`).
+ *
+ * `blockers` : ce qui empêche la suppression tant qu'il n'est pas réglé —
+ * de l'argent encore dû, des voyageurs qui perdraient leur séjour.
+ * `warnings` : ce que la suppression fera perdre, sans l'empêcher.
+ */
+export interface AccountDeletionPreviewDto {
+  can_delete: boolean
+  blockers: AccountDeletionNoticeDto[]
+  warnings: AccountDeletionNoticeDto[]
+  /** Délai, en jours, avant la suppression définitive. */
+  grace_period_days: number
+}
+
+export interface AccountDeletionNoticeDto {
+  code: string
+  message: string
+}
+
+/** Réponse de `DELETE /auth/account`. */
+export interface AccountDeletionDto {
+  deleted_at: Date
+  purge_scheduled_at: Date
 }
 
 /** Résumé affiché à côté d'une ligne d'une autre liste (réservation, logement…). */

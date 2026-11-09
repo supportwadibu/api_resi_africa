@@ -1,4 +1,5 @@
 import type { GoogleLoginInput, GoogleLoginOutput } from '#auth/dto/index'
+import { assertNotPendingDeletion } from '#auth/helpers/pending_deletion'
 import { logAuthAttempt } from '#auth/helpers/auth_audit'
 import { issueTokens } from '#auth/helpers/issue_tokens'
 import { assertRateLimit } from '#auth/helpers/rate_limit'
@@ -174,6 +175,7 @@ export class GoogleLoginUseCase {
 
   /** Refuse les comptes désactivés, quel que soit le chemin d'entrée. */
   private assertUsable(user: UserEntity, identity: GoogleIdentity, input: GoogleLoginInput): void {
+    assertNotPendingDeletion(user)
     if (!user.is_active) {
       void this.logFailure(identity, 'account_disabled', input, user._id)
       throw new AuthError('account_disabled', 'Compte désactivé.', 403)

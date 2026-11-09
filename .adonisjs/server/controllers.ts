@@ -26,6 +26,7 @@ export const controllers = {
     Withdrawals: () => import('#controllers/admin/withdrawals_controller'),
   },
   auth: {
+    Account: () => import('#controllers/auth/account_controller'),
     Auth: () => import('#controllers/auth/auth_controller'),
     DeviceToken: () => import('#controllers/auth/device_token_controller'),
   },

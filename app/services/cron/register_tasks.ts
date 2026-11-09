@@ -76,4 +76,15 @@ export function registerCronTasks(scheduler: CronScheduler): void {
       return new PurgeExpiredAuditLogsUseCase().execute()
     },
   })
+
+  // 7. Suppression définitive des comptes dont la demande est échue
+  scheduler.register({
+    name: 'purge-deleted-accounts',
+    cronExpression: cronConfig.schedules.purgeDeletedAccounts,
+    handler: async () => {
+      const { PurgeScheduledAccountsUseCase } =
+        await import('#features/users/use_cases/account_deletion.use_case')
+      return new PurgeScheduledAccountsUseCase().execute()
+    },
+  })
 }

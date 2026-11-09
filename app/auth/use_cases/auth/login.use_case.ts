@@ -1,4 +1,5 @@
 import HashService from '#services/hash_service'
+import { assertNotPendingDeletion } from '#auth/helpers/pending_deletion'
 import User, { type AuthChannel } from '#models/user'
 import { issueTokens } from '#auth/helpers/issue_tokens'
 import { logAuthAttempt } from '#auth/helpers/auth_audit'
@@ -90,6 +91,7 @@ export class LoginUseCase {
         403
       )
     }
+    assertNotPendingDeletion(user)
     if (!user.is_active) {
       throw new AuthError('account_disabled', 'Compte désactivé.', 403)
     }

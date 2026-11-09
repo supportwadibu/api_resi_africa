@@ -7,3 +7,8 @@ export { UpdateUserUseCase } from './update_user.use_case.ts'
 export { DeleteUserUseCase } from './delete_user.use_case.ts'
 export { RestoreUserUseCase } from './restore_user.use_case.ts'
 export { PreviewUserPurgeUseCase, PurgeUserUseCase } from './purge_user.use_case.ts'
+export {
+  PreviewAccountDeletionUseCase,
+  PurgeScheduledAccountsUseCase,
+  RequestAccountDeletionUseCase,
+} from './account_deletion.use_case.ts'

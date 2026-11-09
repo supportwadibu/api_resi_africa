@@ -52,6 +52,13 @@ const cronConfig = {
      * Tous les jours à 02:30.
      */
     purgeAuditLogs: env.get('CRON_PURGE_AUDIT_LOGS_SCHEDULE', '30 2 * * *'),
+
+    /**
+     * Suppression définitive des comptes dont la demande de suppression a
+     * dépassé son délai de grâce.
+     * Tous les jours à 03:00.
+     */
+    purgeDeletedAccounts: env.get('CRON_PURGE_DELETED_ACCOUNTS_SCHEDULE', '0 3 * * *'),
   },
 }
 

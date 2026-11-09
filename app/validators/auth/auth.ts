@@ -116,3 +116,17 @@ export const logoutValidator = vine.compile(
     refresh_token: vine.string().trim().minLength(10).maxLength(2048),
   })
 )
+
+/**
+ * DELETE /auth/account
+ *
+ * `confirm` doit valoir `true` : une requête rejouée ou mal formée ne doit
+ * pas fermer un compte par accident. Le motif, facultatif, est lu par
+ * l'équipe dans la fiche du compte.
+ */
+export const deleteAccountValidator = vine.compile(
+  vine.object({
+    confirm: vine.literal(true),
+    reason: vine.string().trim().maxLength(500).optional(),
+  })
+)

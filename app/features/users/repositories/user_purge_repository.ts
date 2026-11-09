@@ -15,22 +15,13 @@ import {
 import type { BookingDocument } from '#models/booking'
 import type { SponsorshipAccountDocument, SponsorshipDocument } from '#models/sponsorship'
 import type { PurgeItemDto, PurgeWarningDto } from '../dto/user.dto.ts'
+import { formatAmount, plural, type PendingObligations } from '../account_deletion.ts'
 
 /** Plafond d'un lot d'écritures Firestore. */
 const BATCH_LIMIT = 500
 
 /** Séjours qui ne sont ni terminés ni annulés. */
 const ONGOING_BOOKING_STATUSES = ['confirmed', 'in_progress']
-
-const AMOUNT_FORMATTER = new Intl.NumberFormat('fr-FR')
-
-function formatAmount(value: number): string {
-  return `${AMOUNT_FORMATTER.format(Math.round(value))} FCFA`
-}
-
-function plural(count: number, singular: string, pluralForm: string): string {
-  return `${count} ${count > 1 ? pluralForm : singular}`
-}
 
 /**
  * Accès Firestore, Realtime Database et Cloudinary de la suppression
@@ -188,8 +179,8 @@ export class UserPurgeRepository {
     return snapshot.docs.reduce((sum, doc) => sum + (Number(doc.get('balance')) || 0), 0)
   }
 
-  /** Argent encore dû et séjours en cours, à signaler avant d'effacer. */
-  async warnings(userId: string): Promise<PurgeWarningDto[]> {
+  /** Argent encore dû et séjours en cours sur le compte. */
+  async pendingObligations(userId: string): Promise<PendingObligations> {
     const [walletBalance, pendingWithdrawals, ownerStays, clientStays, sponsorship] =
       await Promise.all([
         this.walletBalance(userId),
@@ -210,6 +201,28 @@ export class UserPurgeRepository {
         ),
         collection(COLLECTIONS.sponsorshipAccounts).doc(userId).get(),
       ])
+
+    const account = sponsorship.exists ? (sponsorship.data() as SponsorshipAccountDocument) : null
+    return {
+      wallet_balance: walletBalance,
+      pending_withdrawals: pendingWithdrawals,
+      owner_ongoing_bookings: ownerStays,
+      client_ongoing_bookings: clientStays,
+      // Champs absents sur un compte de parrainage ancien : 0.
+      sponsorship_balance:
+        (account?.balance ?? 0) + (account?.pending_balance ?? 0) + (account?.stay_credit ?? 0),
+    }
+  }
+
+  /** Argent encore dû et séjours en cours, à signaler avant d'effacer. */
+  async warnings(userId: string): Promise<PurgeWarningDto[]> {
+    const {
+      wallet_balance: walletBalance,
+      pending_withdrawals: pendingWithdrawals,
+      owner_ongoing_bookings: ownerStays,
+      client_ongoing_bookings: clientStays,
+      sponsorship_balance: sponsorshipDue,
+    } = await this.pendingObligations(userId)
 
     const out: PurgeWarningDto[] = []
 
@@ -238,10 +251,6 @@ export class UserPurgeRepository {
       })
     }
 
-    const account = sponsorship.exists ? (sponsorship.data() as SponsorshipAccountDocument) : null
-    // Champs absents sur un compte de parrainage ancien : 0.
-    const sponsorshipDue =
-      (account?.balance ?? 0) + (account?.pending_balance ?? 0) + (account?.stay_credit ?? 0)
     if (sponsorshipDue > 0) {
       out.push({
         code: 'sponsorship_balance',
