@@ -4,6 +4,7 @@ import { generateAndSendOtp } from '#auth/helpers/otp_dispatch'
 import { resetChannel, resetRefusal } from '#auth/helpers/password_reset'
 import { assertRateLimit } from '#auth/helpers/rate_limit'
 import User from '#models/user'
+import logger from '@adonisjs/core/services/logger'
 
 /**
  * Use case : envoie un code de réinitialisation du mot de passe.
@@ -15,10 +16,21 @@ import User from '#models/user'
  * La réponse ne dit jamais si le compte existe : la route est publique, et
  * une réponse différente suffirait à dresser la liste des numéros inscrits.
  * Un refus est seulement tracé, ce qui le fait aussi compter dans
- * `assertRateLimit`.
+ * `assertRateLimit`. Ni le contenu ni la durée de la réponse ne doivent le
+ * trahir non plus :
+ * - par défaut, l'envoi part sans être attendu — un compte existant, qui
+ *   attendrait WhatsApp, répondrait sinon plus lentement qu'un numéro inconnu ;
+ * - un échec d'envoi est journalisé (`generateAndSendOtp` le trace déjà),
+ *   jamais renvoyé : un 502 n'arriverait que pour un compte existant.
+ *
+ * `waitForDelivery` n'est vrai que hors production, pour rendre le code en
+ * clair aux tests (`dev_otp_code`).
  */
 export class PasswordForgotUseCase {
-  async execute(input: PasswordForgotInput): Promise<PasswordForgotOutput> {
+  async execute(
+    input: PasswordForgotInput,
+    options: { waitForDelivery?: boolean } = {}
+  ): Promise<PasswordForgotOutput> {
     await assertRateLimit(input.identifier, 'generate')
 
     const channel = resetChannel(input.identifier)
@@ -40,15 +52,19 @@ export class PasswordForgotUseCase {
       return { channel, plain_code: null }
     }
 
-    const plainCode = await generateAndSendOtp({
+    const delivery = generateAndSendOtp({
       userId: user._id,
       channel,
       target: input.identifier,
       purpose: 'reset',
       device: input.device,
+    }).catch((error) => {
+      logger.error({ err: error, user_id: user._id }, 'Échec d’envoi du code de réinitialisation')
+      return null
     })
 
-    return { channel, plain_code: plainCode }
+    if (!options.waitForDelivery) return { channel, plain_code: null }
+    return { channel, plain_code: await delivery }
   }
 }
 

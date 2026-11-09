@@ -80,7 +80,11 @@ export default class AuthController {
   async passwordForgot(ctx: HttpContext) {
     const payload = await ctx.request.validateUsing(passwordForgotValidator)
     const device = getDeviceContext(ctx)
-    const result = await new PasswordForgotUseCase().execute({ ...payload, device })
+    // Hors production seulement : attendre l'envoi pour rendre le code de test.
+    const result = await new PasswordForgotUseCase().execute(
+      { ...payload, device },
+      { waitForDelivery: !app.inProduction }
+    )
     return ctx.response.ok({
       message: 'Si un compte correspond, un code de réinitialisation vient d’être envoyé.',
       channel: result.channel,
