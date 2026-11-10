@@ -43,6 +43,7 @@ const AdminWithdrawalsController = () => import('#controllers/admin/withdrawals_
 const AdminWaveTestController = () => import('#controllers/admin/wave_test_controller')
 const ProprioWalletController = () => import('#controllers/proprio/wallet_controller')
 const WaveWebhookController = () => import('#controllers/wave_webhook_controller')
+const DuguWebhookController = () => import('#controllers/dugu_webhook_controller')
 const AdminPlansController = () => import('#controllers/admin/plans_controller')
 const AdminFeedbackController = () => import('#controllers/admin/feedback_controller')
 const AdminAuditLogsController = () => import('#controllers/admin/audit_logs_controller')
@@ -99,6 +100,10 @@ router.get('/', () => {
 // et sous le préfixe de l'API, pour qu'un moniteur trouve l'une ou l'autre.
 router.get('health', [HealthController, 'show']).as('health')
 router.get('api/v1/health', [HealthController, 'show']).as('api_health')
+
+// Hors du préfixe de l'API : URL déclarée telle quelle dans le portail DUGU.
+// Voir `DuguWebhookController`.
+router.post('webhooks/dugu', [DuguWebhookController, 'handle']).as('dugu_webhook')
 
 router
   .group(() => {

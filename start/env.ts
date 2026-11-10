@@ -235,4 +235,5 @@ export default await Env.create(new URL('../', import.meta.url), {
   DUGU_API_KEY: Env.schema.string.optional(),
   DUGU_PROJECT_ID: Env.schema.string.optional(),
   DUGU_BASE_URL: Env.schema.string.optional(),
+  DUGU_WEBHOOK_SECRET: Env.schema.string.optional(),
 })

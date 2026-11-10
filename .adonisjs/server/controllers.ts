@@ -37,6 +37,7 @@ export const controllers = {
     Property: () => import('#controllers/client/property_controller'),
   },
   Cron: () => import('#controllers/cron_controller'),
+  DuguWebhook: () => import('#controllers/dugu_webhook_controller'),
   gerant: {
     Booking: () => import('#controllers/gerant/booking_controller'),
     Client: () => import('#controllers/gerant/client_controller'),
