@@ -14,11 +14,16 @@ import env from '#start/env'
 
 /**
  * Construit le provider messaging selon la variable d'environnement
- * MESSAGING_PROVIDER. Lève si la valeur est inconnue ou si la config
- * spécifique au provider est incomplète.
+ * MESSAGING_PROVIDER. Lève si la valeur est inconnue, si la config
+ * spécifique au provider est incomplète, ou si la production retomberait sur
+ * la console — l'appelant décide du repli.
  */
-export function buildMessagingProvider(): MessagingProvider {
-  const raw = env.get('MESSAGING_PROVIDER', 'console')
+export function buildMessagingProvider(options: {
+  inProduction: boolean
+  /** MESSAGING_PROVIDER par défaut ; les tests le fixent pour ne pas dépendre du `.env` local. */
+  provider?: string
+}): MessagingProvider {
+  const raw = options.provider ?? env.get('MESSAGING_PROVIDER') ?? 'console'
   const name = raw as MessagingProviderName
 
   if (!MESSAGING_PROVIDERS.includes(name)) {
@@ -29,6 +34,11 @@ export function buildMessagingProvider(): MessagingProvider {
 
   switch (name) {
     case 'console':
+      if (options.inProduction) {
+        throw new Error(
+          'MESSAGING_PROVIDER vaut « console » (ou est absent) en production : aucun code ne partirait par téléphone.'
+        )
+      }
       return new ConsoleMessagingProvider()
 
     case 'africas_talking':

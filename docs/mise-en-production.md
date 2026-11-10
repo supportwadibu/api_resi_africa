@@ -40,6 +40,7 @@ puis demande les secrets marqués `sync: false` :
 | `WAVE_API_KEY`, `WAVE_WEBHOOK_SECRET`, `WAVE_API_SIGNING_SECRET` | Wave Business → Développeurs (clés **production**) |
 | `RESEND_API_KEY` | Resend → API Keys |
 | `DUGU_API_KEY`, `DUGU_PROJECT_ID` | DUGU — clé `dsk_live_…` |
+| `DUGU_WEBHOOK_SECRET` | DUGU → Applications → Webhook |
 
 ### Si un service tourne déjà sur `api.resi.africa`
 
@@ -63,6 +64,10 @@ indiqué chez le registraire. Le certificat TLS est émis par Render.
   `https://api.resi.africa/api/v1/payments/wave/webhook` et copier son secret
   dans `WAVE_WEBHOOK_SECRET`. Sans secret, tout webhook est refusé et aucun
   paiement n'aboutit.
+- **DUGU Sender** : déclarer le webhook `https://api.resi.africa/webhooks/dugu`
+  (Applications → Webhook) et copier son secret dans `DUGU_WEBHOOK_SECRET`.
+  Sans secret, tout webhook est refusé — les OTP partent quand même, seul le
+  suivi des échecs d'acheminement manque.
 - **Resend** : domaine `resi.africa` vérifié (SPF, DKIM), templates
   `otp_email_verification` et `email_verified` publiés.
 - **Tâches planifiées** : l'ordonnanceur interne les lance (six tâches, une

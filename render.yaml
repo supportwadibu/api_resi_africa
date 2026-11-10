@@ -136,3 +136,5 @@ services:
         sync: false
       - key: DUGU_PROJECT_ID
         sync: false
+      - key: DUGU_WEBHOOK_SECRET
+        sync: false
