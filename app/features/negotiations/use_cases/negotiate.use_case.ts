@@ -1,3 +1,9 @@
+import {
+  activeCommissionRule,
+  markupDailyPrice,
+  type CommissionRule,
+} from '#features/commissions/commission_rules'
+import CommissionRepository from '#features/commissions/repositories/commission_repository'
 import { isPublicProperty } from '#features/properties/public_property'
 import Negotiation from '#models/negotiation'
 import Property from '#models/property'
@@ -5,15 +11,24 @@ import { DomainError } from '#utils/domain_error'
 
 import type { NegotiationDto } from '../dto/negotiation.dto.ts'
 
+/**
+ * Les paliers restent stockés au prix du propriétaire : le client les voit
+ * commission comprise, comme le prix normal. La réservation relit le palier
+ * du propriétaire et le majore de la même règle.
+ */
 function toDto(
   status: NegotiationDto['status'],
   offers: number[],
-  dailyPrice: number
+  dailyPrice: number,
+  rule: CommissionRule | null
 ): NegotiationDto {
   return {
     status,
-    daily_price: dailyPrice,
-    offers: offers.map((price, index) => ({ level: index + 1, daily_price: price })),
+    daily_price: markupDailyPrice(dailyPrice, rule),
+    offers: offers.map((price, index) => ({
+      level: index + 1,
+      daily_price: markupDailyPrice(price, rule),
+    })),
   }
 }
 
@@ -25,6 +40,10 @@ function toDto(
  * restants n'est jamais dit — le client ne sait pas s'il touche le plancher.
  */
 export class NegotiateUseCase {
+  constructor(
+    private commissions: Pick<CommissionRepository, 'settings'> = new CommissionRepository()
+  ) {}
+
   /** Paliers déjà révélés, pour rouvrir la feuille où le client l'a laissée. */
   async current(propertyId: string, clientId: string): Promise<NegotiationDto> {
     const property = await this.publicProperty(propertyId, clientId)
@@ -33,7 +52,8 @@ export class NegotiateUseCase {
     return toDto(
       negotiable ? 'offer' : 'not_negotiable',
       negotiable ? offers : [],
-      property.pricing.daily_price
+      property.pricing.daily_price,
+      await this.rule()
     )
   }
 
@@ -44,7 +64,16 @@ export class NegotiateUseCase {
     if (!revealed) throw new DomainError('property_not_found', 'Propriété introuvable.', 404)
 
     const { result, daily_price: dailyPrice } = revealed
-    return toDto(result.status, result.status === 'not_negotiable' ? [] : result.offers, dailyPrice)
+    return toDto(
+      result.status,
+      result.status === 'not_negotiable' ? [] : result.offers,
+      dailyPrice,
+      await this.rule()
+    )
+  }
+
+  private async rule(): Promise<CommissionRule | null> {
+    return activeCommissionRule(await this.commissions.settings())
   }
 
   private async publicProperty(propertyId: string, clientId: string) {

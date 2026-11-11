@@ -17,6 +17,7 @@ import {
   type RewardRule,
   type SponsorshipRole,
 } from '#features/sponsorships/sponsorship_rules'
+import { clientAmountOf } from '#features/commissions/booking_commission'
 import type { BookingDocument } from '#models/booking'
 import type { BookingPaymentDocument } from '#models/booking_payment'
 import { subscriptionCredits, type SubscriptionCreditDocument } from '#models/subscription_credit'
@@ -97,11 +98,54 @@ export interface SponsorshipDocument {
   cancelled_at: Date | null
   cancellation_reason: string | null
   cancelled_by: string | null
+  /**
+   * Somme et nombre des gains de `sponsorship_rewards` non annulés. Depuis le
+   * parrainage récurrent, chaque action qui rapporte du filleul crée un gain ;
+   * les champs `reward_*` et `trigger*` ci-dessus ne portent plus que le gain
+   * unique de l'ancien parrainage. Absents de l'historique : 0.
+   */
+  rewards_total?: number
+  rewards_count?: number
   created_at: Date
   updated_at: Date
 }
 
 export type SponsorshipRecord = WithId<SponsorshipDocument>
+
+/** Gain total d'un parrainage : l'éventuel gain unique historique, plus les gains récurrents. */
+export function totalRewardOf(doc: SponsorshipDocument): number {
+  return (doc.reward_amount ?? 0) + (doc.rewards_total ?? 0)
+}
+
+export const SPONSORSHIP_REWARD_STATUSES = ['pending', 'earned', 'cancelled'] as const
+export type SponsorshipRewardStatus = (typeof SPONSORSHIP_REWARD_STATUSES)[number]
+
+/**
+ * Un gain, pour une action qui rapporte du filleul. Clé `<trigger>_<ref>` :
+ * une clôture ou un webhook rejoués retombent sur le même document, et le
+ * gain n'est jamais compté deux fois.
+ */
+export interface SponsorshipRewardDocument {
+  sponsorship_id: string
+  sponsor_id: string
+  sponsored_id: string
+  sponsored_role: SponsorshipRole
+  status: SponsorshipRewardStatus
+  amount: number
+  rule: RewardRule
+  trigger: SponsorshipTrigger
+  trigger_ref_id: string
+  /** Montant sur lequel le gain a été calculé : la commission de RESI, ou l'abonnement payé. */
+  trigger_amount: number
+  available_at: Date
+  earned_at: Date | null
+  cancelled_at: Date | null
+  cancellation_reason: string | null
+  created_at: Date
+  updated_at: Date
+}
+
+export type SponsorshipRewardRecord = WithId<SponsorshipRewardDocument>
 
 export const SPONSORSHIP_TRANSACTION_TYPES = [
   'reward',
@@ -177,6 +221,9 @@ function ledger() {
 }
 function redemptions() {
   return collection<SponsorshipRedemptionDocument>(COLLECTIONS.sponsorshipRedemptions)
+}
+function rewards() {
+  return collection<SponsorshipRewardDocument>(COLLECTIONS.sponsorshipRewards)
 }
 function bookings() {
   return collection<BookingDocument>(COLLECTIONS.bookings)
@@ -460,6 +507,215 @@ const Sponsorship = {
     })
   },
 
+  /**
+   * Ajoute un gain pour une action qui rapporte du filleul — chaque séjour,
+   * chaque abonnement payé, et non plus le premier seulement.
+   *
+   * Rien ne se passe si le parrainage est annulé, ou si ce gain existe déjà.
+   * Un parrainage `registered` passe `earned` : il a rapporté. Il ne passe
+   * jamais `pending`, statut réservé au gain unique historique, que
+   * `release` créditerait une seconde fois.
+   */
+  async addReward(
+    sponsoredId: string,
+    input: {
+      reward: number
+      rule: RewardRule
+      trigger: SponsorshipTrigger
+      trigger_ref_id: string
+      trigger_amount: number
+      available_at: Date
+      now: Date
+    }
+  ): Promise<{ sponsor_id: string; pending: boolean } | null> {
+    const ref = sponsorships().doc(sponsoredId)
+    const rewardId = `${input.trigger}_${input.trigger_ref_id}`
+    const rewardRef = rewards().doc(rewardId)
+
+    return transaction(async (tx) => {
+      const current = toDoc<SponsorshipDocument>(await tx.get(ref))
+      if (!current || current.status === 'cancelled') return null
+      const existing = await tx.get(rewardRef)
+      if (existing.exists) return null
+
+      const accountRef = accounts().doc(current.sponsor_id)
+      const account = toDoc<SponsorshipAccountDocument>(await tx.get(accountRef))
+      if (!account) return null
+
+      const immediate = input.available_at.getTime() <= input.now.getTime()
+      const next: SponsorshipAccountDocument = immediate
+        ? {
+            ...account,
+            balance: account.balance + input.reward,
+            total_earned: account.total_earned + input.reward,
+            updated_at: input.now,
+          }
+        : {
+            ...account,
+            pending_balance: account.pending_balance + input.reward,
+            updated_at: input.now,
+          }
+
+      tx.create(
+        rewardRef,
+        write({
+          sponsorship_id: sponsoredId,
+          sponsor_id: current.sponsor_id,
+          sponsored_id: sponsoredId,
+          sponsored_role: current.sponsored_role,
+          status: immediate ? 'earned' : 'pending',
+          amount: input.reward,
+          rule: input.rule,
+          trigger: input.trigger,
+          trigger_ref_id: input.trigger_ref_id,
+          trigger_amount: input.trigger_amount,
+          available_at: input.available_at,
+          earned_at: immediate ? input.now : null,
+          cancelled_at: null,
+          cancellation_reason: null,
+          created_at: input.now,
+          updated_at: input.now,
+        } satisfies SponsorshipRewardDocument)
+      )
+      tx.set(accountRef, write(next))
+      tx.update(
+        ref,
+        write({
+          status: current.status === 'registered' ? 'earned' : current.status,
+          qualified_at: current.qualified_at ?? input.now,
+          rewards_total: (current.rewards_total ?? 0) + input.reward,
+          rewards_count: (current.rewards_count ?? 0) + 1,
+          updated_at: input.now,
+        })
+      )
+      if (immediate) {
+        tx.set(
+          ledger().doc(`reward_${rewardId}`),
+          write(
+            ledgerLine(next, {
+              type: 'reward',
+              balance_delta: input.reward,
+              stay_credit_delta: 0,
+              sponsorship_id: sponsoredId,
+              created_at: input.now,
+            })
+          )
+        )
+      }
+      return { sponsor_id: current.sponsor_id, pending: !immediate }
+    })
+  },
+
+  /** Gains récurrents encore dans leur délai d'attente, d'un parrain ou de tous. */
+  async listPendingRewards(sponsorId?: string): Promise<SponsorshipRewardRecord[]> {
+    let query = rewards().where('status', '==', 'pending') as FirebaseFirestore.Query
+    if (sponsorId) query = query.where('sponsor_id', '==', sponsorId)
+    const snapshot = await query.get()
+    return toDocs<SponsorshipRewardDocument>(snapshot.docs)
+  },
+
+  /** Rend disponible un gain récurrent sorti de son délai d'attente. */
+  async releaseReward(rewardId: string, now: Date): Promise<boolean> {
+    const ref = rewards().doc(rewardId)
+
+    return transaction(async (tx) => {
+      const current = toDoc<SponsorshipRewardDocument>(await tx.get(ref))
+      if (!current || current.status !== 'pending') return false
+      if (current.available_at.getTime() > now.getTime()) return false
+
+      const accountRef = accounts().doc(current.sponsor_id)
+      const account = toDoc<SponsorshipAccountDocument>(await tx.get(accountRef))
+      if (!account) return false
+
+      const next: SponsorshipAccountDocument = {
+        ...account,
+        pending_balance: Math.max(0, account.pending_balance - current.amount),
+        balance: account.balance + current.amount,
+        total_earned: account.total_earned + current.amount,
+        updated_at: now,
+      }
+      tx.update(ref, write({ status: 'earned', earned_at: now, updated_at: now }))
+      tx.set(accountRef, write(next))
+      tx.set(
+        ledger().doc(`reward_${rewardId}`),
+        write(
+          ledgerLine(next, {
+            type: 'reward',
+            balance_delta: current.amount,
+            stay_credit_delta: 0,
+            sponsorship_id: current.sponsorship_id,
+            created_at: now,
+          })
+        )
+      )
+      return true
+    })
+  },
+
+  /**
+   * Annule les gains récurrents encore en attente nés d'un déclencheur — un
+   * abonnement remboursé. Les gains déjà disponibles restent acquis : le délai
+   * d'attente est là pour couvrir ce cas.
+   */
+  async cancelPendingRewards(
+    sponsoredId: string,
+    input: { trigger: SponsorshipTrigger; reason: string; now: Date }
+  ): Promise<number> {
+    const snapshot = await rewards()
+      .where('sponsored_id', '==', sponsoredId)
+      .where('status', '==', 'pending')
+      .get()
+    const pending = toDocs<SponsorshipRewardDocument>(snapshot.docs).filter(
+      (r) => r.trigger === input.trigger
+    )
+
+    let cancelled = 0
+    for (const reward of pending) {
+      const done = await transaction(async (tx) => {
+        const ref = rewards().doc(reward._id)
+        const current = toDoc<SponsorshipRewardDocument>(await tx.get(ref))
+        if (!current || current.status !== 'pending') return false
+        const accountRef = accounts().doc(current.sponsor_id)
+        const account = toDoc<SponsorshipAccountDocument>(await tx.get(accountRef))
+        const sponsorshipRef = sponsorships().doc(current.sponsorship_id)
+        const sponsorship = toDoc<SponsorshipDocument>(await tx.get(sponsorshipRef))
+
+        tx.update(
+          ref,
+          write({
+            status: 'cancelled',
+            cancelled_at: input.now,
+            cancellation_reason: input.reason,
+            updated_at: input.now,
+          })
+        )
+        if (account) {
+          tx.set(
+            accountRef,
+            write({
+              ...account,
+              pending_balance: Math.max(0, account.pending_balance - current.amount),
+              updated_at: input.now,
+            })
+          )
+        }
+        if (sponsorship) {
+          tx.update(
+            sponsorshipRef,
+            write({
+              rewards_total: Math.max(0, (sponsorship.rewards_total ?? 0) - current.amount),
+              rewards_count: Math.max(0, (sponsorship.rewards_count ?? 0) - 1),
+              updated_at: input.now,
+            })
+          )
+        }
+        return true
+      })
+      if (done) cancelled += 1
+    }
+    return cancelled
+  },
+
   /** Rend disponible un gain sorti de son délai d'attente. */
   async release(sponsoredId: string, now: Date): Promise<boolean> {
     const ref = sponsorships().doc(sponsoredId)
@@ -523,22 +779,51 @@ const Sponsorship = {
 
       const accountRef = accounts().doc(current.sponsor_id)
       const account = toDoc<SponsorshipAccountDocument>(await tx.get(accountRef))
-      const reward = current.reward_amount
+      // Gains récurrents : l'annulation d'un parrainage les reprend tous,
+      // comme le gain unique historique. Lus avant toute écriture, comme
+      // l'exige une transaction Firestore.
+      const recurringSnapshot = input.only_pending
+        ? null
+        : await tx.get(rewards().where('sponsored_id', '==', sponsoredId))
+      const recurring = recurringSnapshot
+        ? toDocs<SponsorshipRewardDocument>(recurringSnapshot.docs).filter(
+            (r) => r.status !== 'cancelled'
+          )
+        : []
+      const sum = (status: SponsorshipRewardStatus) =>
+        recurring.filter((r) => r.status === status).reduce((total, r) => total + r.amount, 0)
 
-      if (account && current.status === 'pending') {
-        tx.set(
-          accountRef,
+      const legacy = current.reward_amount ?? 0
+      const pendingReward = (current.status === 'pending' ? legacy : 0) + sum('pending')
+      const reward = (current.status === 'earned' ? legacy : 0) + sum('earned')
+
+      for (const r of recurring) {
+        tx.update(
+          rewards().doc(r._id),
           write({
-            ...account,
-            pending_balance: Math.max(0, account.pending_balance - reward),
+            status: 'cancelled',
+            cancelled_at: input.now,
+            cancellation_reason: input.reason,
             updated_at: input.now,
           })
         )
       }
 
-      if (account && current.status === 'earned') {
+      if (account && pendingReward > 0 && reward <= 0) {
+        tx.set(
+          accountRef,
+          write({
+            ...account,
+            pending_balance: Math.max(0, account.pending_balance - pendingReward),
+            updated_at: input.now,
+          })
+        )
+      }
+
+      if (account && reward > 0) {
         const next: SponsorshipAccountDocument = {
           ...account,
+          pending_balance: Math.max(0, account.pending_balance - pendingReward),
           balance: account.balance - reward,
           total_earned: account.total_earned - reward,
           updated_at: input.now,
@@ -828,7 +1113,9 @@ const Sponsorship = {
       }
 
       const account = toDoc<SponsorshipAccountDocument>(accountSnap)
-      const amount = Math.min(Math.floor(account?.stay_credit ?? 0), booking.total_amount)
+      // Plafonné à ce que paie le client, commission de RESI comprise.
+      const due = clientAmountOf(booking)
+      const amount = Math.min(Math.floor(account?.stay_credit ?? 0), due)
       if (!account || amount <= 0) return { ok: false, reason: 'no_stay_credit' } as const
 
       const next: SponsorshipAccountDocument = {
@@ -851,7 +1138,7 @@ const Sponsorship = {
         )
       )
 
-      const fullyPaid = amount >= booking.total_amount
+      const fullyPaid = amount >= due
       if (fullyPaid) {
         const id = stayCreditPaymentId(input.booking_id)
         tx.set(
@@ -874,7 +1161,10 @@ const Sponsorship = {
             paid_at: input.now,
             cancelled_at: null,
             expired_at: null,
-            metadata: { sponsorship_credit_amount: amount },
+            metadata: {
+              sponsorship_credit_amount: amount,
+              ...(due !== booking.total_amount ? { owner_amount: booking.total_amount } : {}),
+            },
             provider_payload: {},
             created_at: input.now,
             updated_at: input.now,

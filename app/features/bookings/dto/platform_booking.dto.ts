@@ -1,3 +1,4 @@
+import type { BookingCommission } from '#features/commissions/booking_commission'
 import type { PaginationMeta } from '#features/feedbacks/dto/feedback.dto'
 import type {
   PropertySummaryDto,
@@ -32,6 +33,8 @@ export type PlatformBookingDto = Omit<BookingDto, 'property' | 'client'> & {
   residence: ResidenceSummaryDto | null
   owner: UserSummaryDto | null
   client: PlatformBookingClientDto | null
+  /** Part de RESI ; `null` sans commission (comptoir, historique, commission coupée). */
+  commission: BookingCommission | null
 }
 
 export interface ListPlatformBookingsInput {

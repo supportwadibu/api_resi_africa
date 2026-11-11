@@ -47,7 +47,11 @@ export class RequestRedemptionUseCase {
     }
 
     // Un gain échu mais pas encore libéré par l'ordonnanceur doit compter.
-    await this.release.forSponsor(await Sponsorship.listBySponsor(input.user_id), now)
+    await this.release.forSponsor(
+      input.user_id,
+      await Sponsorship.listBySponsor(input.user_id),
+      now
+    )
     await Sponsorship.ensureAccount({
       user_id: input.user_id,
       role: user.role_id,

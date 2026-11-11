@@ -4,6 +4,10 @@ import {
   resolveSponsorshipSettings,
   type SponsorshipSettings,
 } from '#features/sponsorships/sponsorship_rules'
+import {
+  resolveCommissionSettings,
+  type CommissionSettings,
+} from '#features/commissions/commission_rules'
 import { MINIMUM_WITHDRAWAL } from '#features/wallets/wallet_rules'
 
 /**
@@ -27,6 +31,17 @@ export interface SponsorshipSettingsDocument extends SponsorshipSettings {
 
 const WITHDRAWALS_DOC = 'withdrawals'
 const SPONSORSHIPS_DOC = 'sponsorships'
+const COMMISSIONS_DOC = 'commissions'
+
+/** Réglage de la commission de RESI : voir `commission_rules.ts`. */
+export interface CommissionSettingsDocument extends CommissionSettings {
+  updated_at: Date
+  updated_by: string | null
+}
+
+function commissionSettings() {
+  return collection<CommissionSettingsDocument>(COLLECTIONS.platformSettings).doc(COMMISSIONS_DOC)
+}
 
 function settings() {
   return collection<WithdrawalSettingsDocument>(COLLECTIONS.platformSettings)
@@ -82,6 +97,28 @@ const PlatformSetting = {
       } satisfies SponsorshipSettingsDocument) as unknown as SponsorshipSettingsDocument
     )
     return { ...resolveSponsorshipSettings(input), updated_at: now }
+  },
+
+  /**
+   * Commission de RESI. Sans document — avant le premier réglage au
+   * backoffice —, `DEFAULT_COMMISSION_SETTINGS`, commission coupée.
+   */
+  async commissions(): Promise<CommissionSettings & { updated_at: Date | null }> {
+    const doc = toDoc<CommissionSettingsDocument>(await commissionSettings().get())
+    return { ...resolveCommissionSettings(doc), updated_at: doc?.updated_at ?? null }
+  },
+
+  async updateCommissions(input: CommissionSettings, adminId: string) {
+    const now = new Date()
+    const resolved = resolveCommissionSettings(input)
+    await commissionSettings().set(
+      toPayload({
+        ...resolved,
+        updated_at: now,
+        updated_by: adminId,
+      } satisfies CommissionSettingsDocument) as unknown as CommissionSettingsDocument
+    )
+    return { ...resolved, updated_at: now }
   },
 }
 

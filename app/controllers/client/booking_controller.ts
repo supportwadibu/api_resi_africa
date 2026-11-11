@@ -5,6 +5,8 @@ import {
   updateBookingValidator,
 } from '#validators/booking/booking'
 
+import { toClientBooking } from '#features/commissions/booking_commission'
+
 import type { HttpContext } from '@adonisjs/core/http'
 
 import {
@@ -41,7 +43,7 @@ export default class ClientBookingController {
       message: payload.message,
       negotiation_level: payload.negotiation_level,
     })
-    return ctx.response.created({ data: booking })
+    return ctx.response.created({ data: toClientBooking(booking) })
   }
 
   async update(ctx: HttpContext) {
@@ -55,7 +57,7 @@ export default class ClientBookingController {
       message: payload.message,
     })
 
-    return ctx.response.ok({ data: booking })
+    return ctx.response.ok({ data: toClientBooking(booking) })
   }
 
   async cancel(ctx: HttpContext) {
@@ -64,12 +66,12 @@ export default class ClientBookingController {
 
     const payload = await ctx.request.validateUsing(cancelBookingValidator)
     const booking = await new CancelBookingUseCase().execute(ctx.params.id, userId, payload)
-    return ctx.response.ok({ data: booking })
+    return ctx.response.ok({ data: toClientBooking(booking) })
   }
 
   /** POST /client/bookings/:id/sponsorship-credit — payer avec le crédit parrainage. */
   async applySponsorshipCredit(ctx: HttpContext) {
     const booking = await new ApplyStayCreditUseCase().execute(ctx.params.id, ctx.authUser!.id)
-    return ctx.response.ok({ data: booking })
+    return ctx.response.ok({ data: toClientBooking(booking) })
   }
 }

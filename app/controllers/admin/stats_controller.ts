@@ -1,10 +1,12 @@
 import {
+  GetPlatformRevenueUseCase,
   GetPlatformStatsUseCase,
   GetRevenueSeriesUseCase,
   GetStayTypeBreakdownUseCase,
   GetSubscriptionRevenueUseCase,
 } from '#features/platform_stats/use_cases/index'
 import {
+  platformRevenueValidator,
   revenueSeriesValidator,
   stayTypeBreakdownValidator,
   subscriptionRevenueValidator,
@@ -46,6 +48,24 @@ export default class AdminStatsController {
     })
     const series = await new GetRevenueSeriesUseCase().execute(payload)
     return ctx.response.ok({ data: series })
+  }
+
+  /**
+   * GET /admin/stats/platform-revenue — chiffre d'affaires de RESI : commissions,
+   * abonnements, frais de retrait, moins les gains de parrainage.
+   */
+  async platformRevenue(ctx: HttpContext) {
+    const { from, to, granularity } = await ctx.request.validateUsing(platformRevenueValidator, {
+      data: ctx.request.qs(),
+    })
+    const end = utcDay(to)
+    const revenue = await new GetPlatformRevenueUseCase().execute({
+      from: utcDay(from),
+      // Dernier jour inclus : la borne passée au calcul est le lendemain.
+      to: end ? new Date(end.getTime() + 24 * 60 * 60 * 1000) : undefined,
+      granularity,
+    })
+    return ctx.response.ok({ data: revenue })
   }
 
   /** GET /admin/stats/stay-types — réservations par type et durée de séjour. */

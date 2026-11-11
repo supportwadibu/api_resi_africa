@@ -10,9 +10,10 @@ import { DomainError } from '#utils/domain_error'
  * propriétaire, hors de la plateforme.
  *
  * Le parrain ne gagne rien à l'inscription — vingt faux comptes ne coûtent
- * rien à créer —, mais à la **première action qui rapporte** du filleul :
- * - filleul client : un séjour réservé en ligne, payé et terminé ;
- * - filleul propriétaire : un abonnement payé (l'essai gratuit ne compte pas).
+ * rien à créer —, mais à **chaque action qui rapporte** du filleul :
+ * - filleul client : chaque séjour réservé en ligne, payé et terminé — le gain
+ *   se calcule sur la commission de RESI, pas sur le prix du séjour ;
+ * - filleul propriétaire : chaque abonnement payé (l'essai gratuit ne compte pas).
  *
  * Le gain s'accumule sur un solde de parrainage. Passé un seuil, le parrain
  * le retire sur Wave ou le convertit : en crédit séjour pour un client, en
@@ -44,7 +45,10 @@ export const REDEMPTION_TYPES_BY_ROLE: Record<SponsorshipRole, readonly Redempti
 
 /** Gain dû pour un filleul d'un rôle donné. */
 export interface RewardRule {
-  /** `fixed` : `value` francs. `percent` : `value` % du montant payé. */
+  /**
+   * `fixed` : `value` francs. `percent` : `value` % de la base — commission de
+   * RESI pour un filleul client, abonnement payé pour un propriétaire.
+   */
   mode: RewardMode
   value: number
   /** Plafond d'un gain en pourcentage. `null` : sans plafond. */
@@ -88,8 +92,10 @@ export interface SponsorshipSettings {
 export const DEFAULT_SPONSORSHIP_SETTINGS: SponsorshipSettings = {
   enabled: false,
   rewards: {
-    client: { mode: 'fixed', value: 100, max_amount: null, hold_days: 0 },
-    proprio: { mode: 'fixed', value: 1000, max_amount: null, hold_days: 14 },
+    // 5 % de la commission de RESI sur chaque séjour du filleul client.
+    client: { mode: 'percent', value: 5, max_amount: null, hold_days: 0 },
+    // 10 % de chaque abonnement payé par le filleul propriétaire.
+    proprio: { mode: 'percent', value: 10, max_amount: null, hold_days: 14 },
   },
   redemption: {
     client: { minimum_amount: 5000, options: ['withdrawal', 'stay_credit'] },

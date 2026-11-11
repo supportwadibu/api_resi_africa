@@ -1,3 +1,4 @@
+import { markupPricing, type CommissionRule } from '#features/commissions/commission_rules'
 import type { PropertyDto } from './dto/property.dto.ts'
 
 /**
@@ -66,7 +67,10 @@ function roundCoordinate(value: number | null | undefined): number | null {
  * Liste blanche plutôt que noire : un champ ajouté plus tard au DTO ne sort
  * pas sur la route publique sans avoir été choisi ici.
  */
-export function toPublicProperty(property: PropertyDto): PublicPropertyDto {
+export function toPublicProperty(
+  property: PropertyDto,
+  commission: CommissionRule | null = null
+): PublicPropertyDto {
   // Biens historiques sans adresse complète : les champs absents restent vides
   // plutôt que de lever.
   const address: Partial<PropertyDto['address']> = property.address ?? {}
@@ -81,7 +85,8 @@ export function toPublicProperty(property: PropertyDto): PublicPropertyDto {
     details: property.details,
     amenities: property.amenities,
     media: property.media,
-    pricing: property.pricing,
+    // Le client voit le prix par nuit commission de RESI comprise.
+    pricing: markupPricing(property.pricing, commission),
     charges_included: property.charges_included,
     additional_charges: property.additional_charges,
     available_from: property.available_from,

@@ -1,5 +1,11 @@
 import { BookingRepository } from '#features/bookings/repositories/booking_repository'
-import { collection, COLLECTIONS, countQuery, type CollectionName } from '#firebase/firestore'
+import {
+  collection,
+  COLLECTIONS,
+  countQuery,
+  toDocs,
+  type CollectionName,
+} from '#firebase/firestore'
 import Booking, { BOOKING_STATUSES } from '#models/booking'
 import { PROPERTY_STATUSES } from '#models/property'
 import { ROLE_NAMES } from '#models/role'
@@ -9,10 +15,15 @@ import PaymentHistory from '#models/payment_history'
 import Plan from '#models/plan'
 import Subscription from '#models/subscription'
 import { readPaidPlanTier } from '#features/plans/plan_tier'
+import { ownerAmountOf, sponsorshipCreditOf } from '#features/booking_payments/sponsorship_credit'
+import type { BookingPaymentDocument } from '#models/booking_payment'
+import type { SponsorshipTransactionDocument } from '#models/sponsorship'
+import type { WithdrawalRequestDocument } from '#models/wallet'
 
 import type { StatsBooking } from '#features/bookings/booking_stats'
 import type { PlatformStatsDto } from '../dto/platform_stats.dto.ts'
 import type { StayBreakdownBooking } from '../stay_type_breakdown.ts'
+import { commissionEvents, type RevenueEvent } from '../platform_revenue.ts'
 import type { EarnedPayment, PaidSubscription, TrialSubscription } from '../subscription_revenue.ts'
 
 type Counters = Omit<PlatformStatsDto, 'generated_at' | 'revenue' | 'occupancy_rate'>
@@ -184,6 +195,58 @@ export class PlatformStatsRepository {
           (!until || b.start_date < until) &&
           (!ownerId || b.owner_id === ownerId)
       )
+  }
+
+  /**
+   * Mouvements du chiffre d'affaires de RESI depuis `from`.
+   *
+   * Une requête d'intervalle sur un seul champ par collection : Firestore
+   * l'indexe d'office, sans index composite à déclarer. Statuts et types sont
+   * filtrés ensuite, sur un volume borné par la période.
+   */
+  async platformRevenueEvents(from: Date): Promise<RevenueEvent[]> {
+    const since = <T>(name: CollectionName, field: string) =>
+      collection(name)
+        .where(field, '>=', from)
+        .get()
+        .then((snapshot) => toDocs<T & object>(snapshot.docs))
+
+    const [paid, refunded, subscriptions, withdrawals, rewards] = await Promise.all([
+      since<BookingPaymentDocument>(COLLECTIONS.bookingPayments, 'paid_at'),
+      since<BookingPaymentDocument>(COLLECTIONS.bookingPayments, 'refunded_at'),
+      PaymentHistory.findPaidSince(from),
+      since<WithdrawalRequestDocument>(COLLECTIONS.withdrawalRequests, 'processed_at'),
+      since<SponsorshipTransactionDocument>(COLLECTIONS.sponsorshipTransactions, 'created_at'),
+    ])
+
+    // Un paiement payé puis remboursé dans la période sort des deux requêtes.
+    const payments = new Map([...paid, ...refunded].map((p) => [p._id, p]))
+    const events: RevenueEvent[] = [...payments.values()].flatMap((p) =>
+      commissionEvents({
+        status: p.status,
+        paid_at: p.paid_at,
+        refunded_at: p.refunded_at ?? null,
+        // Signée : un code promo plus généreux que la commission coûte à RESI.
+        commission: p.amount + sponsorshipCreditOf(p) - ownerAmountOf(p),
+      })
+    )
+
+    for (const p of subscriptions) {
+      if (p.paid_at)
+        events.push({ source: 'subscriptions', amount: Number(p.amount), at: p.paid_at })
+    }
+    for (const w of withdrawals) {
+      if (w.status === 'paid' && w.processed_at && w.fee > 0) {
+        events.push({ source: 'withdrawal_fees', amount: w.fee, at: w.processed_at })
+      }
+    }
+    // Gain crédité au parrain : une dépense de RESI ; sa reprise, une recette.
+    for (const t of rewards) {
+      if (t.type === 'reward' || t.type === 'reward_reversal') {
+        events.push({ source: 'sponsorship_rewards', amount: -t.balance_delta, at: t.created_at })
+      }
+    }
+    return events
   }
 }
 

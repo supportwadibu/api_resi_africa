@@ -1,5 +1,7 @@
 import type { BookingPaymentStatus } from '#features/booking_payments/dto/booking_payment.dto'
 
+import { toClientBooking } from '#features/commissions/booking_commission'
+
 import type { BookingDto } from './dto/booking.dto.ts'
 
 interface PropertyLike {
@@ -37,7 +39,8 @@ export function attachClientView(
   return bookings.map((booking) => {
     const property = properties.get(booking.property_id)
     return {
-      ...booking,
+      // Prix vus et payés par le client, et non la part du propriétaire.
+      ...toClientBooking(booking),
       ...(property
         ? {
             property: {

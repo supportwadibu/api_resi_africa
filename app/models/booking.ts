@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 
 import type { StayType } from '#features/bookings/stay_type'
+import type { CommissionMode } from '#features/commissions/commission_rules'
 import type { Referrer } from '#features/bookings/referrer'
 import type { DepositAction } from '#features/bookings/cancellation'
 import { buildReferrerFields } from '#features/bookings/referrer'
@@ -65,6 +66,19 @@ export interface BookingDocument {
    */
   negotiation_level?: number | null
   list_daily_price?: number | null
+  /**
+   * Commission de RESI, figée à la création d'une réservation en ligne (voir
+   * `commission_rules.ts`). `daily_price` à `total_amount` restent alors la
+   * part du propriétaire ; les champs `client_*` portent ce que voit et paie
+   * le client. Absents de l'historique, du comptoir et de toute réservation
+   * prise commission coupée : le client y paie `total_amount`.
+   */
+  commission_mode?: CommissionMode | null
+  commission_value?: number | null
+  commission_amount?: number | null
+  client_daily_price?: number | null
+  client_subtotal_amount?: number | null
+  client_total_amount?: number | null
   message: string | null
 
   /**
@@ -427,6 +441,15 @@ const Booking = {
     message?: string | null
     negotiation_level?: number | null
     list_daily_price?: number | null
+    commission?: Pick<
+      BookingDocument,
+      | 'commission_mode'
+      | 'commission_value'
+      | 'commission_amount'
+      | 'client_daily_price'
+      | 'client_subtotal_amount'
+      | 'client_total_amount'
+    > | null
     created_by?: string | null
   }): Promise<BookingRecord> {
     const firestore = db()
@@ -459,6 +482,7 @@ const Booking = {
       ...(input.negotiation_level
         ? { negotiation_level: input.negotiation_level, list_daily_price: input.list_daily_price }
         : {}),
+      ...(input.commission ?? {}),
       cancelled_at: null,
       completed_at: null,
       cancellation_reason: null,

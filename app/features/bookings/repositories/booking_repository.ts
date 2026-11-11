@@ -1,5 +1,6 @@
 import { exploitedUnits } from '#features/finance/occupancy'
 import { SCOPE_READ_LIMIT } from '#features/managers/scope'
+import { attachCommission, readBookingCommission } from '#features/commissions/booking_commission'
 import Booking, { type BookingRecord } from '#models/booking'
 import Property from '#models/property'
 
@@ -24,6 +25,11 @@ import type {
 
 export class BookingRepository {
   static toDto(doc: BookingRecord): BookingDto {
+    // Part de RESI sous clé `Symbol` : jamais sérialisée, voir `booking_commission.ts`.
+    return attachCommission(BookingRepository.toBaseDto(doc), readBookingCommission(doc))
+  }
+
+  private static toBaseDto(doc: BookingRecord): BookingDto {
     return {
       id: doc._id,
       property_id: doc.property_id,
@@ -43,9 +49,12 @@ export class BookingRepository {
       // hebdomadaire et mensuel distincts.
       duration_discount_percent: doc.duration_discount_percent ?? 0,
       subtotal_amount: doc.subtotal_amount,
-      discount_amount: doc.discount_amount,
+      // Avec commission, le code promo est un geste de RESI : le propriétaire ne
+      // le voit pas, sa part n'en est pas diminuée. Les vues client et admin
+      // le lisent dans la part de RESI.
+      discount_amount: doc.commission_mode ? 0 : doc.discount_amount,
       total_amount: doc.total_amount,
-      promo_code: doc.promo_code ?? null,
+      promo_code: doc.commission_mode ? null : (doc.promo_code ?? null),
       // Absent de l'historique, antérieur au parrainage : rien de réglé en crédit.
       sponsorship_credit_amount: doc.sponsorship_credit_amount ?? 0,
       amount_due: Math.max(0, doc.total_amount - (doc.sponsorship_credit_amount ?? 0)),
@@ -177,6 +186,16 @@ export class BookingRepository {
       message: input.message ?? null,
       negotiation_level: input.negotiation_level ?? null,
       list_daily_price: input.list_daily_price ?? null,
+      commission: input.commission_mode
+        ? {
+            commission_mode: input.commission_mode,
+            commission_value: input.commission_value,
+            commission_amount: input.commission_amount,
+            client_daily_price: input.client_daily_price,
+            client_subtotal_amount: input.client_subtotal_amount,
+            client_total_amount: input.client_total_amount,
+          }
+        : null,
     })
 
     return BookingRepository.toDto(booking)
