@@ -118,7 +118,7 @@ test.group('réglages du parrainage', () => {
     })
     assert.isTrue(settings.enabled)
     assert.equal(settings.rewards.client.value, 250)
-    assert.equal(settings.rewards.client.mode, 'fixed')
+    assert.equal(settings.rewards.client.mode, 'percent')
     assert.deepEqual(settings.rewards.proprio, DEFAULT_SPONSORSHIP_SETTINGS.rewards.proprio)
   })
 

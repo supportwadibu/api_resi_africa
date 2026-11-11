@@ -1,4 +1,5 @@
 import vine from '@vinejs/vine'
+import { REVENUE_GRANULARITIES } from '#features/platform_stats/platform_revenue'
 
 /**
  * GET /admin/stats/revenue
@@ -37,5 +38,17 @@ export const stayTypeBreakdownValidator = vine.compile(
     from: vine.date({ formats: ['YYYY-MM-DD'] }).optional(),
     to: vine.date({ formats: ['YYYY-MM-DD'] }).optional(),
     owner_id: vine.string().trim().minLength(1).maxLength(128).optional(),
+  })
+)
+
+/**
+ * GET /admin/stats/platform-revenue — chiffre d'affaires de RESI. `to` est le
+ * dernier jour inclus ; la taille de la série est bornée par le use case.
+ */
+export const platformRevenueValidator = vine.compile(
+  vine.object({
+    from: vine.date({ formats: ['YYYY-MM-DD'] }).optional(),
+    to: vine.date({ formats: ['YYYY-MM-DD'] }).optional(),
+    granularity: vine.enum(REVENUE_GRANULARITIES).optional(),
   })
 )

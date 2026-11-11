@@ -1,3 +1,4 @@
+import { commissionOf } from '#features/commissions/booking_commission'
 import { toPropertySummary, toResidenceSummary } from '#features/properties/portfolio'
 
 import type { PropertyDto } from '#features/properties/dto/property.dto'
@@ -130,6 +131,8 @@ export function attachBookingRelations(
       residence: residence ? toResidenceSummary(residence) : null,
       owner: relations.users.get(booking.owner_id) ?? null,
       client: resolveBookingClient(booking, relations),
+      // Lue explicitement : la part de RESI ne sort que sur la vue admin.
+      commission: commissionOf(booking),
     }
   })
 }

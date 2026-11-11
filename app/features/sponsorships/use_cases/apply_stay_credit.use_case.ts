@@ -49,7 +49,8 @@ export class ApplyStayCreditUseCase {
         residence_id: result.booking.residence_id ?? null,
         booking_id: bookingId,
         booking_payment_id: stayCreditPaymentId(bookingId),
-        amount: result.amount,
+        // Part du propriétaire : le crédit couvre aussi la commission de RESI.
+        amount: result.booking.total_amount,
       })
     }
 

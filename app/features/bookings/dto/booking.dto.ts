@@ -3,6 +3,7 @@
  * statut est ajouté, ce qui est arrivé avec `in_progress`.
  */
 import type { BookingPaymentStatus } from '#features/booking_payments/dto/booking_payment.dto'
+import type { CommissionMode } from '#features/commissions/commission_rules'
 import type { ActorScope } from '#features/managers/scope'
 import type { BookingStatus } from '#models/booking'
 
@@ -194,6 +195,13 @@ export interface CreateCalculatedBookingInput extends CreateBookingInput {
   /** Prix normal par jour au moment de la négociation ; absent sans négociation. */
   list_daily_price?: number
   owner_id: string
+  /** Commission de RESI et montants côté client ; absents commission coupée. */
+  commission_mode?: CommissionMode
+  commission_value?: number
+  commission_amount?: number
+  client_daily_price?: number
+  client_subtotal_amount?: number
+  client_total_amount?: number
   /** Copié depuis l'unité par le use case, jamais fourni par le client. */
   residence_id?: string | null
   days_count: number
@@ -222,6 +230,11 @@ export interface UpdateCalculatedBookingInput extends UpdateBookingInput {
   late_checkout_fee: number
   discount_amount: number
   total_amount: number
+  /** Recalculés sur la règle figée à la création ; absents sans commission. */
+  commission_amount?: number
+  client_daily_price?: number
+  client_subtotal_amount?: number
+  client_total_amount?: number
 }
 
 export interface ListBookingsInput {

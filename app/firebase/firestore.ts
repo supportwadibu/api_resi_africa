@@ -57,6 +57,7 @@ export const COLLECTIONS = {
   sponsorshipAccounts: 'sponsorship_accounts',
   sponsorshipTransactions: 'sponsorship_transactions',
   sponsorshipRedemptions: 'sponsorship_redemptions',
+  sponsorshipRewards: 'sponsorship_rewards',
   negotiations: 'negotiations',
   auditLogs: 'audit_logs',
 } as const

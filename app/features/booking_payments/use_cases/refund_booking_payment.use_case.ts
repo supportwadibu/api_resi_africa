@@ -6,7 +6,7 @@ import WaveClient, { toPaymentDomainError } from '#services/wave_client'
 
 import type { BookingPaymentDto } from '../dto/booking_payment.dto.ts'
 import BookingPaymentRepository from '../repositories/booking_payment_repository.ts'
-import { sponsorshipCreditOf } from '../sponsorship_credit.ts'
+import { ownerAmountOf } from '../sponsorship_credit.ts'
 
 /**
  * Rembourse au client, par Wave, le paiement en ligne d'une réservation
@@ -63,7 +63,7 @@ export class RefundBookingPaymentUseCase {
       residence_id: booking.residence_id,
       booking_id: booking.id,
       booking_payment_id: payment.id,
-      amount: payment.amount + sponsorshipCreditOf(payment),
+      amount: ownerAmountOf(payment),
     })
 
     return payment.amount

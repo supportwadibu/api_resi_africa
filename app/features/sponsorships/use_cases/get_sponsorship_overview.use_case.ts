@@ -37,7 +37,7 @@ export class GetSponsorshipOverviewUseCase {
 
     // Avant la lecture du compte : les soldes qu'elle rend tiennent compte des
     // gains tout juste libérés.
-    await this.release.forSponsor(sponsored, now)
+    await this.release.forSponsor(userId, sponsored, now)
     const account = await Sponsorship.ensureAccount({
       user_id: userId,
       role,

@@ -4,7 +4,9 @@ import { findExtensionConflict, toPeriods } from '../availability.ts'
 import type { BookingDto, UpdateBookingInput } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 import PromoCodeRepository from '../repositories/promo_code_repository.ts'
-import { assertExtensionBounds, calculateStayPrice, negotiatedPricing } from '../stay_pricing.ts'
+import { assertExtensionBounds, negotiatedPricing } from '../stay_pricing.ts'
+import { commissionOf } from '#features/commissions/booking_commission'
+import { onlineBookingAmounts, priceOnlineStay } from '#features/commissions/commission_rules'
 
 export class UpdateBookingUseCase {
   constructor(
@@ -38,10 +40,21 @@ export class UpdateBookingUseCase {
       current.negotiation_level !== null
         ? negotiatedPricing(property.pricing, current.daily_price)
         : property.pricing
-    const price = calculateStayPrice(pricing, current.start_date, input.end_date)
+    // Règle figée à la création, et non le réglage du jour : un taux changé
+    // entre-temps ne doit pas renchérir les nuits déjà réservées.
+    const commission = commissionOf(current)
+    const price = priceOnlineStay(
+      pricing,
+      current.start_date,
+      input.end_date,
+      commission ? { mode: commission.mode, value: commission.value } : null
+    )
     const promo = input.promo_code
-      ? await this.validatePromoCode(input.promo_code, client_id, price.subtotal)
+      ? await this.validatePromoCode(input.promo_code, client_id, price.client.subtotal)
       : null
+    // La règle réécrite est celle déjà figée : `commission_mode` et
+    // `commission_value` ne changent pas.
+    const amounts = onlineBookingAmounts(price, promo?.discount ?? 0)
 
     // Le chevauchement est vérifié *dans* la transaction d'écriture, comme à
     // la création comptoir : hors transaction, une prolongation et une
@@ -52,13 +65,7 @@ export class UpdateBookingUseCase {
         id,
         {
           ...input,
-          days_count: price.days,
-          daily_price: price.dailyPrice,
-          duration_discount_percent: price.discountPercent,
-          subtotal_amount: price.subtotal,
-          late_checkout_fee: price.lateCheckoutFee,
-          discount_amount: promo?.discount ?? 0,
-          total_amount: price.subtotal - (promo?.discount ?? 0),
+          ...amounts,
           promo_code: promo?.code ?? undefined,
         },
         { client_id },

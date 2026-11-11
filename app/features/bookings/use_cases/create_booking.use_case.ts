@@ -4,14 +4,21 @@ import { DomainError } from '#utils/domain_error'
 import type { BookingDto, CreateBookingInput } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 import PromoCodeRepository from '../repositories/promo_code_repository.ts'
-import { calculateStayPrice, negotiatedPricing } from '../stay_pricing.ts'
+import { negotiatedPricing } from '../stay_pricing.ts'
+import {
+  activeCommissionRule,
+  onlineBookingAmounts,
+  priceOnlineStay,
+} from '#features/commissions/commission_rules'
+import CommissionRepository from '#features/commissions/repositories/commission_repository'
 import Negotiation from '#models/negotiation'
 
 export class CreateBookingUseCase {
   constructor(
     private repo: BookingRepository = new BookingRepository(),
     private promoRepo: PromoCodeRepository = new PromoCodeRepository(),
-    private negotiations: Pick<typeof Negotiation, 'offers'> = Negotiation
+    private negotiations: Pick<typeof Negotiation, 'offers'> = Negotiation,
+    private commissions: Pick<CommissionRepository, 'settings'> = new CommissionRepository()
   ) {}
 
   async execute(input: CreateBookingInput): Promise<BookingDto> {
@@ -39,13 +46,17 @@ export class CreateBookingUseCase {
       )
     }
 
-    const price = calculateStayPrice(
+    const settings = await this.commissions.settings()
+    const price = priceOnlineStay(
       negotiated === null ? property.pricing : negotiatedPricing(property.pricing, negotiated),
       input.start_date,
-      input.end_date
+      input.end_date,
+      activeCommissionRule(settings)
     )
+    // Le code promo porte sur ce que voit le client : c'est à ce montant que
+    // s'applique son minimum de séjour.
     const promo = input.promo_code
-      ? await this.validatePromoCode(input.promo_code, input.client_id, price.subtotal)
+      ? await this.validatePromoCode(input.promo_code, input.client_id, price.client.subtotal)
       : null
 
     try {
@@ -55,13 +66,7 @@ export class CreateBookingUseCase {
         // Figé à la création : déplacer l'unité plus tard ne doit pas
         // réimputer un chiffre d'affaires déjà constaté.
         residence_id: property.residence_id ?? null,
-        days_count: price.days,
-        daily_price: price.dailyPrice,
-        duration_discount_percent: price.discountPercent,
-        subtotal_amount: price.subtotal,
-        late_checkout_fee: price.lateCheckoutFee,
-        discount_amount: promo?.discount ?? 0,
-        total_amount: price.subtotal - (promo?.discount ?? 0),
+        ...onlineBookingAmounts(price, promo?.discount ?? 0),
         promo_code: promo?.code ?? undefined,
         promo_code_id: promo?.id ?? null,
         negotiation_level: negotiated === null ? undefined : input.negotiation_level,

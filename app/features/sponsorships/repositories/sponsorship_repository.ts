@@ -1,6 +1,7 @@
 import { COLLECTIONS, getByIds } from '#firebase/firestore'
 import PlatformSetting from '#models/platform_setting'
 import Sponsorship, {
+  totalRewardOf,
   type RedemptionStatus,
   type SponsorshipAccountRecord,
   type SponsorshipRecord,
@@ -42,7 +43,8 @@ export class SponsorshipRepository {
       full_name: doc.sponsored_name,
       role: doc.sponsored_role,
       status: doc.status,
-      reward_amount: doc.reward_amount,
+      // Gain cumulé : le gain unique historique plus les gains récurrents.
+      reward_amount: totalRewardOf(doc),
       available_at: doc.available_at ?? null,
       created_at: doc.created_at,
       qualified_at: doc.qualified_at ?? null,
@@ -117,7 +119,8 @@ export class SponsorshipRepository {
         }),
         name_at_signup: doc.sponsored_name,
       },
-      reward_amount: doc.reward_amount,
+      // Gain cumulé : le gain unique historique plus les gains récurrents.
+      reward_amount: totalRewardOf(doc),
       reward_rule: doc.reward_rule ?? null,
       trigger: doc.trigger ?? null,
       trigger_ref_id: doc.trigger_ref_id ?? null,

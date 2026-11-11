@@ -8,7 +8,7 @@ import { DomainError } from '#utils/domain_error'
 
 import type { BookingPaymentDto } from '../dto/booking_payment.dto.ts'
 import BookingPaymentRepository from '../repositories/booking_payment_repository.ts'
-import { sponsorshipCreditOf } from '../sponsorship_credit.ts'
+import { ownerAmountOf } from '../sponsorship_credit.ts'
 
 /**
  * Constate l'issue du paiement Wave d'une réservation, sans attendre le
@@ -111,7 +111,7 @@ export class ConfirmBookingPaymentUseCase {
         residence_id: booking?.residence_id ?? null,
         booking_id: payment.booking_id,
         booking_payment_id: payment.id,
-        amount: payment.amount + sponsorshipCreditOf(payment),
+        amount: ownerAmountOf(payment),
       })
 
       return paid

@@ -10,3 +10,32 @@ export function sponsorshipCreditOf(payment: { metadata?: Record<string, unknown
   const value = payment.metadata?.sponsorship_credit_amount
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
 }
+
+/**
+ * Ce qui revient au propriétaire sur un paiement de réservation : sa part
+ * figée à l'ouverture du paiement quand RESI prend une commission, tout
+ * l'encaissement — crédit parrainage compris — sinon, comme avant la
+ * commission. Ce que RESI garde est l'écart entre les deux.
+ */
+export function ownerAmountOf(payment: {
+  amount: number
+  metadata?: Record<string, unknown>
+}): number {
+  const value = payment.metadata?.owner_amount
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : payment.amount + sponsorshipCreditOf(payment)
+}
+
+/**
+ * Commission de RESI sur un paiement de réservation : ce que le client a
+ * réglé — Wave et crédit parrainage — moins la part du propriétaire. 0 sur un
+ * paiement sans commission, et jamais négatif : un code promo plus généreux
+ * que la commission ne fait pas devoir de gain au parrain.
+ */
+export function commissionOfPayment(payment: {
+  amount: number
+  metadata?: Record<string, unknown>
+}): number {
+  return Math.max(0, payment.amount + sponsorshipCreditOf(payment) - ownerAmountOf(payment))
+}

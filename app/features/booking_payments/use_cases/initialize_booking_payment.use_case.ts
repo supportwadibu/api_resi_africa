@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 
 import logger from '@adonisjs/core/services/logger'
 
+import { commissionOf } from '#features/commissions/booking_commission'
 import WaveClient, { isSessionPayable, toPaymentDomainError } from '#services/wave_client'
 import env from '#start/env'
 import { DomainError } from '#utils/domain_error'
@@ -51,7 +52,10 @@ export class InitializeBookingPaymentUseCase {
     // La part réglée par le crédit parrainage n'est pas redemandée : Wave
     // n'encaisse que le reste.
     const sponsorshipCredit = booking.sponsorship_credit_amount ?? 0
-    const amountDue = booking.total_amount - sponsorshipCredit
+    // Le client paie son prix, commission de RESI comprise ; `total_amount`
+    // n'est que la part du propriétaire.
+    const commission = commissionOf(booking)
+    const amountDue = (commission?.client_total_amount ?? booking.total_amount) - sponsorshipCredit
 
     // Wave refuse les décimales en XOF : un montant qui en porterait serait
     // rejeté, et mieux vaut le dire ici qu'en 502.
@@ -108,6 +112,9 @@ export class InitializeBookingPaymentUseCase {
       metadata: {
         booking_id: booking.id,
         ...(sponsorshipCredit > 0 ? { sponsorship_credit_amount: sponsorshipCredit } : {}),
+        // Part du propriétaire figée elle aussi : c'est elle, et non tout
+        // l'encaissement, qui entre à son portefeuille.
+        ...(commission ? { owner_amount: booking.total_amount } : {}),
       },
     })
 

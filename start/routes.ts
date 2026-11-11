@@ -91,6 +91,7 @@ const ClientBookingPaymentController = () =>
 const ClientNegotiationController = () => import('#controllers/client/negotiation_controller')
 const SponsorshipController = () => import('#controllers/sponsorship_controller')
 const AdminSponsorshipsController = () => import('#controllers/admin/sponsorships_controller')
+const AdminCommissionsController = () => import('#controllers/admin/commissions_controller')
 
 router.get('/', () => {
   return { hello: 'world' }
@@ -223,6 +224,7 @@ router
             router.get('revenue', [AdminStatsController, 'revenue'])
             router.get('subscriptions', [AdminStatsController, 'subscriptions'])
             router.get('stay-types', [AdminStatsController, 'stayTypes'])
+            router.get('platform-revenue', [AdminStatsController, 'platformRevenue'])
           })
           .prefix('stats')
           .as('stats')
@@ -344,6 +346,13 @@ router
           })
           .prefix('settings/sponsorships')
           .as('sponsorship_settings')
+        router
+          .group(() => {
+            router.get('/', [AdminCommissionsController, 'settings'])
+            router.put('/', [AdminCommissionsController, 'updateSettings'])
+          })
+          .prefix('settings/commissions')
+          .as('commission_settings')
       })
       .prefix('admin')
       .as('admin')
