@@ -2,6 +2,7 @@ import { exploitedUnits } from '#features/finance/occupancy'
 import { SCOPE_READ_LIMIT } from '#features/managers/scope'
 import { attachCommission, readBookingCommission } from '#features/commissions/booking_commission'
 import Booking, { type BookingRecord } from '#models/booking'
+import type { BookingSource } from '#features/clients/platform_clients'
 import Property from '#models/property'
 
 import {
@@ -24,6 +25,11 @@ import type {
 } from '../dto/booking.dto.ts'
 
 export class BookingRepository {
+  /** Réservations réduites au lien client ↔ logement, les plus récentes d'abord. */
+  async listForClients(limit: number): Promise<BookingSource[]> {
+    return Booking.listForClients(limit)
+  }
+
   static toDto(doc: BookingRecord): BookingDto {
     // Part de RESI sous clé `Symbol` : jamais sérialisée, voir `booking_commission.ts`.
     return attachCommission(BookingRepository.toBaseDto(doc), readBookingCommission(doc))

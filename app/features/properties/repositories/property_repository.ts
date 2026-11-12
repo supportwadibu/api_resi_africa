@@ -6,6 +6,7 @@ import {
 } from '#features/bookings/stay_pricing'
 import { COLLECTIONS, getByIds } from '#firebase/firestore'
 import Property, { type PropertyDocument, type PropertyRecord } from '#models/property'
+import type { MapPropertySource } from '#features/residences/platform_map'
 
 import type {
   CreatePropertyInput,
@@ -28,6 +29,11 @@ function withoutFurnishing(details: PropertyRecord['details']): PropertyRecord['
 }
 
 export class PropertyRepository {
+  /** Logements réduits aux champs de la carte du back-office. */
+  async listForMap(limit: number): Promise<MapPropertySource[]> {
+    return Property.listForMap(limit)
+  }
+
   static toDto(doc: PropertyRecord): PropertyDto {
     return {
       id: doc._id,

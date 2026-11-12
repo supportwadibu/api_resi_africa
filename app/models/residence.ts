@@ -213,6 +213,19 @@ const Residence = {
       .update({ units_count: increment(by), updated_at: new Date() })
   },
 
+  /**
+   * Toutes les résidences, réduites aux champs de la carte du back-office.
+   * La projection évite de rapatrier descriptions et médias complets pour
+   * placer un point.
+   */
+  async listForMap(limit: number) {
+    const snapshot = await residences()
+      .select('owner_id', 'name', 'address', 'media.images', 'units_count')
+      .limit(limit)
+      .get()
+    return toDocs<ResidenceDocument>(snapshot.docs)
+  },
+
   async paginate(
     filters: ResidenceFilters,
     options: { limit: number; offset: number }

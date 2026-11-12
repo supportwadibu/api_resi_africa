@@ -1,5 +1,6 @@
 import {
   FindPlatformResidenceUseCase,
+  GetPlatformMapUseCase,
   ListPlatformResidencesUseCase,
 } from '#features/residences/use_cases/index'
 import { listPlatformResidencesValidator } from '#validators/residence/residence'
@@ -14,6 +15,14 @@ export default class AdminResidencesController {
     })
     const result = await new ListPlatformResidencesUseCase().execute(payload)
     return ctx.response.ok(result)
+  }
+
+  /**
+   * GET /admin/residences/map — résidences et logements autonomes
+   * géolocalisés, pour la carte du tableau de bord.
+   */
+  async map(ctx: HttpContext) {
+    return ctx.response.ok(await new GetPlatformMapUseCase().execute())
   }
 
   /** GET /admin/residences/:id */

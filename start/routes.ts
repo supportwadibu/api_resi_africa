@@ -34,6 +34,12 @@ const throttle = {
   /** Exports et imports (carnet clients, compte) : chacun lit ou écrit des milliers de documents. */
   dataTransfer: () =>
     middleware.throttle({ name: 'data_transfer', max: 10, window: 600, by: 'user' }),
+  /**
+   * Écriture contrôlée par le mot de passe actuel : une session volée ne doit
+   * pas servir à le deviner à la cadence du quota général.
+   */
+  passwordCheck: () =>
+    middleware.throttle({ name: 'password_check', max: 10, window: 600, by: 'user' }),
 }
 
 const AuthController = () => import('#controllers/auth/auth_controller')
@@ -49,6 +55,7 @@ const AdminFeedbackController = () => import('#controllers/admin/feedback_contro
 const AdminAuditLogsController = () => import('#controllers/admin/audit_logs_controller')
 const AdminStatsController = () => import('#controllers/admin/stats_controller')
 const AdminUsersController = () => import('#controllers/admin/users_controller')
+const AdminProfileController = () => import('#controllers/admin/profile_controller')
 const AdminOwnersController = () => import('#controllers/admin/owners_controller')
 const AdminPropertiesController = () => import('#controllers/admin/properties_controller')
 const AdminResidencesController = () => import('#controllers/admin/residences_controller')
@@ -153,6 +160,14 @@ router
           })
           .prefix('plans')
           .as('plans')
+
+        // Compte de l'administrateur connecté. Distinct de `users/:id` : le
+        // mot de passe actuel y est exigé pour changer un identifiant.
+        router.get('profile', [AdminProfileController, 'show']).as('profile.show')
+        router
+          .patch('profile', [AdminProfileController, 'update'])
+          .as('profile.update')
+          .use(throttle.passwordCheck())
 
         // Journal d'audit. Ses lectures ne sont pas elles-mêmes tracées (voir
         // `AuditMiddleware`).
@@ -268,16 +283,17 @@ router
           .prefix('owners')
           .as('owners')
 
-        // Carnet clients de toute la plateforme, exporté avant une remise à
-        // zéro de la base puis réimporté.
+        // Clients de toute la plateforme. Le carnet est exporté avant une
+        // remise à zéro de la base puis réimporté ; seuls ces deux transferts
+        // portent la limite des traitements lourds, pas la liste.
         router
           .group(() => {
-            router.get('export', [AdminClientsController, 'export'])
-            router.post('import', [AdminClientsController, 'import'])
+            router.get('/', [AdminClientsController, 'index'])
+            router.get('export', [AdminClientsController, 'export']).use(throttle.dataTransfer())
+            router.post('import', [AdminClientsController, 'import']).use(throttle.dataTransfer())
           })
           .prefix('clients')
           .as('clients')
-          .use(throttle.dataTransfer())
 
         router
           .group(() => {
@@ -291,6 +307,8 @@ router
         router
           .group(() => {
             router.get('/', [AdminResidencesController, 'index'])
+            // Avant `:id`, sinon « map » serait pris pour un identifiant.
+            router.get('map', [AdminResidencesController, 'map'])
             router.get(':id', [AdminResidencesController, 'show'])
           })
           .prefix('residences')

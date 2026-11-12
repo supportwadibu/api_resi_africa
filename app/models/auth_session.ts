@@ -9,6 +9,8 @@ import { COLLECTIONS, collection, toDoc, toDocs, toPayload, type WithId } from '
  * `account_deleted` : sessions fermées par la suppression que l'utilisateur
  * a demandée lui-même. `password_reset` : sessions fermées par une
  * réinitialisation du mot de passe — un appareil volé ne garde pas l'accès.
+ * `password_changed` : sessions fermées quand le titulaire change lui-même
+ * son mot de passe, toutes sauf celle d'où il le change.
  */
 export const REVOKE_REASONS = [
   'logout',
@@ -17,6 +19,7 @@ export const REVOKE_REASONS = [
   'rotated',
   'account_deleted',
   'password_reset',
+  'password_changed',
 ] as const
 export type RevokeReason = (typeof REVOKE_REASONS)[number]
 
@@ -179,6 +182,37 @@ const AuthSession = {
     await batch.commit()
 
     return snapshot.size
+  },
+
+  /**
+   * Révoque les sessions de l'utilisateur, sauf celle qui porte `keepJti`.
+   *
+   * Le jeton d'accès de la requête désigne la session courante : son refresh
+   * token n'est pas connu ici, seul son `jti` l'est.
+   */
+  async revokeOthersForUser(
+    userId: string,
+    keepJti: string,
+    reason: RevokeReason = 'admin'
+  ): Promise<number> {
+    const snapshot = await sessions()
+      .where('user_id', '==', userId)
+      .where('is_revoked', '==', false)
+      .get()
+
+    const others = snapshot.docs.filter((doc) => doc.get('access_token_jti') !== keepJti)
+    if (others.length === 0) return 0
+
+    const batch = sessions().firestore.batch()
+    const patch = toPayload({
+      is_revoked: true,
+      revoked_at: new Date(),
+      revoke_reason: reason,
+    })
+    for (const doc of others) batch.update(doc.ref, patch)
+    await batch.commit()
+
+    return others.length
   },
 
   async touchLastUsed(refreshToken: string): Promise<void> {

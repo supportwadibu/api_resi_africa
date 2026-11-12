@@ -67,3 +67,21 @@ export const createAdminValidator = vine.compile(
     password: password(),
   })
 )
+
+/**
+ * PATCH /admin/profile — compte de l'administrateur connecté.
+ *
+ * `phone: null` retire le numéro ; l'e-mail ne se retire pas, c'est
+ * l'identifiant de connexion au back-office. `current_password` : bornes de
+ * la connexion, pas de l'inscription — un mot de passe ancien peut être plus
+ * court que les règles d'aujourd'hui.
+ */
+export const updateAdminProfileValidator = vine.compile(
+  vine.object({
+    full_name: vine.string().trim().minLength(2).maxLength(120).optional(),
+    email: email().optional(),
+    phone: phone().nullable().optional(),
+    current_password: vine.string().minLength(1).maxLength(128).optional(),
+    new_password: password().optional(),
+  })
+)

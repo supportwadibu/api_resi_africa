@@ -283,6 +283,18 @@ const Client = {
     return out
   },
 
+  /**
+   * Fiches de tous les carnets, réduites aux champs de la liste du
+   * back-office : ni pièces d'identité ni état civil n'en sortent.
+   */
+  async listForAdmin(limit: number) {
+    const snapshot = await clients()
+      .select('owner_id', 'full_name', 'phone', 'created_at')
+      .limit(limit)
+      .get()
+    return toDocs<ClientDocument>(snapshot.docs)
+  },
+
   /** Fiches de plusieurs carnets. `in` plafonne à 30 valeurs, d'où les lots. */
   async findByOwners(ownerIds: readonly string[]): Promise<ClientRecord[]> {
     const unique = [...new Set(ownerIds)]

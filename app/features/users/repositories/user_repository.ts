@@ -187,6 +187,15 @@ export class UserRepository {
     return AuthSession.revokeAllForUser(id, reason)
   }
 
+  /** Ferme les sessions du compte, sauf celle du jeton `keepJti`. */
+  async revokeOtherSessions(
+    id: string,
+    keepJti: string,
+    reason: RevokeReason = 'admin'
+  ): Promise<number> {
+    return AuthSession.revokeOthersForUser(id, keepJti, reason)
+  }
+
   /**
    * Retire tous les appareils du compte : un compte en attente de purge ne
    * doit plus recevoir de notification, envoi groupé compris.
@@ -212,6 +221,13 @@ export class UserRepository {
   }
 
   /** Identifiant du document de rôle, `null` si `seed:roles` n'a pas été lancé. */
+  /** Comptes d'un rôle, les plus récents d'abord, dans la limite donnée. */
+  async listByRole(name: RoleName, limit: number): Promise<UserRecord[]> {
+    const roleId = await this.findRoleId(name)
+    if (!roleId) return []
+    return User.findByRole(roleId, { limit, offset: 0 })
+  }
+
   async findRoleId(name: RoleName): Promise<string | null> {
     const role = await Role.findOne({ name })
     return role?._id ?? null

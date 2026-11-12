@@ -12,6 +12,7 @@ les lectures unitaires `{ data }`, les erreurs `{ code, message }`.
 | GET | `stats/subscriptions?months_back&months_ahead` | Revenu de RESI : paiements d'abonnement encaissés par mois, revenu mensuel récurrent par forfait, renouvellements attendus, potentiel des essais |
 | GET | `stats` | Tableau de bord : comptes, propriétaires, catalogue, réservations, revenu du mois, occupation, abonnements, retours |
 | GET | `stats/stay-types?months&owner_id` | Réservations non annulées commencées sur les `months` derniers mois (1 à 24, 12 par défaut), par tranche : `passage`, `half_day`, puis séjours complets `one_day`, `two_to_six_days`, `seven_to_twenty_nine_days`, `thirty_days_plus`. Par tranche : nombre, part, chiffre d'affaires, jours occupés pondérés |
+| GET | `clients?q&kind&owner_id&property_id&page&per_page` | Clients de la plateforme : fiches des carnets (`kind=carnet`) et comptes clients (`account`). Chacun avec `owners` (la fiche : son propriétaire ; le compte : ceux des logements réservés), `properties` (logements réservés, séjours, dernier séjour), `stays`, `total_paid`, `last_stay_at` — annulations exclues. Recherche sans accents sur nom, téléphone, e-mail, propriétaire, logement. `counts` par nature, `truncated` si la borne de lecture est atteinte |
 | GET | `clients/export` | Carnet clients de toute la plateforme, format `resi.clients` v1 : chaque fiche avec l'identité de son propriétaire (e-mail, téléphone), sans les statistiques |
 | POST | `clients/import` | Multipart, champ `file` (JSON, 10 Mo). Rattache chaque fiche au propriétaire retrouvé par identifiant, e-mail puis téléphone ; garde l'identifiant de la fiche ; rejouable. Rapport `total`, `created`, `skipped[]` (`owner_not_found`, `already_exists`, `duplicate_phone`) |
 | GET | `users/:id/export/preview` | Sections exportables d'un compte avec leur volume, et celles cochées d'office pour son rôle |
@@ -26,6 +27,9 @@ les lectures unitaires `{ data }`, les erreurs `{ code, message }`.
 | POST | `users/:id/restore` | Restaure un compte supprimé dans son état d'avant (`is_active` compris) ; annule une suppression demandée par l'utilisateur et sa purge programmée. `409 user_not_deleted` |
 | GET | `users/:id/purge` | Aperçu de la suppression définitive : `items` effacés, `kept` (réservations prises comme client, conservées au nom figé), `warnings`. Compte supprimé seulement |
 | DELETE | `users/:id/purge` | Suppression définitive en cascade (plan dans `app/features/users/purge_plan.ts`) et fichiers Cloudinary ; rejouable après une panne. Compte supprimé seulement, limite de débit dédiée |
+| GET | `residences/map` | Carte du tableau de bord : résidences et logements autonomes géolocalisés (`kind`), propriétaire, unités, unités publiées, prix d'appel, photo. `without_coordinates` compte les lieux écartés, `truncated` la borne de lecture atteinte |
+| GET | `profile` | Compte de l'administrateur connecté, même forme que `users/:id` |
+| PATCH | `profile` | `full_name`, `email`, `phone` (`null` le retire), `current_password`, `new_password`. Le mot de passe actuel est exigé pour changer l'e-mail, le téléphone ou le mot de passe. Un nouveau mot de passe ferme les autres sessions (`revoked_sessions`), pas celle de la requête. Limite de débit dédiée |
 | GET | `owners?status` · `owners/pending` | Propriétaires par statut de validation |
 | GET | `owners/:id` | Propriétaire |
 | GET | `owners/:id/profile` | Dossier de validation, pièces en URLs signées |
@@ -126,6 +130,8 @@ Non paginée : un agrégat calculé sur une page serait faux.
 | `user_not_found` | 404 | Compte introuvable |
 | `cannot_deactivate_self` | 409 | Un administrateur désactive son propre compte |
 | `email_already_used` · `phone_already_used` | 409 | Identifiant porté par un autre compte |
+| `current_password_required` | 422 | `PATCH profile` change un identifiant ou le mot de passe sans `current_password` |
+| `invalid_credentials` | 422 | `PATCH profile` : mot de passe actuel incorrect |
 | `user_contact_required` | 422 | Création sans e-mail ni téléphone |
 | `admin_email_required` | 422 | Création d'un admin sans e-mail — il se connecte par e-mail |
 | `owner_not_found` | 422 | Création d'un gérant sans propriétaire valide |
