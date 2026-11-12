@@ -3,6 +3,7 @@
  * DTO d'entrée/sortie pour les usecases Property.
  * Format primitivisé, directement sérialisable JSON.
  */
+import type { PropertyDeposit } from '#features/deposits/deposit_rules'
 
 export type PropertyStatus =
   | 'draft'
@@ -79,6 +80,8 @@ export interface PropertyDto {
   pricing: PropertyPricingInput
   /** Paliers de négociation : propriétaire seulement, jamais sur la vue publique. */
   negotiation: PropertyNegotiationInput
+  /** Acompte réglé par le propriétaire ; `null` s'il n'en a jamais réglé. */
+  deposit: PropertyDeposit | null
   charges_included: boolean
   additional_charges: number
   available_from: Date
@@ -118,6 +121,7 @@ export interface CreatePropertyInput {
   media?: MediaInput
   pricing: PropertyPricingInput
   negotiation?: PropertyNegotiationInput
+  deposit?: PropertyDeposit
   charges_included?: boolean
   additional_charges?: number
   available_from: Date
@@ -141,6 +145,8 @@ export interface UpdatePropertyInput {
   pricing?: Partial<PropertyPricingInput>
   /** Remplacée en entier : une liste de paliers partielle n’a pas de sens. */
   negotiation?: PropertyNegotiationInput
+  /** Remplacé en entier, comme la négociation. */
+  deposit?: PropertyDeposit
   charges_included?: boolean
   additional_charges?: number
   available_from?: Date

@@ -27,6 +27,18 @@ export class UpdateBookingUseCase {
       throw new DomainError('booking_not_found', 'Réservation introuvable.', 404)
     }
 
+    // Avec un acompte, le reste se règle en espèces au comptoir : des jours
+    // ajoutés ici grossiraient la part de RESI sans qu'elle passe jamais par
+    // Wave. La prolongation se fait chez le propriétaire, qui en supporte la
+    // commission (`ExtendOwnerBookingUseCase`).
+    if (current.payment_option === 'deposit') {
+      throw new DomainError(
+        'deposit_booking_extend_at_property',
+        'Vous avez réglé un acompte : la prolongation se fait auprès du propriétaire, sur place.',
+        409
+      )
+    }
+
     const property = await this.repo.getPropertyForPricing(current.property_id)
     if (!property) {
       throw new DomainError('property_not_found', 'Propriété introuvable.', 404)

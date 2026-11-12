@@ -1,9 +1,11 @@
 import logger from '@adonisjs/core/services/logger'
 
 import { QualifySponsorshipUseCase } from '#features/sponsorships/use_cases/qualify_sponsorship.use_case'
+import BookingPaymentRepository from '#features/booking_payments/repositories/booking_payment_repository'
+import { ReleaseHeldDepositUseCase } from '#features/wallets/use_cases/index'
 
 import BookingRepository from '../repositories/booking_repository.ts'
-import { resolveStayTransition } from '../stay_status.ts'
+import { buildNoShowPatch, resolveStayTransition } from '../stay_status.ts'
 
 export interface SyncStayStatusesResult {
   /** Séjours ouverts examinés. */
@@ -30,7 +32,12 @@ export class SyncStayStatusesUseCase {
     private sponsorships: Pick<
       QualifySponsorshipUseCase,
       'onBookingCompleted'
-    > = new QualifySponsorshipUseCase()
+    > = new QualifySponsorshipUseCase(),
+    private payments: Pick<
+      BookingPaymentRepository,
+      'findSucceededByBooking'
+    > = new BookingPaymentRepository(),
+    private release: Pick<ReleaseHeldDepositUseCase, 'execute'> = new ReleaseHeldDepositUseCase()
   ) {}
 
   async execute(now: Date = new Date()): Promise<SyncStayStatusesResult> {
@@ -45,21 +52,24 @@ export class SyncStayStatusesUseCase {
     for (const booking of open) {
       const transition = resolveStayTransition(booking, now)
       if (!transition) continue
+      const noShow = buildNoShowPatch(booking)
 
       // Un échec isolé ne doit pas interrompre le lot : le séjour suivant n'a
       // pas à pâtir d'un document corrompu, et celui-ci sera repris au
       // prochain appel.
       try {
-        const applied = await this.repo.applyStatusTransition(
-          booking._id,
-          booking.status,
-          transition
-        )
+        const applied = await this.repo.applyStatusTransition(booking._id, booking.status, {
+          ...transition,
+          ...noShow,
+        })
 
         if (!applied) {
           result.skipped += 1
         } else {
           result.completed += 1
+          // Client absent : plus d'annulation à rembourser, l'acompte gardé
+          // devient retirable. Arrivé, il l'a été au comptoir.
+          if (noShow.no_show) await this.releaseDeposit(booking)
           if (transition.status === 'completed') {
             await this.sponsorships.onBookingCompleted(
               {
@@ -67,7 +77,10 @@ export class SyncStayStatusesUseCase {
                 client_id: booking.client_id,
                 owner_id: booking.owner_id,
                 source: booking.source,
-                total_amount: booking.total_amount,
+                total_amount:
+                  typeof noShow.total_amount === 'number'
+                    ? noShow.total_amount
+                    : booking.total_amount,
                 sponsorship_credit_amount: booking.sponsorship_credit_amount,
               },
               now
@@ -81,6 +94,20 @@ export class SyncStayStatusesUseCase {
     }
 
     return result
+  }
+
+  private async releaseDeposit(booking: {
+    _id: string
+    owner_id: string
+    residence_id?: string | null
+  }): Promise<void> {
+    const payment = await this.payments.findSucceededByBooking(booking._id)
+    if (!payment) return
+    await this.release.execute({
+      owner_id: booking.owner_id,
+      residence_id: booking.residence_id ?? null,
+      booking_payment_id: payment.id,
+    })
   }
 }
 

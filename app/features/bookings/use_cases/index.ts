@@ -17,3 +17,4 @@ export { default as ListPlatformBookingsUseCase } from './list_platform_bookings
 export { default as UpdateOwnerBookingUseCase } from './update_owner_booking.use_case.ts'
 export { default as SyncStayStatusesUseCase } from './sync_stay_statuses.use_case.ts'
 export { GetPublicAvailabilityUseCase } from './get_public_availability.use_case.ts'
+export { default as FindArrivalBookingUseCase } from './find_arrival_booking.use_case.ts'

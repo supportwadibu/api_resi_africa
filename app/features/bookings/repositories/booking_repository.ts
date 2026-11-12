@@ -1,6 +1,7 @@
 import { exploitedUnits } from '#features/finance/occupancy'
 import { SCOPE_READ_LIMIT } from '#features/managers/scope'
 import { attachCommission, readBookingCommission } from '#features/commissions/booking_commission'
+import { ownerBalanceDue } from '#features/deposits/deposit_rules'
 import Booking, { type BookingRecord } from '#models/booking'
 import type { BookingSource } from '#features/clients/platform_clients'
 import Property from '#models/property'
@@ -14,6 +15,7 @@ import {
   occupancyForWindow,
   revenueForMonth,
 } from '../booking_stats.ts'
+import { attachArrival, readBookingArrival } from '../booking_arrival.ts'
 
 import type {
   BookingDto,
@@ -31,8 +33,12 @@ export class BookingRepository {
   }
 
   static toDto(doc: BookingRecord): BookingDto {
-    // Part de RESI sous clé `Symbol` : jamais sérialisée, voir `booking_commission.ts`.
-    return attachCommission(BookingRepository.toBaseDto(doc), readBookingCommission(doc))
+    // Part de RESI et code d'arrivée sous clé `Symbol` : jamais sérialisés,
+    // voir `booking_commission.ts` et `booking_arrival.ts`.
+    return attachArrival(
+      attachCommission(BookingRepository.toBaseDto(doc), readBookingCommission(doc)),
+      readBookingArrival(doc)
+    )
   }
 
   private static toBaseDto(doc: BookingRecord): BookingDto {
@@ -102,6 +108,12 @@ export class BookingRepository {
       // Absent de l'historique : aucun départ tardif n'était facturé à part.
       late_checkout_fee: doc.late_checkout_fee ?? 0,
       deposit_amount: doc.deposit_amount ?? 0,
+      // Absents de l'historique et du comptoir : payé en une fois, rien de
+      // compté comme reçu en ligne, aucune absence constatée.
+      payment_option: doc.payment_option ?? 'full',
+      prepaid_amount: doc.prepaid_amount ?? 0,
+      balance_due: ownerBalanceDue(doc),
+      no_show: doc.no_show ?? false,
       sync_status: doc.sync_status ?? 'synced',
       // Absents de l'historique et des séjours menés à terme.
       early_checkout_option: doc.early_checkout_option,
@@ -202,6 +214,15 @@ export class BookingRepository {
             client_total_amount: input.client_total_amount,
           }
         : null,
+      deposit:
+        input.payment_option === 'deposit'
+          ? {
+              payment_option: 'deposit',
+              online_deposit_amount: input.online_deposit_amount,
+              deposit_owner_amount: input.deposit_owner_amount,
+            }
+          : null,
+      arrival: input.arrival ?? null,
     })
 
     return BookingRepository.toDto(booking)
@@ -210,6 +231,25 @@ export class BookingRepository {
   async findById(id: string): Promise<BookingDto | null> {
     const doc = await Booking.findById(id)
     return doc ? BookingRepository.toDto(doc) : null
+  }
+
+  /** Réservation d'un code d'arrivée scanné : voir `Booking.findByCheckInToken`. */
+  async findByCheckInToken(token: string): Promise<BookingDto | null> {
+    const doc = await Booking.findByCheckInToken(token)
+    return doc ? BookingRepository.toDto(doc) : null
+  }
+
+  async findByCheckInPin(ownerId: string, pin: string): Promise<BookingDto[]> {
+    const docs = await Booking.findByCheckInPin(ownerId, pin)
+    return docs.map((doc) => BookingRepository.toDto(doc))
+  }
+
+  /**
+   * Consigne la part du propriétaire reçue en ligne, à la confirmation du
+   * paiement : c'est elle que le reste dû au comptoir déduit.
+   */
+  async recordPrepaid(id: string, amount: number): Promise<void> {
+    await Booking.findOneAndUpdate(id, { prepaid_amount: amount })
   }
 
   /**

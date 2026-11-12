@@ -1,6 +1,7 @@
 import { FieldPath } from 'firebase-admin/firestore'
 
 import { FIRESTORE_IN_LIMIT } from '#features/managers/scope'
+import type { PropertyDeposit } from '#features/deposits/deposit_rules'
 import {
   DEFAULT_CHECKOUT_TIME,
   DEFAULT_LATE_CHECKOUT_GRACE_MINUTES,
@@ -176,6 +177,12 @@ export interface PropertyDocument {
    * droit au plancher. Absent des biens antérieurs : non négociable.
    */
   negotiation?: PropertyNegotiation
+  /**
+   * Acompte réglé par le propriétaire, lu seulement quand RESI le lui laisse
+   * régler (`deposit_rules.ts`). Absent des biens antérieurs et de ceux jamais
+   * réglés : la règle de RESI s'applique.
+   */
+  deposit?: PropertyDeposit
   charges_included: boolean
   additional_charges: number
 
@@ -294,6 +301,7 @@ function withDefaults(input: Partial<PropertyDocument>): PropertyDocument {
       enabled: input.negotiation?.enabled ?? false,
       prices: input.negotiation?.prices ?? [],
     },
+    ...(input.deposit ? { deposit: input.deposit } : {}),
     charges_included: input.charges_included ?? false,
     additional_charges: input.additional_charges ?? 0,
 

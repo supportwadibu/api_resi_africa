@@ -1,8 +1,12 @@
 import Booking from '#models/booking'
 import type { BookingStatus } from '#models/booking'
 import { DomainError } from '#utils/domain_error'
+import { ownerBalanceDue, type PaymentOption } from '#features/deposits/deposit_rules'
+import BookingPaymentRepository from '#features/booking_payments/repositories/booking_payment_repository'
+import { ReleaseHeldDepositUseCase } from '#features/wallets/use_cases/index'
 
 import type { BookingDto } from '../dto/booking.dto.ts'
+import { matchesArrivalCode } from '../arrival_code.ts'
 import { CLOCK_SKEW_TOLERANCE_MS } from '../early_check_out.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 
@@ -104,6 +108,76 @@ export function buildCheckInPatch(
   return { status: 'in_progress', actual_check_in_at: arrival }
 }
 
+/** Réservation réduite à ce que la remise des clés vérifie. */
+export interface ArrivalGateBooking {
+  source?: 'online' | 'offline'
+  payment_option?: PaymentOption
+  received_amount?: number
+  total_amount?: number
+  deposit_amount?: number
+  prepaid_amount?: number
+}
+
+/**
+ * Refuse la remise des clés tant que ce qui est dû n'est pas réglé.
+ *
+ * - Une réservation **en ligne** n'ouvre pas de séjour sans paiement en ligne
+ *   encaissé : sinon, réserver par l'app pour tout régler en espèces au
+ *   comptoir effacerait la commission de RESI. Le comptoir n'est pas concerné,
+ *   il ne porte jamais de commission.
+ * - Avec un **acompte**, le reste se solde avant l'arrivée : c'est la règle
+ *   annoncée au client, et le propriétaire n'a pas à la négocier.
+ *
+ * [onlinePaid] : un paiement en ligne de la réservation a réussi.
+ *
+ * @throws `booking_online_unpaid` si le paiement en ligne manque
+ * @throws `booking_balance_due` s'il reste à payer sur un acompte
+ */
+export function assertArrivalPaid(booking: ArrivalGateBooking, onlinePaid: boolean): void {
+  // Une réservation sans `source` est de l'historique en ligne.
+  if ((booking.source ?? 'online') === 'offline') return
+
+  if (!onlinePaid) {
+    throw new DomainError(
+      'booking_online_unpaid',
+      'Le client n’a pas réglé sa réservation en ligne : l’arrivée ne peut pas être enregistrée.',
+      409
+    )
+  }
+
+  const balance = ownerBalanceDue(booking)
+  if (booking.payment_option === 'deposit' && balance > 0) {
+    throw new DomainError(
+      'booking_balance_due',
+      `Reste à payer : ${balance} F. Encaissez-le avant de remettre les clés.`,
+      409
+    )
+  }
+}
+
+/**
+ * Une réservation en ligne qui porte un code d'arrivée ne s'ouvre que sur ce
+ * code : le QR scanné ou le PIN saisi prouve que le client est au comptoir.
+ *
+ * Sans cette preuve, le propriétaire pourrait déclarer une arrivée qui n'a
+ * pas eu lieu — l'acompte bloqué deviendrait retirable, puis remboursé au
+ * client aux frais de RESI. Le comptoir et l'historique sans code restent
+ * libres.
+ *
+ * @throws `arrival_code_required` si le code manque ou ne correspond pas
+ */
+export function assertArrivalProven(
+  booking: { source?: 'online' | 'offline'; check_in_token?: string; check_in_pin?: string },
+  arrivalCode: string | undefined
+): void {
+  if ((booking.source ?? 'online') === 'offline' || !booking.check_in_token) return
+  if (matchesArrivalCode(booking, arrivalCode)) return
+  throw new DomainError(
+    'arrival_code_required',
+    'Scannez le QR du client, ou saisissez son code PIN, pour enregistrer son arrivée.',
+    422
+  )
+}
 /**
  * Enregistre l'arrivée d'un client sur une réservation à venir.
  *
@@ -113,12 +187,23 @@ export function buildCheckInPatch(
  *
  * L'écriture est conditionnée au statut lu (`applyStatusTransition`) : deux
  * enregistrements concurrents, ou une annulation intercalée, ne s'écrasent pas.
+ *
+ * L'arrivée débloque l'acompte au portefeuille : le séjour a commencé, il
+ * n'y a plus d'annulation à rembourser.
  */
 export class CheckInBookingUseCase {
+  constructor(
+    private payments: Pick<
+      BookingPaymentRepository,
+      'findSucceededByBooking'
+    > = new BookingPaymentRepository(),
+    private release: Pick<ReleaseHeldDepositUseCase, 'execute'> = new ReleaseHeldDepositUseCase()
+  ) {}
+
   async execute(
     id: string,
     ownerId: string,
-    input: { actual_check_in_at?: Date } = {}
+    input: { actual_check_in_at?: Date; arrival_code?: string } = {}
   ): Promise<BookingDto> {
     const now = new Date()
 
@@ -129,6 +214,11 @@ export class CheckInBookingUseCase {
 
     const patch = buildCheckInPatch(booking, input.actual_check_in_at, now)
 
+    const online = (booking.source ?? 'online') !== 'offline'
+    const payment = online ? await this.payments.findSucceededByBooking(id) : null
+    assertArrivalPaid(booking, payment !== null)
+    assertArrivalProven(booking, input.arrival_code)
+
     const applied = await Booking.applyStatusTransition(id, booking.status, patch)
     if (!applied) {
       throw new DomainError(
@@ -136,6 +226,14 @@ export class CheckInBookingUseCase {
         'La réservation vient d’être modifiée. Rouvrez-la et réessayez.',
         409
       )
+    }
+
+    if (payment) {
+      await this.release.execute({
+        owner_id: booking.owner_id,
+        residence_id: booking.residence_id ?? null,
+        booking_payment_id: payment.id,
+      })
     }
 
     const updated = await Booking.findById(id)

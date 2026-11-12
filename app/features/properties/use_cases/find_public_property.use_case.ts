@@ -2,6 +2,8 @@ import { DomainError } from '#utils/domain_error'
 
 import { activeCommissionRule } from '#features/commissions/commission_rules'
 import CommissionRepository from '#features/commissions/repositories/commission_repository'
+import { effectiveDepositRule } from '#features/deposits/deposit_rules'
+import DepositRepository from '#features/deposits/repositories/deposit_repository'
 
 import { isPublicProperty, toPublicProperty, type PublicPropertyDto } from '../public_property.ts'
 import PropertyRepository from '../repositories/property_repository.ts'
@@ -9,7 +11,8 @@ import PropertyRepository from '../repositories/property_repository.ts'
 export class FindPublicPropertyUseCase {
   constructor(
     private repo: PropertyRepository = new PropertyRepository(),
-    private commissions: Pick<CommissionRepository, 'settings'> = new CommissionRepository()
+    private commissions: Pick<CommissionRepository, 'settings'> = new CommissionRepository(),
+    private deposits: Pick<DepositRepository, 'settings'> = new DepositRepository()
   ) {}
 
   async execute(id: string): Promise<PublicPropertyDto> {
@@ -27,7 +30,15 @@ export class FindPublicPropertyUseCase {
     }
 
     await this.repo.incrementViews(id)
-    return toPublicProperty(property, activeCommissionRule(await this.commissions.settings()))
+    const [commission, deposit] = await Promise.all([
+      this.commissions.settings(),
+      this.deposits.settings(),
+    ])
+    return toPublicProperty(
+      property,
+      activeCommissionRule(commission),
+      effectiveDepositRule(deposit, property.deposit)
+    )
   }
 }
 

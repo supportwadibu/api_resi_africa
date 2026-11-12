@@ -38,6 +38,14 @@ const throttle = {
    * Écriture contrôlée par le mot de passe actuel : une session volée ne doit
    * pas servir à le deviner à la cadence du quota général.
    */
+  /**
+   * Code d'arrivée saisi au comptoir : le PIN n'a que six chiffres, et le
+   * quota général laisserait en essayer des milliers par heure.
+   */
+  arrivalCode: () =>
+    middleware.throttle({ name: 'arrival_code', max: 30, window: 600, by: 'user' }),
+  /** Arrivée : elle vérifie un code d'arrivée, borné comme sa recherche. */
+  checkIn: () => middleware.throttle({ name: 'check_in', max: 60, window: 600, by: 'user' }),
   passwordCheck: () =>
     middleware.throttle({ name: 'password_check', max: 10, window: 600, by: 'user' }),
 }
@@ -74,6 +82,7 @@ const ProprioPropertyController = () => import('#controllers/proprio/property_co
 const ProprioPropertyImageController = () =>
   import('#controllers/proprio/property_image_controller')
 const ProprioBookingController = () => import('#controllers/proprio/booking_controller')
+const ProprioDepositsController = () => import('#controllers/proprio/deposits_controller')
 const ProprioResidenceController = () => import('#controllers/proprio/residence_controller')
 const ProprioClientController = () => import('#controllers/proprio/client_controller')
 const ProprioExpenseController = () => import('#controllers/proprio/expense_controller')
@@ -99,6 +108,7 @@ const ClientNegotiationController = () => import('#controllers/client/negotiatio
 const SponsorshipController = () => import('#controllers/sponsorship_controller')
 const AdminSponsorshipsController = () => import('#controllers/admin/sponsorships_controller')
 const AdminCommissionsController = () => import('#controllers/admin/commissions_controller')
+const AdminDepositsController = () => import('#controllers/admin/deposits_controller')
 
 router.get('/', () => {
   return { hello: 'world' }
@@ -371,6 +381,13 @@ router
           })
           .prefix('settings/commissions')
           .as('commission_settings')
+        router
+          .group(() => {
+            router.get('/', [AdminDepositsController, 'settings'])
+            router.put('/', [AdminDepositsController, 'updateSettings'])
+          })
+          .prefix('settings/deposits')
+          .as('deposit_settings')
       })
       .prefix('admin')
       .as('admin')
@@ -431,6 +448,7 @@ router
           })
           .prefix('feedbacks')
           .as('feedbacks')
+        router.get('settings/deposit', [ProprioDepositsController, 'show']).as('deposit_settings')
 
         // RESI Basic : tableau de bord, revenus et taux d'occupation.
         router
@@ -565,7 +583,13 @@ router
                 router.get('/', [ProprioBookingController, 'index'])
                 router.post('/', [ProprioBookingController, 'store'])
                 router.patch(':id/cancel', [ProprioBookingController, 'cancel'])
-                router.patch(':id/check-in', [ProprioBookingController, 'checkIn'])
+                router
+                  .get('arrival/:code', [ProprioBookingController, 'arrival'])
+                  .use(throttle.arrivalCode())
+                router.post(':id/payments', [ProprioBookingController, 'recordPayment'])
+                router
+                  .patch(':id/check-in', [ProprioBookingController, 'checkIn'])
+                  .use(throttle.checkIn())
                 router.get(':id/check-out/preview', [ProprioBookingController, 'checkOutPreview'])
                 router.patch(':id/check-out', [ProprioBookingController, 'checkOut'])
                 router.patch(':id/extend', [ProprioBookingController, 'extend'])
@@ -643,7 +667,12 @@ router
             // Mêmes verbes et mêmes chemins que côté propriétaire : le mobile
             // ne fait que substituer le préfixe, et un `POST` ici lui rendrait
             // un 404 muet.
-            router.patch(':id/check-in', [GerantBookingController, 'checkIn'])
+            router
+              .get('arrival/:code', [GerantBookingController, 'arrival'])
+              .use(throttle.arrivalCode())
+            router
+              .patch(':id/check-in', [GerantBookingController, 'checkIn'])
+              .use(throttle.checkIn())
             router.get(':id/check-out/preview', [GerantBookingController, 'checkOutPreview'])
             router.patch(':id/check-out', [GerantBookingController, 'checkOut'])
             router.patch(':id/extend', [GerantBookingController, 'update']).as('extend')

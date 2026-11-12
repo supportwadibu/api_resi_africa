@@ -1,4 +1,8 @@
-export { CreditBookingPaymentUseCase } from './credit_booking_payment.use_case.ts'
+export {
+  ChargeCommissionUseCase,
+  CreditBookingPaymentUseCase,
+  ReleaseHeldDepositUseCase,
+} from './credit_booking_payment.use_case.ts'
 export { ListOwnerWalletsUseCase } from './list_owner_wallets.use_case.ts'
 export { ListWalletTransactionsUseCase } from './list_wallet_transactions.use_case.ts'
 export { RequestWithdrawalUseCase } from './request_withdrawal.use_case.ts'

@@ -20,6 +20,7 @@ import {
   CheckOutBookingUseCase,
   CreateOwnerBookingUseCase,
   ExtendOwnerBookingUseCase,
+  FindArrivalBookingUseCase,
   FindOwnerBookingUseCase,
   GetBookingStatsUseCase,
   ListOwnerBookingsUseCase,
@@ -198,6 +199,7 @@ export default class GerantBookingController {
     const payload = await ctx.request.validateUsing(checkInBookingValidator)
     const booking = await new CheckInBookingUseCase().execute(ctx.params.id, ctx.scope.ownerId, {
       actual_check_in_at: payload.actual_check_in_at?.toJSDate(),
+      arrival_code: payload.arrival_code,
     })
     return ctx.response.ok({ data: booking })
   }
@@ -242,6 +244,16 @@ export default class GerantBookingController {
     )
 
     return ctx.response.ok({ data: booking })
+  }
+
+  /** Réservation présentée au comptoir, cherchée dans le seul périmètre du gérant. */
+  async arrival(ctx: HttpContext) {
+    const data = await new FindArrivalBookingUseCase().execute(
+      String(ctx.params.code),
+      ctx.scope.ownerId,
+      ctx.scope.propertyIds
+    )
+    return ctx.response.ok({ data })
   }
 
   /** Versement reçu au comptoir sur une réservation du périmètre. */

@@ -1,6 +1,10 @@
 import { ClosePendingBookingPaymentUseCase } from '#features/booking_payments/use_cases/close_pending_booking_payment.use_case'
 import { RefundBookingPaymentUseCase } from '#features/booking_payments/use_cases/refund_booking_payment.use_case'
-import { sponsorshipCreditOf } from '#features/booking_payments/sponsorship_credit'
+import {
+  commissionOfPayment,
+  sponsorshipCreditOf,
+} from '#features/booking_payments/sponsorship_credit'
+import { ChargeCommissionUseCase } from '#features/wallets/use_cases/index'
 import { RestoreStayCreditUseCase } from '#features/sponsorships/use_cases/restore_stay_credit.use_case'
 import Booking from '#models/booking'
 import { DomainError } from '#utils/domain_error'
@@ -29,7 +33,8 @@ export class CancelOwnerBookingUseCase {
   constructor(
     private refunds: RefundBookingPaymentUseCase = new RefundBookingPaymentUseCase(),
     private pendingPayments: ClosePendingBookingPaymentUseCase = new ClosePendingBookingPaymentUseCase(),
-    private stayCredit: RestoreStayCreditUseCase = new RestoreStayCreditUseCase()
+    private stayCredit: RestoreStayCreditUseCase = new RestoreStayCreditUseCase(),
+    private commissions: Pick<ChargeCommissionUseCase, 'execute'> = new ChargeCommissionUseCase()
   ) {}
 
   async execute(id: string, ownerId: string, input: CancelBookingInput = {}): Promise<BookingDto> {
@@ -61,6 +66,18 @@ export class CancelOwnerBookingUseCase {
         id: booking._id,
         owner_id: booking.owner_id,
         residence_id: booking.residence_id ?? null,
+      })
+      // Le client récupère tout ce qu'il a payé ; la part de RESI, elle, est
+      // reprise au propriétaire. Sans cette reprise, annuler et rembourser
+      // puis encaisser le séjour en espèces effacerait la commission — et
+      // rembourser serait gratuit pour qui veut s'arranger avec son client.
+      await this.commissions.execute({
+        owner_id: booking.owner_id,
+        residence_id: booking.residence_id ?? null,
+        booking_id: booking._id,
+        booking_payment_id: onlinePayment.id,
+        key: `refund_${onlinePayment.id}`,
+        amount: commissionOfPayment(onlinePayment),
       })
     }
 

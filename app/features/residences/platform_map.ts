@@ -115,12 +115,19 @@ export function buildMapPoints(
   let withoutCoordinates = 0
 
   for (const residence of residences) {
-    const coords = mapCoordinates(residence.address)
+    const units = unitsByResidence.get(residence._id) ?? []
+    // Repli sur les coordonnées d'une unité : les résidences saisies sans
+    // localisation existent, alors que leurs unités, dans le même bâtiment,
+    // en portent souvent une. Sans ce repli, la résidence et toutes ses
+    // unités disparaîtraient de la carte.
+    const coords =
+      mapCoordinates(residence.address) ??
+      units.map((unit) => mapCoordinates(unit.address)).find((c) => c !== null) ??
+      null
     if (!coords) {
       withoutCoordinates += 1
       continue
     }
-    const units = unitsByResidence.get(residence._id) ?? []
     data.push({
       id: residence._id,
       kind: 'residence',

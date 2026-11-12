@@ -30,6 +30,17 @@ export class ApplyStayCreditUseCase {
       throw new DomainError('booking_not_found', 'Réservation introuvable.', 404)
     }
 
+    // L'acompte est la seule part payée par Wave, et il doit couvrir la
+    // commission de RESI : un crédit qui le réduirait la laisserait au
+    // comptoir, en espèces. Le crédit sert donc au paiement total seulement.
+    if (booking.payment_option === 'deposit') {
+      throw new DomainError(
+        'credit_not_with_deposit',
+        'Le crédit séjour s’utilise avec le paiement total, pas avec un acompte.',
+        409
+      )
+    }
+
     // Une session ouverte au prix plein ne doit pas rester payable : payée
     // après coup, elle encaisserait en plus du crédit.
     await this.pendingPayments.execute(bookingId)

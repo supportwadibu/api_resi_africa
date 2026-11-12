@@ -24,12 +24,14 @@ function useCase(options: {
   const updates: Array<{ status: string; data: Record<string, unknown> }> = []
   const credits: Array<Record<string, unknown>> = []
   const refunds: string[] = []
+  const prepaid: Array<{ id: string; amount: number }> = []
   const confirm = new ConfirmBookingPaymentUseCase(
     {
       findById: async () =>
         options.booking === undefined
           ? { client_id: 'c1', residence_id: 'r1', status: 'confirmed' }
           : options.booking,
+      recordPrepaid: async (id: string, amount: number) => void prepaid.push({ id, amount }),
     } as never,
     {
       findLatestByBooking: async () => (options.payment === undefined ? pending : options.payment),
@@ -50,7 +52,7 @@ function useCase(options: {
     } as never,
     { execute: async (input: Record<string, unknown>) => void credits.push(input) } as never
   )
-  return { confirm, updates, credits, refunds }
+  return { confirm, updates, credits, refunds, prepaid }
 }
 
 const paid = {
@@ -217,5 +219,24 @@ test.group('ConfirmBookingPaymentUseCase', () => {
     await assert.rejects(() => confirm.executeForCheckout('cos-1'))
     assert.lengthOf(updates, 0)
     assert.lengthOf(credits, 0)
+  })
+})
+
+test.group('ConfirmBookingPaymentUseCase — acompte', () => {
+  test('crédite l’acompte bloqué et consigne la part reçue en ligne', async ({ assert }) => {
+    const deposit = {
+      ...pending,
+      amount: 30000,
+      metadata: { owner_amount: 20000, deposit: true },
+    }
+    const { confirm, credits, prepaid } = useCase({
+      payment: deposit,
+      session: { ...paid, amount: '30000' },
+    })
+    await confirm.execute('b1', 'c1')
+
+    assert.equal(credits[0].amount, 20000)
+    assert.isTrue(credits[0].held)
+    assert.deepEqual(prepaid, [{ id: 'b1', amount: 20000 }])
   })
 })

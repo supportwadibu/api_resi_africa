@@ -42,6 +42,7 @@ export default class ClientBookingController {
       promo_code: payload.promo_code,
       message: payload.message,
       negotiation_level: payload.negotiation_level,
+      payment_option: payload.payment_option,
     })
     return ctx.response.created({ data: toClientBooking(booking) })
   }

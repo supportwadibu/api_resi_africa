@@ -1,6 +1,9 @@
 import Booking from '#models/booking'
 import Property from '#models/property'
 import { DomainError } from '#utils/domain_error'
+import logger from '@adonisjs/core/services/logger'
+import { extensionCommission } from '#features/commissions/commission_rules'
+import { ChargeCommissionUseCase } from '#features/wallets/use_cases/index'
 
 import { findExtensionConflict, toPeriods } from '../availability.ts'
 import type { BookingDto } from '../dto/booking.dto.ts'
@@ -123,6 +126,10 @@ function agreedDailyRate(current: AgreedStay): number | null {
  * propriétaire saisit un nouveau séjour.
  */
 export class ExtendOwnerBookingUseCase {
+  constructor(
+    private commissions: Pick<ChargeCommissionUseCase, 'execute'> = new ChargeCommissionUseCase()
+  ) {}
+
   async execute(
     id: string,
     ownerId: string,
@@ -197,13 +204,49 @@ export class ExtendOwnerBookingUseCase {
     const received = input.received_amount ?? extendedAgreedAmount(current, amounts)
     const lateCheckoutFee = extendedLateCheckoutFee(current, amounts)
 
+    // Séjour vendu en ligne : les jours ajoutés ici portent la commission de
+    // RESI, à la règle figée sur la réservation. Une réservation sans `source`
+    // est de l'historique en ligne ; le comptoir n'en porte jamais.
+    const online = (booking.source ?? 'online') !== 'offline'
+    const rule =
+      online && booking.commission_mode
+        ? { mode: booking.commission_mode, value: booking.commission_value ?? 0 }
+        : null
+    // Assise sur le plus haut du prix renégocié et du tarif des jours
+    // ajoutés, calculé ici : un `received_amount` saisi au plus bas — le
+    // séjour « prolongé gratuitement » puis réglé en espèces — ramènerait
+    // sinon la commission à zéro.
+    const addedCommission = extensionCommission(
+      rule,
+      Math.max(
+        received - currentReceived,
+        expected - (amounts.lateCheckoutFee ?? 0) - current.expected
+      ),
+      days - current.days
+    )
+
     let updated
     try {
       updated = await Booking.extendBooking(
         id,
-        // La commission reste celle de l'enregistrement : une prolongation ne
-        // l'augmente pas (voir `REFERRER_COMMISSION_RATE`).
-        buildExtensionPatch(checkOut, days, expected, received, discountPercent, lateCheckoutFee),
+        // La commission d'apporteur reste celle de l'enregistrement : une
+        // prolongation ne l'augmente pas (voir `REFERRER_COMMISSION_RATE`).
+        {
+          ...buildExtensionPatch(
+            checkOut,
+            days,
+            expected,
+            received,
+            discountPercent,
+            lateCheckoutFee
+          ),
+          ...(addedCommission > 0
+            ? {
+                extension_commission_amount:
+                  (booking.extension_commission_amount ?? 0) + addedCommission,
+              }
+            : {}),
+        },
         { owner_id: ownerId },
         (active) => findExtensionConflict(id, currentCheckOut, checkOut, toPeriods(active)) !== null
       )
@@ -223,6 +266,28 @@ export class ExtendOwnerBookingUseCase {
     }
 
     await syncReferrerCommissionExpense(updated)
+
+    // Après l'écriture : une prolongation refusée ne doit rien retenir. La clé
+    // porte la nouvelle sortie, si bien qu'un rejeu ne retient pas deux fois.
+    // Un échec est journalisé sans défaire la prolongation, déjà acquise : la
+    // reprise se rejoue depuis le journal.
+    if (addedCommission > 0) {
+      try {
+        await this.commissions.execute({
+          owner_id: booking.owner_id,
+          residence_id: booking.residence_id ?? null,
+          booking_id: id,
+          booking_payment_id: null,
+          key: `extension_${id}_${checkOut.getTime()}`,
+          amount: addedCommission,
+        })
+      } catch (error) {
+        logger.error(
+          { err: error, booking_id: id, amount: addedCommission },
+          'Commission de prolongation non retenue'
+        )
+      }
+    }
 
     return BookingRepository.toDto(updated)
   }

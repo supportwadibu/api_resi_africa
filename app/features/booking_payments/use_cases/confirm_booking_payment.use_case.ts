@@ -8,7 +8,7 @@ import { DomainError } from '#utils/domain_error'
 
 import type { BookingPaymentDto } from '../dto/booking_payment.dto.ts'
 import BookingPaymentRepository from '../repositories/booking_payment_repository.ts'
-import { ownerAmountOf } from '../sponsorship_credit.ts'
+import { isDepositPayment, ownerAmountOf } from '../sponsorship_credit.ts'
 
 /**
  * Constate l'issue du paiement Wave d'une réservation, sans attendre le
@@ -20,7 +20,10 @@ import { ownerAmountOf } from '../sponsorship_credit.ts'
  */
 export class ConfirmBookingPaymentUseCase {
   constructor(
-    private bookingRepo: Pick<BookingRepository, 'findById'> = new BookingRepository(),
+    private bookingRepo: Pick<
+      BookingRepository,
+      'findById' | 'recordPrepaid'
+    > = new BookingRepository(),
     private paymentRepo: Pick<
       BookingPaymentRepository,
       'findLatestByBooking' | 'findByProviderCheckoutId' | 'findSucceededByBooking' | 'updateStatus'
@@ -112,7 +115,11 @@ export class ConfirmBookingPaymentUseCase {
         booking_id: payment.booking_id,
         booking_payment_id: payment.id,
         amount: ownerAmountOf(payment),
+        held: isDepositPayment(payment),
       })
+      // Ce que le comptoir déduira du prix : sans cette trace, l'acompte payé
+      // en ligne serait redemandé en espèces à l'arrivée.
+      await this.bookingRepo.recordPrepaid(payment.booking_id, ownerAmountOf(payment))
 
       return paid
     }

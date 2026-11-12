@@ -2,6 +2,7 @@ import vine from '@vinejs/vine'
 
 import { CHECKOUT_TIME_PATTERN } from '#features/bookings/stay_pricing'
 import { MAX_NEGOTIATION_STEPS } from '#features/negotiations/negotiation_rules'
+import { propertyDepositSchema } from '#validators/deposit/deposit'
 
 const PROPERTY_TYPES = ['apartment', 'studio', 'villa', 'duplex'] as const
 
@@ -133,6 +134,7 @@ export const createPropertyValidator = vine.compile(
     media: mediaSchema,
     pricing: pricingSchema,
     negotiation: negotiationSchema,
+    deposit: propertyDepositSchema,
     charges_included: vine.boolean().optional(),
     additional_charges: vine.number().min(0).optional(),
     available_from: vine.date(),
@@ -161,6 +163,7 @@ export const updatePropertyValidator = vine.compile(
     media: mediaSchema,
     pricing: pricingSchema.optional(),
     negotiation: negotiationSchema,
+    deposit: propertyDepositSchema,
     charges_included: vine.boolean().optional(),
     additional_charges: vine.number().min(0).optional(),
     available_from: vine.date().optional(),

@@ -18,7 +18,7 @@ import { readPaidPlanTier } from '#features/plans/plan_tier'
 import { ownerAmountOf, sponsorshipCreditOf } from '#features/booking_payments/sponsorship_credit'
 import type { BookingPaymentDocument } from '#models/booking_payment'
 import type { SponsorshipTransactionDocument } from '#models/sponsorship'
-import type { WithdrawalRequestDocument } from '#models/wallet'
+import type { WalletTransactionDocument, WithdrawalRequestDocument } from '#models/wallet'
 
 import type { StatsBooking } from '#features/bookings/booking_stats'
 import type { PlatformStatsDto } from '../dto/platform_stats.dto.ts'
@@ -211,12 +211,13 @@ export class PlatformStatsRepository {
         .get()
         .then((snapshot) => toDocs<T & object>(snapshot.docs))
 
-    const [paid, refunded, subscriptions, withdrawals, rewards] = await Promise.all([
+    const [paid, refunded, subscriptions, withdrawals, rewards, walletLines] = await Promise.all([
       since<BookingPaymentDocument>(COLLECTIONS.bookingPayments, 'paid_at'),
       since<BookingPaymentDocument>(COLLECTIONS.bookingPayments, 'refunded_at'),
       PaymentHistory.findPaidSince(from),
       since<WithdrawalRequestDocument>(COLLECTIONS.withdrawalRequests, 'processed_at'),
       since<SponsorshipTransactionDocument>(COLLECTIONS.sponsorshipTransactions, 'created_at'),
+      since<WalletTransactionDocument>(COLLECTIONS.walletTransactions, 'created_at'),
     ])
 
     // Un paiement payé puis remboursé dans la période sort des deux requêtes.
@@ -231,6 +232,14 @@ export class PlatformStatsRepository {
       })
     )
 
+    // Commission reprise au propriétaire — acompte qu'il a remboursé, jours
+    // ajoutés au comptoir : une recette de RESI, que le remboursement du
+    // paiement avait retirée de la colonne des commissions.
+    for (const line of walletLines) {
+      if (line.type === 'commission_charge') {
+        events.push({ source: 'commissions', amount: -line.amount, at: line.created_at })
+      }
+    }
     for (const p of subscriptions) {
       if (p.paid_at)
         events.push({ source: 'subscriptions', amount: Number(p.amount), at: p.paid_at })

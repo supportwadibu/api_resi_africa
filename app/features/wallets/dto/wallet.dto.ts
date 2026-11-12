@@ -15,6 +15,8 @@ export interface WalletDto {
   pending_withdrawals: number
   /** Part de `balance` retirable sans frais : remboursements d'abonnement. */
   fee_free_balance: number
+  /** Acomptes encaissés, débloqués à l'arrivée du client : hors de `balance`. */
+  held_balance: number
   updated_at: Date
 }
 

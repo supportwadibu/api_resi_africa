@@ -12,13 +12,18 @@ import {
 } from '#features/commissions/commission_rules'
 import CommissionRepository from '#features/commissions/repositories/commission_repository'
 import Negotiation from '#models/negotiation'
+import { depositBookingFields, effectiveDepositRule } from '#features/deposits/deposit_rules'
+import DepositRepository from '#features/deposits/repositories/deposit_repository'
+
+import { generateArrivalCode } from '../arrival_code.ts'
 
 export class CreateBookingUseCase {
   constructor(
     private repo: BookingRepository = new BookingRepository(),
     private promoRepo: PromoCodeRepository = new PromoCodeRepository(),
     private negotiations: Pick<typeof Negotiation, 'offers'> = Negotiation,
-    private commissions: Pick<CommissionRepository, 'settings'> = new CommissionRepository()
+    private commissions: Pick<CommissionRepository, 'settings'> = new CommissionRepository(),
+    private deposits: Pick<DepositRepository, 'settings'> = new DepositRepository()
   ) {}
 
   async execute(input: CreateBookingInput): Promise<BookingDto> {
@@ -46,7 +51,10 @@ export class CreateBookingUseCase {
       )
     }
 
-    const settings = await this.commissions.settings()
+    const [settings, depositSettings] = await Promise.all([
+      this.commissions.settings(),
+      this.deposits.settings(),
+    ])
     const price = priceOnlineStay(
       negotiated === null ? property.pricing : negotiatedPricing(property.pricing, negotiated),
       input.start_date,
@@ -59,6 +67,16 @@ export class CreateBookingUseCase {
       ? await this.validatePromoCode(input.promo_code, input.client_id, price.client.subtotal)
       : null
 
+    const amounts = onlineBookingAmounts(price, promo?.discount ?? 0)
+    // Calculé sur ce que paie vraiment le client, code promo déduit : c'est
+    // sur ce montant que la part de RESI doit tenir dans l'acompte.
+    const deposit = depositBookingFields(
+      input.payment_option ?? 'full',
+      effectiveDepositRule(depositSettings, property.deposit),
+      amounts.client_total_amount ?? amounts.total_amount,
+      amounts.total_amount
+    )
+
     try {
       return await this.repo.create({
         ...input,
@@ -66,7 +84,9 @@ export class CreateBookingUseCase {
         // Figé à la création : déplacer l'unité plus tard ne doit pas
         // réimputer un chiffre d'affaires déjà constaté.
         residence_id: property.residence_id ?? null,
-        ...onlineBookingAmounts(price, promo?.discount ?? 0),
+        ...amounts,
+        ...deposit,
+        arrival: generateArrivalCode(),
         promo_code: promo?.code ?? undefined,
         promo_code_id: promo?.id ?? null,
         negotiation_level: negotiated === null ? undefined : input.negotiation_level,

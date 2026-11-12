@@ -174,6 +174,8 @@ export class WalletRepository {
       total_withdrawn: wallet.total_withdrawn,
       pending_withdrawals: pending,
       fee_free_balance: wallet.fee_free_balance ?? 0,
+      // Absent de l'historique, antérieur à l'acompte.
+      held_balance: wallet.held_balance ?? 0,
       updated_at: wallet.updated_at,
     }
   }

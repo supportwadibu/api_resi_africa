@@ -98,6 +98,31 @@ test.group('buildMapPoints', () => {
     assert.equal(missing, 2)
   })
 
+  test('une résidence sans coordonnées prend celles d’une de ses unités', ({ assert }) => {
+    // Cas réel : résidence saisie sans localisation, unités localisées.
+    const { data, without_coordinates: missing } = buildMapPoints(
+      [
+        residence({
+          address: { city: 'Abidjan', coordinates: { latitude: null, longitude: null } },
+        }),
+      ],
+      [
+        property({
+          _id: 'u1',
+          residence_id: 'res-1',
+          address: { coordinates: { latitude: null, longitude: null } },
+        }),
+        property({ _id: 'u2', residence_id: 'res-1' }),
+      ],
+      owners
+    )
+
+    assert.lengthOf(data, 1)
+    assert.equal(data[0].kind, 'residence')
+    assert.equal(data[0].latitude, ABIDJAN.latitude)
+    assert.equal(missing, 0)
+  })
+
   test('une résidence sans photo prend celle d’une de ses unités', ({ assert }) => {
     const { data } = buildMapPoints(
       [residence()],
