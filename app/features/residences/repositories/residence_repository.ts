@@ -1,6 +1,7 @@
 import { SCOPE_READ_LIMIT } from '#features/managers/scope'
 import { COLLECTIONS, getByIds } from '#firebase/firestore'
 import Residence, { type ResidenceDocument, type ResidenceRecord } from '#models/residence'
+import type { MapResidenceSource } from '#features/residences/platform_map'
 
 import type {
   CreateResidenceInput,
@@ -10,6 +11,11 @@ import type {
 } from '../dto/residence.dto.ts'
 
 export class ResidenceRepository {
+  /** Résidences réduites aux champs de la carte du back-office. */
+  async listForMap(limit: number): Promise<MapResidenceSource[]> {
+    return Residence.listForMap(limit)
+  }
+
   static toDto(doc: ResidenceRecord): ResidenceDto {
     return {
       id: doc._id,

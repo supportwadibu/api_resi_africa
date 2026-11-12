@@ -643,6 +643,30 @@ const Property = {
    *   rapatriés, filtrés puis découpés en mémoire. `total` reflète alors le
    *   nombre réel de correspondances, pas le nombre de documents lus.
    */
+  /**
+   * Tous les logements, réduits aux champs de la carte du back-office.
+   *
+   * Pas de filtre sur `residence_id` : Firestore ne retrouve pas un champ
+   * absent par `== null`, et les biens antérieurs aux résidences n'en
+   * portent pas. Le tri entre unités et logements autonomes se fait après.
+   */
+  async listForMap(limit: number) {
+    const snapshot = await properties()
+      .select(
+        'owner_id',
+        'residence_id',
+        'title',
+        'property_type',
+        'status',
+        'address',
+        'media.images',
+        'pricing.daily_price'
+      )
+      .limit(limit)
+      .get()
+    return toDocs<PropertyDocument>(snapshot.docs)
+  },
+
   async paginate(
     filters: PropertyFilters,
     options: { limit: number; offset: number }

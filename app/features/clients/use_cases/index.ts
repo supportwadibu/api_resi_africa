@@ -9,3 +9,4 @@ export { default as GetScopedClientUseCase } from './get_scoped_client.use_case.
 export { default as ListPropertyClientsUseCase } from './list_property_clients.use_case.ts'
 export { default as ExportClientsUseCase } from './export_clients.use_case.ts'
 export { default as ImportClientsUseCase } from './import_clients.use_case.ts'
+export { default as ListPlatformClientsUseCase } from './list_platform_clients.use_case.ts'

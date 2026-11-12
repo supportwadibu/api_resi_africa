@@ -1,6 +1,7 @@
 import { SCOPE_READ_LIMIT } from '#features/managers/scope'
 import { COLLECTIONS, getByIds } from '#firebase/firestore'
 import Client, { type ClientDocument, type ClientRecord } from '#models/client'
+import type { CarnetSource } from '#features/clients/platform_clients'
 import { readCreatedBy } from '#utils/created_by'
 
 import type {
@@ -11,6 +12,11 @@ import type {
 } from '../dto/client.dto.ts'
 
 export class ClientRepository {
+  /** Fiches de tous les carnets, pour la liste du back-office. */
+  async listForAdmin(limit: number): Promise<CarnetSource[]> {
+    return Client.listForAdmin(limit)
+  }
+
   static toDto(doc: ClientRecord): ClientDto {
     return {
       id: doc._id,

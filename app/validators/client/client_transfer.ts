@@ -60,3 +60,15 @@ export const clientExportContentValidator = vine.compile(
       .maxLength(50000),
   })
 )
+
+/** GET /admin/clients — clients de la plateforme, fiches et comptes. */
+export const listPlatformClientsValidator = vine.compile(
+  vine.object({
+    q: vine.string().trim().maxLength(120).optional(),
+    kind: vine.enum(['carnet', 'account'] as const).optional(),
+    owner_id: vine.string().trim().minLength(1).maxLength(128).optional(),
+    property_id: vine.string().trim().minLength(1).maxLength(128).optional(),
+    page: vine.number().positive().withoutDecimals().optional(),
+    per_page: vine.number().positive().withoutDecimals().max(100).optional(),
+  })
+)

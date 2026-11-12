@@ -388,6 +388,27 @@ function scopeOf(filters: BookingFilters): ActorScope {
 }
 
 const Booking = {
+  /**
+   * Toutes les réservations, réduites à ce qui relie un client à un
+   * logement : la liste des clients du back-office en dérive.
+   */
+  async listForClients(limit: number) {
+    const snapshot = await bookings()
+      .select(
+        'property_id',
+        'owner_id',
+        'client_id',
+        'source',
+        'status',
+        'start_date',
+        'total_amount'
+      )
+      .orderBy('start_date', 'desc')
+      .limit(limit)
+      .get()
+    return toDocs<BookingDocument>(snapshot.docs)
+  },
+
   async findById(id: string): Promise<BookingRecord | null> {
     if (!id) return null
     return toDoc<BookingDocument>(await bookings().doc(id).get())

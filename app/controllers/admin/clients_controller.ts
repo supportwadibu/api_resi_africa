@@ -1,15 +1,34 @@
 import { readFile } from 'node:fs/promises'
 
-import { ExportClientsUseCase, ImportClientsUseCase } from '#features/clients/use_cases/index'
-import { importClientsValidator } from '#validators/client/client_transfer'
+import {
+  ExportClientsUseCase,
+  ImportClientsUseCase,
+  ListPlatformClientsUseCase,
+} from '#features/clients/use_cases/index'
+import {
+  importClientsValidator,
+  listPlatformClientsValidator,
+} from '#validators/client/client_transfer'
 
 import type { HttpContext } from '@adonisjs/core/http'
 
 /**
- * Export et réimport du carnet clients de toute la plateforme, pour vider la
- * base sans perdre les fiches. Voir `app/features/clients/client_transfer.ts`.
+ * Clients de la plateforme : liste, et export / réimport des carnets pour
+ * vider la base sans perdre les fiches (voir
+ * `app/features/clients/client_transfer.ts`).
  */
 export default class AdminClientsController {
+  /**
+   * GET /admin/clients — fiches des carnets et comptes clients, avec leurs
+   * propriétaires et les logements où ils ont séjourné.
+   */
+  async index(ctx: HttpContext) {
+    const payload = await ctx.request.validateUsing(listPlatformClientsValidator, {
+      data: ctx.request.qs(),
+    })
+    return ctx.response.ok(await new ListPlatformClientsUseCase().execute(payload))
+  }
+
   /** GET /admin/clients/export */
   async export(ctx: HttpContext) {
     const data = await new ExportClientsUseCase().execute()
