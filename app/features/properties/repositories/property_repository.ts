@@ -1,3 +1,4 @@
+import { resolvePropertyDeposit } from '#features/deposits/deposit_rules'
 import { SCOPE_READ_LIMIT } from '#features/managers/scope'
 import {
   DEFAULT_CHECKOUT_TIME,
@@ -67,6 +68,8 @@ export class PropertyRepository {
         // que la facturation leur applique.
         checkout_time: doc.pricing?.checkout_time ?? DEFAULT_CHECKOUT_TIME,
       },
+      // Absent des biens jamais réglés : la règle de RESI s'applique.
+      deposit: resolvePropertyDeposit(doc.deposit),
       // Absente des biens antérieurs à la négociation : non négociable.
       negotiation: {
         enabled: doc.negotiation?.enabled ?? false,

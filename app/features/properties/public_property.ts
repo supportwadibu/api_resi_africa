@@ -1,3 +1,4 @@
+import type { DepositRule } from '#features/deposits/deposit_rules'
 import { markupPricing, type CommissionRule } from '#features/commissions/commission_rules'
 import type { PropertyDto } from './dto/property.dto.ts'
 
@@ -44,7 +45,16 @@ export type PublicPropertyDto = Pick<
   | 'visibility'
   | 'created_at'
   | 'updated_at'
-> & { address: PublicAddress }
+> & {
+  address: PublicAddress
+  /**
+   * Acompte proposé sur ce logement, `null` s'il ne se règle qu'en totalité.
+   * La règle seule, pas le montant : il dépend du séjour, et le serveur le
+   * relève au besoin à la part de RESI — le montant à payer est toujours
+   * celui de la réservation créée.
+   */
+  deposit_policy: DepositRule | null
+}
 
 /** Trois décimales : environ 110 m à l'équateur. */
 const COORDINATE_PRECISION = 1000
@@ -69,7 +79,8 @@ function roundCoordinate(value: number | null | undefined): number | null {
  */
 export function toPublicProperty(
   property: PropertyDto,
-  commission: CommissionRule | null = null
+  commission: CommissionRule | null = null,
+  deposit: DepositRule | null = null
 ): PublicPropertyDto {
   // Biens historiques sans adresse complète : les champs absents restent vides
   // plutôt que de lever.
@@ -87,6 +98,7 @@ export function toPublicProperty(
     media: property.media,
     // Le client voit le prix par nuit commission de RESI comprise.
     pricing: markupPricing(property.pricing, commission),
+    deposit_policy: deposit,
     charges_included: property.charges_included,
     additional_charges: property.additional_charges,
     available_from: property.available_from,

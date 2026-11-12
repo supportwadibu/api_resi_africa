@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 
 import type { StayType } from '#features/bookings/stay_type'
 import type { CommissionMode } from '#features/commissions/commission_rules'
+import type { PaymentOption } from '#features/deposits/deposit_rules'
 import type { Referrer } from '#features/bookings/referrer'
 import type { DepositAction } from '#features/bookings/cancellation'
 import { buildReferrerFields } from '#features/bookings/referrer'
@@ -177,7 +178,36 @@ export interface BookingDocument {
    * montants. Absent de l'historique et des séjours sans dépassement facturé.
    */
   late_checkout_fee?: number
+  /** Versé de la main à la main au comptoir. */
   deposit_amount?: number
+
+  /**
+   * Option de paiement choisie en ligne. Absente de l'historique, du comptoir
+   * et de tout ce qui précède l'acompte : `full`.
+   */
+  payment_option?: PaymentOption
+  /** Acompte à verser par Wave, côté client, figé à la création. */
+  online_deposit_amount?: number
+  /** Part de l'acompte qui revient au propriétaire, une fois la part de RESI retenue. */
+  deposit_owner_amount?: number
+  /**
+   * Part du propriétaire reçue en ligne, écrite à la confirmation du paiement.
+   * Avec `deposit_amount`, elle fait le « déjà payé » que lit le reste dû
+   * (`ownerBalanceDue`). Absente de l'historique : rien n'y était compté.
+   */
+  prepaid_amount?: number
+  /**
+   * Code d'arrivée lu par le scan du propriétaire (QR). Aléatoire, sans lien
+   * avec l'identifiant : un QR photographié ne renseigne sur aucune autre
+   * réservation. Jamais exposé au propriétaire, seulement au client.
+   */
+  check_in_token?: string
+  /** Secours au scan, six chiffres saisis à la main. */
+  check_in_pin?: string
+  /** Close sans arrivée : le client ne s'est jamais présenté. */
+  no_show?: boolean
+  /** Commission de RESI sur les jours ajoutés par prolongation, cumulée. */
+  extension_commission_amount?: number
 
   client_request_id?: string | null
   sync_status?: 'synced' | 'pending' | 'conflict'
@@ -414,6 +444,31 @@ const Booking = {
     return toDoc<BookingDocument>(await bookings().doc(id).get())
   },
 
+  /** Réservation d'un code d'arrivée scanné, `null` s'il n'en désigne aucune. */
+  async findByCheckInToken(token: string): Promise<BookingRecord | null> {
+    if (!token) return null
+    const snapshot = await bookings().where('check_in_token', '==', token).limit(1).get()
+    return toDocs<BookingDocument>(snapshot.docs)[0] ?? null
+  },
+
+  /**
+   * Réservations à venir d'un propriétaire portant ce code PIN.
+   *
+   * Plusieurs au plus rarement : six chiffres tirés au hasard peuvent se
+   * répéter entre deux réservations d'un même propriétaire. L'appelant refuse
+   * alors le PIN et demande le scan, plutôt que de choisir à l'aveugle.
+   */
+  async findByCheckInPin(ownerId: string, pin: string): Promise<BookingRecord[]> {
+    if (!ownerId || !pin) return []
+    const snapshot = await bookings()
+      .where('owner_id', '==', ownerId)
+      .where('check_in_pin', '==', pin)
+      .where('status', '==', 'confirmed')
+      .limit(2)
+      .get()
+    return toDocs<BookingDocument>(snapshot.docs)
+  },
+
   /**
    * Réservations portant une commission d'apporteur, tous propriétaires
    * confondus. Sert au rattrapage des dépenses `commission` de l'historique.
@@ -471,6 +526,11 @@ const Booking = {
       | 'client_subtotal_amount'
       | 'client_total_amount'
     > | null
+    deposit?: Pick<
+      BookingDocument,
+      'payment_option' | 'online_deposit_amount' | 'deposit_owner_amount'
+    > | null
+    arrival?: Pick<BookingDocument, 'check_in_token' | 'check_in_pin'> | null
     created_by?: string | null
   }): Promise<BookingRecord> {
     const firestore = db()
@@ -504,6 +564,8 @@ const Booking = {
         ? { negotiation_level: input.negotiation_level, list_daily_price: input.list_daily_price }
         : {}),
       ...(input.commission ?? {}),
+      ...(input.deposit ?? {}),
+      ...(input.arrival ?? {}),
       cancelled_at: null,
       completed_at: null,
       cancellation_reason: null,

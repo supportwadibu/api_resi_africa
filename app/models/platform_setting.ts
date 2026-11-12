@@ -9,6 +9,7 @@ import {
   type CommissionSettings,
 } from '#features/commissions/commission_rules'
 import { MINIMUM_WITHDRAWAL } from '#features/wallets/wallet_rules'
+import { resolveDepositSettings, type DepositSettings } from '#features/deposits/deposit_rules'
 
 /**
  * Réglages de la plateforme modifiables depuis le backoffice, un document par
@@ -32,6 +33,17 @@ export interface SponsorshipSettingsDocument extends SponsorshipSettings {
 const WITHDRAWALS_DOC = 'withdrawals'
 const SPONSORSHIPS_DOC = 'sponsorships'
 const COMMISSIONS_DOC = 'commissions'
+const DEPOSITS_DOC = 'deposits'
+
+/** Réglage de l'acompte : voir `deposit_rules.ts`. */
+export interface DepositSettingsDocument extends DepositSettings {
+  updated_at: Date
+  updated_by: string | null
+}
+
+function depositSettings() {
+  return collection<DepositSettingsDocument>(COLLECTIONS.platformSettings).doc(DEPOSITS_DOC)
+}
 
 /** Réglage de la commission de RESI : voir `commission_rules.ts`. */
 export interface CommissionSettingsDocument extends CommissionSettings {
@@ -117,6 +129,28 @@ const PlatformSetting = {
         updated_at: now,
         updated_by: adminId,
       } satisfies CommissionSettingsDocument) as unknown as CommissionSettingsDocument
+    )
+    return { ...resolved, updated_at: now }
+  },
+
+  /**
+   * Acompte des réservations en ligne. Sans document — avant le premier
+   * réglage au backoffice —, `DEFAULT_DEPOSIT_SETTINGS`, acompte coupé.
+   */
+  async deposits(): Promise<DepositSettings & { updated_at: Date | null }> {
+    const doc = toDoc<DepositSettingsDocument>(await depositSettings().get())
+    return { ...resolveDepositSettings(doc), updated_at: doc?.updated_at ?? null }
+  },
+
+  async updateDeposits(input: DepositSettings, adminId: string) {
+    const now = new Date()
+    const resolved = resolveDepositSettings(input)
+    await depositSettings().set(
+      toPayload({
+        ...resolved,
+        updated_at: now,
+        updated_by: adminId,
+      } satisfies DepositSettingsDocument) as unknown as DepositSettingsDocument
     )
     return { ...resolved, updated_at: now }
   },

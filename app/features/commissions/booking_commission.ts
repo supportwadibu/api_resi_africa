@@ -1,3 +1,5 @@
+import { arrivalOf } from '#features/bookings/booking_arrival'
+import type { PaymentOption } from '#features/deposits/deposit_rules'
 import { markupDailyPrice, type CommissionMode } from './commission_rules.ts'
 
 /**
@@ -93,15 +95,55 @@ interface BookingAmounts {
   sponsorship_credit_amount: number
   amount_due: number
   list_daily_price: number | null
+  /** Absents des montages de test antérieurs à l'acompte : paiement total. */
+  payment_option?: PaymentOption
+  balance_due?: number
+  deposit_amount?: number
+}
+
+/** Ce que le client lit en plus : son code d'arrivée et son acompte. */
+export interface ClientArrivalFields {
+  /** Contenu du QR « Démarrer mon séjour » ; `null` sans code. */
+  arrival_qr: string | null
+  arrival_pin: string | null
+  /** Acompte à verser en ligne ; `null` en paiement total. */
+  online_deposit_amount: number | null
 }
 
 /**
- * Réservation vue par le client : les prix qu'il a vus et qu'il paie.
+ * Réservation vue par le client : les prix qu'il a vus et qu'il paie, et son
+ * code d'arrivée.
  *
  * Les noms de champs ne changent pas — l'application les lit tels quels —,
  * seules leurs valeurs passent du côté client.
  */
-export function toClientBooking<T extends BookingAmounts>(dto: T): T {
+export function toClientBooking<T extends BookingAmounts>(dto: T): T & ClientArrivalFields {
+  const priced = toClientPrices(dto)
+  const arrival = arrivalOf(dto)
+  const deposit = arrival?.online_deposit_amount ?? null
+  const isDeposit = dto.payment_option === 'deposit' && deposit !== null
+  return {
+    ...priced,
+    // Avec acompte, seul l'acompte se paie en ligne ; le crédit parrainage ne
+    // s'y applique pas (`applyStayCredit`).
+    ...(isDeposit ? { amount_due: deposit } : {}),
+    // Reste à payer au comptoir, vu du client : son prix moins l'acompte et
+    // ce qu'il a déjà versé sur place. Le propriétaire lit le même reste sur
+    // sa part — les deux tombent juste, la part de RESI étant dans l'acompte.
+    ...(dto.balance_due === undefined
+      ? {}
+      : {
+          balance_due: isDeposit
+            ? Math.max(0, priced.total_amount - deposit - (dto.deposit_amount ?? 0))
+            : 0,
+        }),
+    arrival_qr: arrival?.qr ?? null,
+    arrival_pin: arrival?.pin ?? null,
+    online_deposit_amount: isDeposit ? deposit : null,
+  }
+}
+
+function toClientPrices<T extends BookingAmounts>(dto: T): T {
   const commission = commissionOf(dto)
   if (!commission) return dto
   const rule = { mode: commission.mode, value: commission.value }

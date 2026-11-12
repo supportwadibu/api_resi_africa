@@ -4,6 +4,7 @@ import { BOOKING_STATUSES } from '#models/booking'
 import { STAY_TYPES } from '#features/bookings/stay_type'
 import { DEPOSIT_ACTIONS } from '#features/bookings/cancellation'
 import { MAX_NEGOTIATION_STEPS } from '#features/negotiations/negotiation_rules'
+import { PAYMENT_OPTIONS } from '#features/deposits/deposit_rules'
 
 export const createBookingValidator = vine.compile(
   vine.object({
@@ -13,6 +14,8 @@ export const createBookingValidator = vine.compile(
     message: vine.string().trim().maxLength(1000).optional(),
     // Palier de négociation choisi, parmi ceux déjà révélés à ce client.
     negotiation_level: vine.number().withoutDecimals().range([1, MAX_NEGOTIATION_STEPS]).optional(),
+    // Absent : paiement total, ce qu'envoient les applications antérieures à l'acompte.
+    payment_option: vine.enum(PAYMENT_OPTIONS).optional(),
   })
 )
 

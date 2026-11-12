@@ -4,6 +4,7 @@
  */
 import type { BookingPaymentStatus } from '#features/booking_payments/dto/booking_payment.dto'
 import type { CommissionMode } from '#features/commissions/commission_rules'
+import type { PaymentOption } from '#features/deposits/deposit_rules'
 import type { ActorScope } from '#features/managers/scope'
 import type { BookingStatus } from '#models/booking'
 
@@ -95,6 +96,17 @@ export interface BookingDto {
   /** Supplément de départ tardif, déjà compris dans les montants ; 0 sans dépassement. */
   late_checkout_fee: number
   deposit_amount?: number
+  /** `deposit` : le client a choisi de ne verser qu'un acompte en ligne. */
+  payment_option: PaymentOption
+  /** Part du propriétaire reçue en ligne ; 0 tant que rien n'est payé. */
+  prepaid_amount: number
+  /**
+   * Reste à encaisser au comptoir avant la remise des clés. Côté propriétaire,
+   * sur sa part ; la vue client le remplace par son propre reste.
+   */
+  balance_due: number
+  /** Close sans que le client se soit présenté. */
+  no_show: boolean
   sync_status?: 'synced' | 'pending' | 'conflict'
   /** Apporteur d'affaire, `null` sans apporteur. */
   referrer: Referrer | null
@@ -189,9 +201,16 @@ export interface CreateBookingInput {
   message?: string
   /** Palier de négociation choisi, parmi ceux révélés à ce client. */
   negotiation_level?: number
+  /** Absent : paiement total, comme avant l'acompte. */
+  payment_option?: PaymentOption
 }
 
 export interface CreateCalculatedBookingInput extends CreateBookingInput {
+  /** Acompte figé, calculé par le use case : voir `depositBookingFields`. */
+  online_deposit_amount?: number
+  deposit_owner_amount?: number
+  /** Code d'arrivée tiré à la création. */
+  arrival?: { check_in_token: string; check_in_pin: string } | null
   /** Prix normal par jour au moment de la négociation ; absent sans négociation. */
   list_daily_price?: number
   owner_id: string

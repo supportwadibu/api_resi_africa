@@ -39,3 +39,11 @@ export function commissionOfPayment(payment: {
 }): number {
   return Math.max(0, payment.amount + sponsorshipCreditOf(payment) - ownerAmountOf(payment))
 }
+
+/**
+ * Paiement d'un acompte : crédité bloqué au portefeuille, débloqué à l'arrivée.
+ * Absent de l'historique et du paiement total.
+ */
+export function isDepositPayment(payment: { metadata?: Record<string, unknown> }): boolean {
+  return payment.metadata?.deposit === true
+}

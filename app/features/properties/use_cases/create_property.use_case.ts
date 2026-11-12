@@ -1,4 +1,5 @@
 import { normalizeNegotiation } from '#features/negotiations/negotiation_rules'
+import { assertValidPropertyDeposit } from '#features/deposits/deposit_rules'
 import Residence from '#models/residence'
 import { DomainError } from '#utils/domain_error'
 
@@ -77,6 +78,8 @@ export class CreatePropertyUseCase {
     const negotiation = input.negotiation
       ? normalizeNegotiation(input.negotiation, input.pricing.daily_price)
       : undefined
+
+    if (input.deposit) assertValidPropertyDeposit(input.deposit)
 
     const property = await this.repo.create({ ...input, address, negotiation })
 

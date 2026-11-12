@@ -44,6 +44,13 @@ export interface WalletDocument {
    * reviendrait à ne pas le rendre en entier. Absente sur l'historique : 0.
    */
   fee_free_balance?: number
+  /**
+   * Acomptes encaissés en ligne, dus au propriétaire mais pas encore
+   * retirables : ils se débloquent à l'arrivée du client, ou à la clôture d'un
+   * séjour où il ne s'est pas présenté. Hors de `balance`, que lisent les
+   * retraits. Absent sur l'historique : 0.
+   */
+  held_balance?: number
   created_at: Date
   updated_at: Date
 }
@@ -59,6 +66,11 @@ export const WALLET_TRANSACTION_TYPES = [
   'refund',
   // Jours d'abonnement non consommés, rendus à la résiliation.
   'subscription_refund',
+  // Acompte bloqué devenu retirable : arrivée constatée ou absence close.
+  'deposit_release',
+  // Commission de RESI reprise au propriétaire : acompte remboursé à son
+  // initiative, ou jours ajoutés au comptoir à un séjour vendu en ligne.
+  'commission_charge',
 ] as const
 export type WalletTransactionType = (typeof WALLET_TRANSACTION_TYPES)[number]
 
@@ -76,6 +88,11 @@ export interface WalletTransactionDocument {
   withdrawal_id: string | null
   /** Abonnement résilié, pour un `subscription_refund`. Absent ailleurs. */
   subscription_id?: string | null
+  /**
+   * Mouvement porté par `held_balance` et non par `balance` : crédit d'un
+   * acompte, ou son remboursement avant déblocage. Absent ailleurs.
+   */
+  held?: boolean
   created_at: Date
 }
 
@@ -140,9 +157,39 @@ function emptyWallet(ownerId: string, residenceId: string | null, now: Date): Wa
     total_credited: 0,
     total_withdrawn: 0,
     fee_free_balance: 0,
+    held_balance: 0,
     created_at: now,
     updated_at: now,
   }
+}
+
+/**
+ * Document complet du portefeuille après un mouvement.
+ *
+ * Chaque champ est recopié : `tx.set` remplace le document entier, et un
+ * champ oublié ici — `held_balance` l'a été — disparaîtrait du portefeuille.
+ */
+function walletPayload(
+  current: WalletDocument,
+  now: Date,
+  changes: Partial<
+    Pick<
+      WalletDocument,
+      'balance' | 'total_credited' | 'total_withdrawn' | 'fee_free_balance' | 'held_balance'
+    >
+  >
+): WalletDocument {
+  return toPayload({
+    owner_id: current.owner_id,
+    residence_id: current.residence_id,
+    balance: changes.balance ?? current.balance,
+    total_credited: changes.total_credited ?? current.total_credited,
+    total_withdrawn: changes.total_withdrawn ?? current.total_withdrawn,
+    fee_free_balance: changes.fee_free_balance ?? current.fee_free_balance ?? 0,
+    held_balance: changes.held_balance ?? current.held_balance ?? 0,
+    created_at: current.created_at,
+    updated_at: now,
+  }) as unknown as WalletDocument
 }
 
 const Wallet = {
@@ -163,6 +210,9 @@ const Wallet = {
    * webhook et la page de retour constatent le même paiement à quelques
    * secondes d'écart — le second trouve la ligne et ne crédite rien.
    *
+   * [held] : acompte, crédité à `held_balance` et non au solde retirable,
+   * jusqu'à `releaseHeld`.
+   *
    * Rend `false` si le paiement était déjà crédité.
    */
   async creditPayment(input: {
@@ -172,6 +222,7 @@ const Wallet = {
     booking_id: string
     booking_payment_id: string
     amount: number
+    held?: boolean
   }): Promise<boolean> {
     const walletRef = wallets().doc(input.wallet_id)
     const lineRef = walletTransactions().doc(`payment_${input.booking_payment_id}`)
@@ -183,20 +234,16 @@ const Wallet = {
       const now = new Date()
       const current =
         toDoc<WalletDocument>(walletSnap) ?? emptyWallet(input.owner_id, input.residence_id, now)
-      const balance = current.balance + input.amount
+      const held = input.held === true
+      const balance = held ? current.balance : current.balance + input.amount
 
       tx.set(
         walletRef,
-        toPayload({
-          owner_id: current.owner_id,
-          residence_id: current.residence_id,
+        walletPayload(current, now, {
           balance,
           total_credited: current.total_credited + input.amount,
-          total_withdrawn: current.total_withdrawn,
-          fee_free_balance: current.fee_free_balance ?? 0,
-          created_at: current.created_at,
-          updated_at: now,
-        }) as unknown as WalletDocument
+          held_balance: (current.held_balance ?? 0) + (held ? input.amount : 0),
+        })
       )
       tx.set(
         lineRef,
@@ -208,6 +255,59 @@ const Wallet = {
           amount: input.amount,
           balance_after: balance,
           booking_id: input.booking_id,
+          booking_payment_id: input.booking_payment_id,
+          withdrawal_id: null,
+          ...(held ? { held: true } : {}),
+          created_at: now,
+        } satisfies WalletTransactionDocument) as unknown as WalletTransactionDocument
+      )
+      return true
+    })
+  },
+
+  /**
+   * Débloque l'acompte d'un paiement : il passe de `held_balance` au solde
+   * retirable.
+   *
+   * Idempotent : la ligne porte l'identifiant du paiement. Sans effet sur un
+   * paiement qui n'a pas été crédité bloqué, déjà débloqué ou déjà remboursé.
+   */
+  async releaseHeld(input: { wallet_id: string; booking_payment_id: string }): Promise<boolean> {
+    const walletRef = wallets().doc(input.wallet_id)
+    const creditRef = walletTransactions().doc(`payment_${input.booking_payment_id}`)
+    const refundRef = walletTransactions().doc(`refund_${input.booking_payment_id}`)
+    const lineRef = walletTransactions().doc(`release_${input.booking_payment_id}`)
+
+    return transaction(async (tx) => {
+      const [walletSnap, creditSnap, refundSnap, lineSnap] = await Promise.all([
+        tx.get(walletRef),
+        tx.get(creditRef),
+        tx.get(refundRef),
+        tx.get(lineRef),
+      ])
+      const credit = toDoc<WalletTransactionDocument>(creditSnap)
+      const current = toDoc<WalletDocument>(walletSnap)
+      if (!credit?.held || !current || refundSnap.exists || lineSnap.exists) return false
+
+      const now = new Date()
+      const balance = current.balance + credit.amount
+      tx.set(
+        walletRef,
+        walletPayload(current, now, {
+          balance,
+          held_balance: Math.max(0, (current.held_balance ?? 0) - credit.amount),
+        })
+      )
+      tx.set(
+        lineRef,
+        toPayload({
+          wallet_id: input.wallet_id,
+          owner_id: credit.owner_id,
+          residence_id: credit.residence_id,
+          type: 'deposit_release',
+          amount: credit.amount,
+          balance_after: balance,
+          booking_id: credit.booking_id,
           booking_payment_id: input.booking_payment_id,
           withdrawal_id: null,
           created_at: now,
@@ -222,10 +322,11 @@ const Wallet = {
    *
    * Idempotent, comme le crédit : la ligne porte l'identifiant du paiement.
    *
-   * Le solde peut devenir négatif : le propriétaire a pu retirer l'argent
-   * avant l'annulation, et le client doit être remboursé quand même. Le solde
-   * négatif est une dette, soldée par les prochains paiements — aucun retrait
-   * n'est possible d'ici là.
+   * Un acompte encore bloqué est repris sur `held_balance` : il n'a jamais été
+   * retirable. Sinon le débit porte sur le solde, qui peut devenir négatif :
+   * le propriétaire a pu retirer l'argent avant l'annulation, et le client
+   * doit être remboursé quand même. Le solde négatif est une dette, soldée par
+   * les prochains paiements — aucun retrait n'est possible d'ici là.
    */
   async debitRefund(input: {
     wallet_id: string
@@ -237,6 +338,74 @@ const Wallet = {
   }): Promise<boolean> {
     const walletRef = wallets().doc(input.wallet_id)
     const lineRef = walletTransactions().doc(`refund_${input.booking_payment_id}`)
+    const creditRef = walletTransactions().doc(`payment_${input.booking_payment_id}`)
+    const releaseRef = walletTransactions().doc(`release_${input.booking_payment_id}`)
+
+    return transaction(async (tx) => {
+      const [walletSnap, lineSnap, creditSnap, releaseSnap] = await Promise.all([
+        tx.get(walletRef),
+        tx.get(lineRef),
+        tx.get(creditRef),
+        tx.get(releaseRef),
+      ])
+      if (lineSnap.exists) return false
+
+      const now = new Date()
+      const current =
+        toDoc<WalletDocument>(walletSnap) ?? emptyWallet(input.owner_id, input.residence_id, now)
+      const stillHeld =
+        toDoc<WalletTransactionDocument>(creditSnap)?.held === true && !releaseSnap.exists
+      const balance = stillHeld ? current.balance : current.balance - input.amount
+
+      tx.set(
+        walletRef,
+        walletPayload(current, now, {
+          balance,
+          // Un solde réduit par un remboursement client ne peut porter plus
+          // d'exonération qu'il ne lui reste d'argent.
+          fee_free_balance: Math.min(current.fee_free_balance ?? 0, Math.max(0, balance)),
+          held_balance: Math.max(0, (current.held_balance ?? 0) - (stillHeld ? input.amount : 0)),
+        })
+      )
+      tx.set(
+        lineRef,
+        toPayload({
+          wallet_id: input.wallet_id,
+          owner_id: input.owner_id,
+          residence_id: input.residence_id,
+          type: 'refund',
+          amount: -input.amount,
+          balance_after: balance,
+          booking_id: input.booking_id,
+          booking_payment_id: input.booking_payment_id,
+          withdrawal_id: null,
+          ...(stillHeld ? { held: true } : {}),
+          created_at: now,
+        } satisfies WalletTransactionDocument) as unknown as WalletTransactionDocument
+      )
+      return true
+    })
+  },
+
+  /**
+   * Reprend au propriétaire une commission de RESI.
+   *
+   * [key] désigne l'occasion et rend l'opération idempotente : un double
+   * appui ou un rejeu ne retient pas deux fois. Le solde peut devenir
+   * négatif, comme au remboursement : la dette bloque les retraits.
+   */
+  async chargeCommission(input: {
+    wallet_id: string
+    owner_id: string
+    residence_id: string | null
+    booking_id: string
+    booking_payment_id: string | null
+    key: string
+    amount: number
+  }): Promise<boolean> {
+    if (!(input.amount > 0)) return false
+    const walletRef = wallets().doc(input.wallet_id)
+    const lineRef = walletTransactions().doc(`commission_${input.key}`)
 
     return transaction(async (tx) => {
       const [walletSnap, lineSnap] = await Promise.all([tx.get(walletRef), tx.get(lineRef)])
@@ -249,18 +418,10 @@ const Wallet = {
 
       tx.set(
         walletRef,
-        toPayload({
-          owner_id: current.owner_id,
-          residence_id: current.residence_id,
+        walletPayload(current, now, {
           balance,
-          total_credited: current.total_credited,
-          total_withdrawn: current.total_withdrawn,
-          // Un solde réduit par un remboursement client ne peut porter plus
-          // d'exonération qu'il ne lui reste d'argent.
           fee_free_balance: Math.min(current.fee_free_balance ?? 0, Math.max(0, balance)),
-          created_at: current.created_at,
-          updated_at: now,
-        }) as unknown as WalletDocument
+        })
       )
       tx.set(
         lineRef,
@@ -268,7 +429,7 @@ const Wallet = {
           wallet_id: input.wallet_id,
           owner_id: input.owner_id,
           residence_id: input.residence_id,
-          type: 'refund',
+          type: 'commission_charge',
           amount: -input.amount,
           balance_after: balance,
           booking_id: input.booking_id,
@@ -383,6 +544,7 @@ const Wallet = {
           total_credited: current.total_credited + input.refund,
           total_withdrawn: current.total_withdrawn,
           fee_free_balance: (current.fee_free_balance ?? 0) + input.refund,
+          held_balance: current.held_balance ?? 0,
           created_at: current.created_at,
           updated_at: now,
         }) as unknown as WalletDocument

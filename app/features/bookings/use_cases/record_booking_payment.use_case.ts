@@ -1,5 +1,6 @@
 import Booking from '#models/booking'
 import { DomainError } from '#utils/domain_error'
+import { ownerBalanceDue, type PaymentOption } from '#features/deposits/deposit_rules'
 
 import type { BookingDto } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
@@ -17,20 +18,25 @@ import BookingRepository from '../repositories/booking_repository.ts'
  * séjour à 60 000 F réglé en deux fois finissait à 120 000 F de chiffre
  * d'affaires.
  *
+ * Le reste dû déduit aussi ce que le propriétaire a reçu en ligne
+ * (`prepaid_amount`) : sans quoi l'acompte payé par Wave serait réclamé une
+ * seconde fois en espèces.
+ *
  * Un versement au-delà du reste dû est refusé : un trop-perçu se rend au
  * client, il ne s'enregistre pas comme un encaissement.
  *
  * @throws `payment_exceeds_balance` si le versement dépasse le reste dû
  */
 export function buildPaymentPatch(
-  current: { received_amount?: number; total_amount?: number; deposit_amount?: number },
+  current: {
+    received_amount?: number
+    total_amount?: number
+    deposit_amount?: number
+    prepaid_amount?: number
+  },
   amount: number
 ): { deposit_amount: number } {
-  // Repli sur `total_amount` : les réservations antérieures à la saisie
-  // comptoir ne portent pas `received_amount`, et leur total en tient lieu.
-  const price = current.received_amount ?? current.total_amount ?? 0
-  const paid = current.deposit_amount ?? 0
-  const balance = Math.max(0, price - paid)
+  const balance = ownerBalanceDue(current)
 
   if (amount > balance) {
     throw new DomainError(
@@ -40,7 +46,42 @@ export function buildPaymentPatch(
     )
   }
 
-  return { deposit_amount: paid + amount }
+  return { deposit_amount: (current.deposit_amount ?? 0) + amount }
+}
+
+/**
+ * Une réservation en ligne n'encaisse au comptoir que le reste d'un acompte,
+ * une fois l'acompte payé.
+ *
+ * Payée en totalité, elle n'a rien à encaisser. Payée de rien, l'encaisser en
+ * espèces ferait d'une vente de l'app une vente sans commission — le
+ * contournement que l'acompte ferme.
+ *
+ * @throws `payment_not_expected` hors acompte
+ * @throws `booking_online_unpaid` tant que l'acompte n'est pas payé
+ */
+export function assertCounterPaymentAllowed(booking: {
+  source?: 'online' | 'offline'
+  payment_option?: PaymentOption
+  prepaid_amount?: number
+}): void {
+  // Une réservation sans `source` est de l'historique en ligne.
+  if ((booking.source ?? 'online') === 'offline') return
+
+  if (booking.payment_option !== 'deposit') {
+    throw new DomainError(
+      'payment_not_expected',
+      'Cette réservation se règle en ligne : rien n’est à encaisser au comptoir.',
+      409
+    )
+  }
+  if (!((booking.prepaid_amount ?? 0) > 0)) {
+    throw new DomainError(
+      'booking_online_unpaid',
+      'L’acompte n’a pas encore été payé en ligne par le client.',
+      409
+    )
+  }
 }
 
 /**
@@ -72,6 +113,8 @@ export class RecordBookingPaymentUseCase {
         409
       )
     }
+
+    assertCounterPaymentAllowed(booking)
 
     // La commission de l'apporteur porte sur le prix du séjour, qu'un
     // versement ne change pas : elle n'a pas à être recalculée ici.

@@ -1,5 +1,6 @@
 /* eslint-disable prettier/prettier */
 import { normalizeNegotiation } from '#features/negotiations/negotiation_rules'
+import { assertValidPropertyDeposit } from '#features/deposits/deposit_rules'
 import { DomainError } from '#utils/domain_error'
 
 import type { PropertyDto, UpdatePropertyInput } from '../dto/property.dto.ts'
@@ -15,6 +16,8 @@ export class UpdatePropertyUseCase {
     if (input.details?.surface_area !== undefined && input.details.surface_area <= 0) {
       throw new DomainError('invalid_surface', 'La surface doit être positive.', 422)
     }
+
+    if (input.deposit) assertValidPropertyDeposit(input.deposit)
 
     // Les paliers se jugent contre le prix normal : celui de la même requête
     // s'il change, sinon celui en base.

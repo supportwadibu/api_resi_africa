@@ -6,6 +6,7 @@ import {
   createOwnerBookingValidator,
   extendOwnerBookingValidator,
   listBookingsValidator,
+  recordBookingPaymentValidator,
   updateOwnerBookingValidator,
 } from '#validators/booking/booking'
 
@@ -17,9 +18,11 @@ import {
   CheckOutBookingUseCase,
   CreateOwnerBookingUseCase,
   ExtendOwnerBookingUseCase,
+  FindArrivalBookingUseCase,
   GetBookingStatsUseCase,
   ListOwnerBookingsUseCase,
   PreviewCheckOutUseCase,
+  RecordBookingPaymentUseCase,
   UpdateOwnerBookingUseCase,
 } from '../../features/bookings/use_cases/index.ts'
 
@@ -117,6 +120,32 @@ export default class ProprioBookingController {
 
     const payload = await ctx.request.validateUsing(cancelBookingValidator)
     const booking = await new CancelOwnerBookingUseCase().execute(ctx.params.id, userId, payload)
+    return ctx.response.ok({ data: booking })
+  }
+
+  /**
+   * Réservation présentée au comptoir : QR scanné ou PIN saisi.
+   * Route bornée en nombre d'essais : le PIN n'a que six chiffres.
+   */
+  async arrival(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const data = await new FindArrivalBookingUseCase().execute(String(ctx.params.code), userId)
+    return ctx.response.ok({ data })
+  }
+
+  /** Versement reçu au comptoir : le reste d'un acompte, ou une saisie comptoir. */
+  async recordPayment(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const payload = await ctx.request.validateUsing(recordBookingPaymentValidator)
+    const booking = await new RecordBookingPaymentUseCase().execute(
+      ctx.params.id,
+      userId,
+      payload.amount
+    )
     return ctx.response.ok({ data: booking })
   }
 

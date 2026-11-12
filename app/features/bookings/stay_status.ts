@@ -78,3 +78,38 @@ export function resolveStayTransition(
 
   return null
 }
+
+/** Réservation réduite à ce que la clôture sans arrivée lit. */
+export interface NoShowBooking {
+  status: BookingStatus
+  source?: 'online' | 'offline'
+  payment_option?: 'full' | 'deposit'
+  total_amount: number
+  prepaid_amount?: number
+}
+
+/**
+ * Champs ajoutés à la clôture automatique d'une réservation en ligne jamais
+ * arrivée : le client ne s'est pas présenté.
+ *
+ * Le séjour compte comme effectué — le logement lui était réservé — mais
+ * avec un acompte, le propriétaire n'a reçu que l'acompte : le revenu est
+ * ramené à ce qu'il a touché, sinon ses rapports montreraient un séjour payé
+ * en entier. Le prix vendu reste lisible dans `planned_total_amount`, comme
+ * au départ anticipé. La commission de RESI, retenue sur l'acompte, ne bouge
+ * pas.
+ *
+ * Le comptoir n'est pas concerné : un client saisi au comptoir qui ne vient
+ * pas relève d'une annulation, que seul le propriétaire décide.
+ */
+export function buildNoShowPatch(booking: NoShowBooking): Record<string, unknown> {
+  if (booking.status !== 'confirmed') return {}
+  // Une réservation sans `source` est de l'historique en ligne.
+  if ((booking.source ?? 'online') === 'offline') return {}
+  if (booking.payment_option !== 'deposit') return { no_show: true }
+  return {
+    no_show: true,
+    planned_total_amount: booking.total_amount,
+    total_amount: booking.prepaid_amount ?? 0,
+  }
+}

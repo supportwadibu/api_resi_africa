@@ -203,3 +203,23 @@ export function onlineBookingAmounts(
     client_total_amount: client.subtotal - discount,
   }
 }
+
+/**
+ * Commission de RESI sur des jours ajoutés au comptoir à un séjour vendu en
+ * ligne, selon la règle figée sur la réservation.
+ *
+ * Ces jours se paient au propriétaire, en espèces : sans cette part, prolonger
+ * sur place un séjour trouvé dans l'app — d'un jour à un mois — échapperait à
+ * la commission. Même majoration que le prix en ligne : `value` % du prix du
+ * propriétaire, ou `value` francs par jour.
+ */
+export function extensionCommission(
+  rule: CommissionRule | null,
+  addedOwnerAmount: number,
+  addedDays: number
+): number {
+  if (!rule || !(addedOwnerAmount > 0)) return 0
+  return rule.mode === 'fixed'
+    ? Math.round(rule.value) * Math.max(0, addedDays)
+    : Math.round((addedOwnerAmount * rule.value) / 100)
+}

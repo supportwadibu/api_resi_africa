@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 
 import logger from '@adonisjs/core/services/logger'
 
+import { arrivalOf } from '#features/bookings/booking_arrival'
 import { commissionOf } from '#features/commissions/booking_commission'
 import WaveClient, { isSessionPayable, toPaymentDomainError } from '#services/wave_client'
 import env from '#start/env'
@@ -55,7 +56,19 @@ export class InitializeBookingPaymentUseCase {
     // Le client paie son prix, commission de RESI comprise ; `total_amount`
     // n'est que la part du propriétaire.
     const commission = commissionOf(booking)
-    const amountDue = (commission?.client_total_amount ?? booking.total_amount) - sponsorshipCredit
+    // Avec acompte, Wave n'encaisse que lui : le reste se paie au comptoir. La
+    // part du propriétaire est ce que l'acompte laisse une fois la part de
+    // RESI retenue — tout le séjour, pas seulement l'acompte.
+    const deposit =
+      booking.payment_option === 'deposit' ? arrivalOf(booking)?.online_deposit_amount : null
+    const amountDue = deposit
+      ? deposit
+      : (commission?.client_total_amount ?? booking.total_amount) - sponsorshipCredit
+    const ownerAmount = deposit
+      ? deposit - (commission?.net_amount ?? 0)
+      : commission
+        ? booking.total_amount
+        : null
 
     // Wave refuse les décimales en XOF : un montant qui en porterait serait
     // rejeté, et mieux vaut le dire ici qu'en 502.
@@ -114,7 +127,10 @@ export class InitializeBookingPaymentUseCase {
         ...(sponsorshipCredit > 0 ? { sponsorship_credit_amount: sponsorshipCredit } : {}),
         // Part du propriétaire figée elle aussi : c'est elle, et non tout
         // l'encaissement, qui entre à son portefeuille.
-        ...(commission ? { owner_amount: booking.total_amount } : {}),
+        ...(ownerAmount === null ? {} : { owner_amount: ownerAmount }),
+        // Un acompte reste bloqué au portefeuille jusqu'à l'arrivée constatée :
+        // retiré puis remboursé à une annulation, il serait payé par RESI.
+        ...(deposit ? { deposit: true } : {}),
       },
     })
 

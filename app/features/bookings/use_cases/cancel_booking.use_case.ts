@@ -37,6 +37,16 @@ export class CancelBookingUseCase {
     await this.pendingPayments.execute(id)
 
     const payment = await this.refunds.findPaid(id)
+    // Un acompte versé engage le séjour : l'annulation se décide chez le
+    // propriétaire, qui le garde ou le rend. L'acompte non encore payé, lui,
+    // n'engage rien — la réservation s'annule comme une autre.
+    if (payment && current.payment_option === 'deposit') {
+      throw new DomainError(
+        'deposit_cancel_at_property',
+        'Vous avez versé un acompte : l’annulation se fait auprès du propriétaire.',
+        409
+      )
+    }
     const refunded = payment
       ? await this.refunds.execute(payment, {
           id: current.id,
