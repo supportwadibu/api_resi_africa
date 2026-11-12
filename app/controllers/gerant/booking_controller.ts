@@ -199,6 +199,7 @@ export default class GerantBookingController {
     const payload = await ctx.request.validateUsing(checkInBookingValidator)
     const booking = await new CheckInBookingUseCase().execute(ctx.params.id, ctx.scope.ownerId, {
       actual_check_in_at: payload.actual_check_in_at?.toJSDate(),
+      arrival_code: payload.arrival_code,
     })
     return ctx.response.ok({ data: booking })
   }

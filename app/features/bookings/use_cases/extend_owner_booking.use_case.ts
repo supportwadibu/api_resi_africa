@@ -212,9 +212,16 @@ export class ExtendOwnerBookingUseCase {
       online && booking.commission_mode
         ? { mode: booking.commission_mode, value: booking.commission_value ?? 0 }
         : null
+    // Assise sur le plus haut du prix renégocié et du tarif des jours
+    // ajoutés, calculé ici : un `received_amount` saisi au plus bas — le
+    // séjour « prolongé gratuitement » puis réglé en espèces — ramènerait
+    // sinon la commission à zéro.
     const addedCommission = extensionCommission(
       rule,
-      received - currentReceived,
+      Math.max(
+        received - currentReceived,
+        expected - (amounts.lateCheckoutFee ?? 0) - current.expected
+      ),
       days - current.days
     )
 

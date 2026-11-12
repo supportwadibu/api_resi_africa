@@ -1,4 +1,4 @@
-import { randomBytes, randomInt } from 'node:crypto'
+import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
 
 /**
  * Code d'arrivée d'une réservation en ligne : le QR que le client présente au
@@ -41,4 +41,27 @@ export function parseArrivalCode(raw: string): ParsedArrivalCode | null {
 
   const token = input.startsWith(ARRIVAL_QR_PREFIX) ? input.slice(ARRIVAL_QR_PREFIX.length) : input
   return TOKEN_PATTERN.test(token) ? { kind: 'token', value: token } : null
+}
+
+function sameSecret(a: string, b: string): boolean {
+  const left = Buffer.from(a)
+  const right = Buffer.from(b)
+  return left.length === right.length && timingSafeEqual(left, right)
+}
+
+/**
+ * Le code présenté désigne-t-il bien cette réservation ?
+ *
+ * Comparaison à temps constant : le PIN n'a que six chiffres, et une
+ * comparaison qui s'arrête au premier caractère faux renseignerait sur les
+ * suivants.
+ */
+export function matchesArrivalCode(
+  booking: { check_in_token?: string; check_in_pin?: string },
+  rawCode: string | undefined
+): boolean {
+  const code = rawCode ? parseArrivalCode(rawCode) : null
+  if (!code) return false
+  const expected = code.kind === 'token' ? booking.check_in_token : booking.check_in_pin
+  return expected !== undefined && sameSecret(code.value, expected)
 }

@@ -6,6 +6,7 @@ import BookingPaymentRepository from '#features/booking_payments/repositories/bo
 import { ReleaseHeldDepositUseCase } from '#features/wallets/use_cases/index'
 
 import type { BookingDto } from '../dto/booking.dto.ts'
+import { matchesArrivalCode } from '../arrival_code.ts'
 import { CLOCK_SKEW_TOLERANCE_MS } from '../early_check_out.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 
@@ -155,6 +156,29 @@ export function assertArrivalPaid(booking: ArrivalGateBooking, onlinePaid: boole
 }
 
 /**
+ * Une réservation en ligne qui porte un code d'arrivée ne s'ouvre que sur ce
+ * code : le QR scanné ou le PIN saisi prouve que le client est au comptoir.
+ *
+ * Sans cette preuve, le propriétaire pourrait déclarer une arrivée qui n'a
+ * pas eu lieu — l'acompte bloqué deviendrait retirable, puis remboursé au
+ * client aux frais de RESI. Le comptoir et l'historique sans code restent
+ * libres.
+ *
+ * @throws `arrival_code_required` si le code manque ou ne correspond pas
+ */
+export function assertArrivalProven(
+  booking: { source?: 'online' | 'offline'; check_in_token?: string; check_in_pin?: string },
+  arrivalCode: string | undefined
+): void {
+  if ((booking.source ?? 'online') === 'offline' || !booking.check_in_token) return
+  if (matchesArrivalCode(booking, arrivalCode)) return
+  throw new DomainError(
+    'arrival_code_required',
+    'Scannez le QR du client, ou saisissez son code PIN, pour enregistrer son arrivée.',
+    422
+  )
+}
+/**
  * Enregistre l'arrivée d'un client sur une réservation à venir.
  *
  * Seul geste qui fait passer une réservation « En cours » : la bascule
@@ -179,7 +203,7 @@ export class CheckInBookingUseCase {
   async execute(
     id: string,
     ownerId: string,
-    input: { actual_check_in_at?: Date } = {}
+    input: { actual_check_in_at?: Date; arrival_code?: string } = {}
   ): Promise<BookingDto> {
     const now = new Date()
 
@@ -193,6 +217,7 @@ export class CheckInBookingUseCase {
     const online = (booking.source ?? 'online') !== 'offline'
     const payment = online ? await this.payments.findSucceededByBooking(id) : null
     assertArrivalPaid(booking, payment !== null)
+    assertArrivalProven(booking, input.arrival_code)
 
     const applied = await Booking.applyStatusTransition(id, booking.status, patch)
     if (!applied) {

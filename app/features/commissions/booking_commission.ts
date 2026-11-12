@@ -99,6 +99,9 @@ interface BookingAmounts {
   payment_option?: PaymentOption
   balance_due?: number
   deposit_amount?: number
+  prepaid_amount?: number
+  expected_amount?: number
+  received_amount?: number
 }
 
 /** Ce que le client lit en plus : son code d'arrivée et son acompte. */
@@ -137,6 +140,16 @@ export function toClientBooking<T extends BookingAmounts>(dto: T): T & ClientArr
             ? Math.max(0, priced.total_amount - deposit - (dto.deposit_amount ?? 0))
             : 0,
         }),
+    // Champs portant la part du propriétaire : rapprochés de ce que le client
+    // a payé, ils lui dévoileraient la commission. Ramenés à ses propres
+    // montants.
+    ...(dto.prepaid_amount === undefined
+      ? {}
+      : {
+          prepaid_amount: dto.prepaid_amount > 0 ? (isDeposit ? deposit : priced.total_amount) : 0,
+        }),
+    ...(dto.expected_amount === undefined ? {} : { expected_amount: priced.total_amount }),
+    ...(dto.received_amount === undefined ? {} : { received_amount: priced.total_amount }),
     arrival_qr: arrival?.qr ?? null,
     arrival_pin: arrival?.pin ?? null,
     online_deposit_amount: isDeposit ? deposit : null,

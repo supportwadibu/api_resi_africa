@@ -142,6 +142,9 @@ export const checkOutBookingValidator = vine.compile(
 export const checkInBookingValidator = vine.compile(
   vine.object({
     actual_check_in_at: vine.date({ formats: ['iso8601'] }).optional(),
+    // QR scanné ou PIN saisi : exigé pour une réservation en ligne, preuve que
+    // le client est au comptoir.
+    arrival_code: vine.string().trim().maxLength(128).optional(),
   })
 )
 

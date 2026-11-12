@@ -44,6 +44,8 @@ const throttle = {
    */
   arrivalCode: () =>
     middleware.throttle({ name: 'arrival_code', max: 30, window: 600, by: 'user' }),
+  /** Arrivée : elle vérifie un code d'arrivée, borné comme sa recherche. */
+  checkIn: () => middleware.throttle({ name: 'check_in', max: 60, window: 600, by: 'user' }),
   passwordCheck: () =>
     middleware.throttle({ name: 'password_check', max: 10, window: 600, by: 'user' }),
 }
@@ -585,7 +587,9 @@ router
                   .get('arrival/:code', [ProprioBookingController, 'arrival'])
                   .use(throttle.arrivalCode())
                 router.post(':id/payments', [ProprioBookingController, 'recordPayment'])
-                router.patch(':id/check-in', [ProprioBookingController, 'checkIn'])
+                router
+                  .patch(':id/check-in', [ProprioBookingController, 'checkIn'])
+                  .use(throttle.checkIn())
                 router.get(':id/check-out/preview', [ProprioBookingController, 'checkOutPreview'])
                 router.patch(':id/check-out', [ProprioBookingController, 'checkOut'])
                 router.patch(':id/extend', [ProprioBookingController, 'extend'])
@@ -666,7 +670,9 @@ router
             router
               .get('arrival/:code', [GerantBookingController, 'arrival'])
               .use(throttle.arrivalCode())
-            router.patch(':id/check-in', [GerantBookingController, 'checkIn'])
+            router
+              .patch(':id/check-in', [GerantBookingController, 'checkIn'])
+              .use(throttle.checkIn())
             router.get(':id/check-out/preview', [GerantBookingController, 'checkOutPreview'])
             router.patch(':id/check-out', [GerantBookingController, 'checkOut'])
             router.patch(':id/extend', [GerantBookingController, 'update']).as('extend')

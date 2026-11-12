@@ -3,10 +3,14 @@ import { test } from '@japa/runner'
 import {
   ARRIVAL_QR_PREFIX,
   generateArrivalCode,
+  matchesArrivalCode,
   parseArrivalCode,
 } from '#features/bookings/arrival_code'
 import { attachArrival, readBookingArrival } from '#features/bookings/booking_arrival'
-import { assertArrivalPaid } from '#features/bookings/use_cases/check_in_booking.use_case'
+import {
+  assertArrivalPaid,
+  assertArrivalProven,
+} from '#features/bookings/use_cases/check_in_booking.use_case'
 import { FindArrivalBookingUseCase } from '#features/bookings/use_cases/find_arrival_booking.use_case'
 import {
   assertCounterPaymentAllowed,
@@ -52,6 +56,8 @@ test.group('code d’arrivée', () => {
           list_daily_price: null,
           payment_option: 'deposit' as const,
           balance_due: 70000,
+          prepaid_amount: 20000,
+          received_amount: 90000,
           deposit_amount: 0,
         },
         {
@@ -81,6 +87,10 @@ test.group('code d’arrivée', () => {
     assert.equal(client.arrival_qr, `${ARRIVAL_QR_PREFIX}abcdefghijklmnopqrstuv`)
     assert.equal(client.arrival_pin, '245252')
     assert.equal(client.amount_due, 30000)
+    // Ni la part du propriétaire reçue en ligne, ni son prix : rapprochés de
+    // l'acompte, ils dévoileraient la commission.
+    assert.equal(client.prepaid_amount, 30000)
+    assert.equal(client.received_amount, 100000)
     // Le client lit le même reste que le propriétaire.
     assert.equal(client.balance_due, 70000)
   })
@@ -216,5 +226,26 @@ test.group('FindArrivalBookingUseCase', () => {
       () => useCase(null, [booking, { ...booking, id: 'b2' }]).execute('245252', 'o1', null, now),
       /scannez/
     )
+  })
+})
+
+test.group('preuve de présence à l’arrivée', () => {
+  const booking = { check_in_token: 'abcdefghijklmnopqrstuv', check_in_pin: '245252' }
+
+  test('reconnaît le QR et le PIN de la réservation, pas un autre', ({ assert }) => {
+    assert.isTrue(matchesArrivalCode(booking, `${ARRIVAL_QR_PREFIX}abcdefghijklmnopqrstuv`))
+    assert.isTrue(matchesArrivalCode(booking, '245-252'))
+    assert.isFalse(matchesArrivalCode(booking, '245253'))
+    assert.isFalse(matchesArrivalCode(booking, undefined))
+  })
+
+  test('refuse l’arrivée en ligne sans le code du client', ({ assert }) => {
+    assert.throws(() => assertArrivalProven(booking, undefined), /QR/)
+    assert.doesNotThrow(() => assertArrivalProven(booking, '245252'))
+  })
+
+  test('laisse le comptoir et l’historique sans code', ({ assert }) => {
+    assert.doesNotThrow(() => assertArrivalProven({ ...booking, source: 'offline' }, undefined))
+    assert.doesNotThrow(() => assertArrivalProven({}, undefined))
   })
 })
