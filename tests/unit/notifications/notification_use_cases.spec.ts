@@ -1,5 +1,7 @@
 import { test } from '@japa/runner'
 
+import { buildOwnerValidatedMessage } from '#features/notifications/owner_validated'
+import NotifyUserUseCase from '#features/notifications/use_cases/notify_user.use_case'
 import SendAdminNotificationUseCase from '#features/notifications/use_cases/send_admin_notification.use_case'
 import SendSubscriptionRemindersUseCase from '#features/notifications/use_cases/send_subscription_reminders.use_case'
 import { DomainError } from '#utils/domain_error'
@@ -192,5 +194,53 @@ test.group('SendAdminNotificationUseCase', () => {
     assert.lengthOf(sent, 0)
     assert.equal(campaign.devices_sent, 0)
     assert.lengthOf(state.campaigns, 1)
+  })
+})
+
+test.group('NotifyUserUseCase', () => {
+  const message = buildOwnerValidatedMessage()
+
+  test('prévient le compte sur tous ses appareils, et lui seul', async ({ assert }) => {
+    const { repo } = fakeRepo({
+      devices: [
+        { id: 'd1', token: 't1', user_id: 'o1', role: 'proprio' },
+        { id: 'd2', token: 't2', user_id: 'o1', role: 'proprio' },
+        { id: 'd3', token: 't3', user_id: 'o2', role: 'proprio' },
+      ],
+    })
+    const { transport: t, sent } = transport()
+    const delivered = await new NotifyUserUseCase(repo, t).execute('o1', message)
+
+    assert.isTrue(delivered)
+    assert.sameMembers(sent[0].tokens, ['t1', 't2'])
+    assert.equal(sent[0].title, 'Votre compte est validé')
+  })
+
+  test('aucun appareil : rien n’est envoyé', async ({ assert }) => {
+    const { repo } = fakeRepo({ devices: [] })
+    const { transport: t, sent } = transport()
+    assert.isFalse(await new NotifyUserUseCase(repo, t).execute('o1', message))
+    assert.lengthOf(sent, 0)
+  })
+
+  test('purge le jeton mort', async ({ assert }) => {
+    const { repo, state } = fakeRepo({
+      devices: [{ id: 'd1', token: 't1', user_id: 'o1', role: 'proprio' }],
+    })
+    const { transport: t } = transport({ t1: 'messaging/registration-token-not-registered' })
+    assert.isFalse(await new NotifyUserUseCase(repo, t).execute('o1', message))
+    assert.deepEqual(state.removed, ['d1'])
+  })
+
+  test('une panne FCM ne lève pas', async ({ assert }) => {
+    const { repo } = fakeRepo({
+      devices: [{ id: 'd1', token: 't1', user_id: 'o1', role: 'proprio' }],
+    })
+    const failing: PushTransport = {
+      async sendMulticast() {
+        throw new Error('FCM indisponible')
+      },
+    }
+    assert.isFalse(await new NotifyUserUseCase(repo, failing).execute('o1', message))
   })
 })

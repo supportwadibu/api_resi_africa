@@ -1,6 +1,7 @@
 import type { SubscriptionStatus } from '#utils/enums/subscription_status'
 import type { PaidPlanTier, PlanTier } from '#features/plans/plan_tier'
 import type { CancellationMode } from '#features/subscriptions/cancellation_policy'
+import type { UserSummaryDto } from '#features/users/dto/user.dto'
 
 /**
  * DTO d'entrée/sortie pour les usecases Subscription.
@@ -97,8 +98,14 @@ export interface ListSubscriptionsInput {
   per_page?: number
 }
 
+/** Abonnement de la liste admin, avec le propriétaire qui l'a souscrit. */
+export interface PlatformSubscriptionDto extends SubscriptionDto {
+  /** `null` si le compte a été supprimé depuis. */
+  owner: UserSummaryDto | null
+}
+
 export interface ListSubscriptionsOutput {
-  data: SubscriptionDto[]
+  data: PlatformSubscriptionDto[]
   meta: {
     total: number
     perPage: number
