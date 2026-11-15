@@ -1,6 +1,9 @@
 /* eslint-disable prettier/prettier */
 import { DomainError } from '#utils/domain_error'
 
+import { buildOwnerValidatedMessage } from '#features/notifications/owner_validated'
+import NotifyUserUseCase from '#features/notifications/use_cases/notify_user.use_case'
+
 import type {
   OwnerDto,
   ValidateOwnerInput,
@@ -11,13 +14,17 @@ import OwnerRepository from '../repositories/owner_repository.ts'
  * Valide un owner en attente :
  *  1. Vérifie qu'il existe et qu'il est bien en statut validable.
  *  2. Bascule owner_status à 'active' + audit (validated_by/validated_at).
+ *  3. Prévient le propriétaire par notification push.
  *
  * N'ouvre plus d'essai : le propriétaire choisit lui-même le palier qu'il
  * essaie, depuis l'application. `trial_started` et `trial_end_date` restent
  * dans la réponse, toujours à faux et nul, pour le back-office qui les lit.
  */
 export class ValidateOwnerUseCase {
-  constructor(private repo: OwnerRepository = new OwnerRepository()) {}
+  constructor(
+    private repo: OwnerRepository = new OwnerRepository(),
+    private notifier: Pick<NotifyUserUseCase, 'execute'> = new NotifyUserUseCase()
+  ) {}
 
   async execute(input: ValidateOwnerInput): Promise<{
     owner: OwnerDto
@@ -54,6 +61,10 @@ export class ValidateOwnerUseCase {
     if (!validated) {
       throw new DomainError('owner_not_found', 'Propriétaire introuvable.', 404)
     }
+
+    // Après l'écriture : le propriétaire n'est prévenu que d'une validation
+    // effective. `notifier` ne lève pas, une panne FCM n'annule rien.
+    await this.notifier.execute(input.owner_id, buildOwnerValidatedMessage())
 
     return { owner: validated, trial_started: false, trial_end_date: null }
   }

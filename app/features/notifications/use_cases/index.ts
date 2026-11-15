@@ -1,4 +1,5 @@
 export { default as ListNotificationCampaignsUseCase } from './list_notification_campaigns.use_case.ts'
+export { default as NotifyUserUseCase } from './notify_user.use_case.ts'
 export {
   RegisterDeviceTokenUseCase,
   UnregisterDeviceTokenUseCase,
