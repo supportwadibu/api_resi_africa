@@ -12,3 +12,4 @@ export { StartSubscriptionCheckoutUseCase } from './start_subscription_checkout.
 export { GetSubscriptionOptionsUseCase } from './get_subscription_options.use_case.ts'
 export { CancelOwnSubscriptionUseCase } from './cancel_own_subscription.use_case.ts'
 export { GrantSubscriptionUseCase } from './grant_subscription.use_case.ts'
+export { RequestSubscriptionGrantCodeUseCase } from './request_subscription_grant_code.use_case.ts'

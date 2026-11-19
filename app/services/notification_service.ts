@@ -218,6 +218,8 @@ export class NotificationService {
         return 'réinitialiser votre mot de passe'
       case '2fa':
         return 'confirmer votre identité'
+      case 'subscription_grant':
+        return "valider l'enregistrement d'un abonnement"
       default:
         return 'vérifier votre identité'
     }

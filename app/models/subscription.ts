@@ -59,6 +59,12 @@ export interface SubscriptionDocument {
    * `end_date`, puis expire. Absent sur l'historique : faux.
    */
   cancel_at_period_end?: boolean | null
+  /**
+   * Enregistré par un administrateur, sans paiement dans l'application. Le
+   * montant payé hors application ne se rend pas au portefeuille à la
+   * résiliation (`cancellationTerms`). Absent ailleurs : faux.
+   */
+  recorded_by_admin?: boolean | null
 
   created_at: Date
   updated_at: Date
@@ -218,7 +224,8 @@ const Subscription = {
   },
 
   /**
-   * Ouvre un abonnement sans paiement et clôt ceux qu'il remplace, d'un bloc.
+   * Ouvre un abonnement enregistré par un administrateur, écrit son
+   * encaissement et clôt les abonnements qu'il remplace, d'un bloc.
    *
    * Les abonnements vivants sont relus dans la transaction : un paiement Wave
    * confirmé au même instant ouvrirait sinon un second abonnement à côté de
@@ -234,7 +241,7 @@ const Subscription = {
           .where('user_id', '==', userId)
           .where('status', 'in', ACTIVE_SUBSCRIPTION_STATUSES)
       )
-      const { subscription, close } = build(toDocs<SubscriptionDocument>(snapshot.docs))
+      const { subscription, payment, close } = build(toDocs<SubscriptionDocument>(snapshot.docs))
 
       const now = new Date()
       for (const closing of close) {
@@ -252,6 +259,13 @@ const Subscription = {
       const ref = subscriptions().doc()
       const payload: SubscriptionDocument = { ...subscription, created_at: now, updated_at: now }
       tx.set(ref, toPayload(payload) as unknown as SubscriptionDocument)
+      if (payment) {
+        // La référence du paiement sert d'identifiant, comme pour Wave.
+        tx.set(
+          collection(COLLECTIONS.paymentHistories).doc(payment.transaction_reference),
+          toPayload({ ...payment, subscription_id: ref.id, created_at: now, updated_at: now })
+        )
+      }
       return { subscription: { ...payload, _id: ref.id }, closed: close }
     })
   },

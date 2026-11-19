@@ -3,7 +3,11 @@ import { RTDB_PATHS, ref } from '#firebase/rtdb'
 export const OTP_CHANNELS = ['email', 'phone'] as const
 export type OtpChannel = (typeof OTP_CHANNELS)[number]
 
-export const OTP_PURPOSES = ['login', 'register', 'reset', '2fa'] as const
+/**
+ * `subscription_grant` : un administrateur confirme, par un code reçu sur son
+ * propre e-mail, l'abonnement qu'il enregistre sans paiement dans l'application.
+ */
+export const OTP_PURPOSES = ['login', 'register', 'reset', '2fa', 'subscription_grant'] as const
 export type OtpPurpose = (typeof OTP_PURPOSES)[number]
 
 export const OTP_DEFAULT_TTL_SECONDS = 10 * 60 // 10 minutes
@@ -27,6 +31,13 @@ interface OtpCodeRaw {
    * (DUGU Sender). Absent des codes générés par RESI, historique compris.
    */
   external_id?: string
+  /**
+   * Ce que le code autorise, quand l'usage ne suffit pas à le dire : le
+   * propriétaire, le forfait et le montant d'un abonnement enregistré par un
+   * administrateur. Un code demandé pour un choix ne vaut pas pour un autre.
+   * Absent des codes de connexion et de l'historique.
+   */
+  context?: string
   channel: OtpChannel
   target: string
   purpose: OtpPurpose
@@ -44,6 +55,7 @@ export interface OtpCodeRecord {
   user_id: string
   code: string | null
   external_id: string | null
+  context: string | null
   channel: OtpChannel
   target: string
   purpose: OtpPurpose
@@ -73,6 +85,7 @@ function toRecord(userId: string, purpose: OtpPurpose, raw: OtpCodeRaw): OtpCode
     user_id: raw.user_id,
     code: raw.code,
     external_id: raw.external_id ?? null,
+    context: raw.context ?? null,
     channel: raw.channel,
     target: raw.target,
     purpose: raw.purpose,
@@ -102,6 +115,7 @@ const OtpCode = {
     user_id: string
     code: string | null
     external_id?: string
+    context?: string
     channel: OtpChannel
     target: string
     purpose: OtpPurpose
@@ -114,6 +128,7 @@ const OtpCode = {
       code: input.code,
       // La RTDB refuse une valeur `undefined` : la clé n'existe que si elle sert.
       ...(input.external_id ? { external_id: input.external_id } : {}),
+      ...(input.context ? { context: input.context } : {}),
       channel: input.channel,
       target: input.target,
       purpose: input.purpose,

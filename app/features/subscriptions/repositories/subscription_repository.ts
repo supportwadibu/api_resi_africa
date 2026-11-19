@@ -31,6 +31,7 @@ export class SubscriptionRepository {
       credit_applied: doc.credit_applied ?? null,
       retained_credit: doc.retained_credit ?? null,
       cancel_at_period_end: doc.cancel_at_period_end ?? false,
+      recorded_by_admin: doc.recorded_by_admin ?? false,
       created_at: doc.created_at,
       updated_at: doc.updated_at,
     }
