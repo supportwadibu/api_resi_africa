@@ -147,7 +147,7 @@ export default class AuthController {
     return ctx.response.ok({ revoked, message: 'Déconnexion effectuée.' })
   }
 
-  /** POST /auth/pin — le client choisit son code à 4 chiffres. */
+  /** POST /auth/pin — le client choisit son code à 5 chiffres. */
   async setPin(ctx: HttpContext) {
     const payload = await ctx.request.validateUsing(setPinValidator)
     const data = await new SetPinUseCase().execute(ctx.authUser!.id, payload.pin)

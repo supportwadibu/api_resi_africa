@@ -120,7 +120,7 @@ export interface AuthTokensOutput {
     role: string
     is_verified: boolean
     avatar_url?: string | null
-    /** Le client doit choisir son code à 4 chiffres avant d'aller plus loin. */
+    /** Le client doit choisir son code à 5 chiffres avant d'aller plus loin. */
     must_set_pin: boolean
   }
 }
