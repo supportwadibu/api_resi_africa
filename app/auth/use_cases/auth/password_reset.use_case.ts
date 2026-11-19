@@ -69,7 +69,7 @@ export class PasswordResetUseCase {
       throw new AuthError('account_disabled', 'Compte désactivé.', 403)
     }
 
-    // Règle du rôle : un client choisit un code à 4 chiffres. Le nouveau
+    // Règle du rôle : un client choisit un code à 5 chiffres. Le nouveau
     // secret lève le blocage — c'est la seule voie pour en sortir.
     const roleName = await roleNameOf(user.role_id)
     assertValidSecret(roleName, input.password)

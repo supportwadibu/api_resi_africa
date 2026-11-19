@@ -47,7 +47,7 @@ export async function issueTokens(
       role: roleName,
       is_verified: user.is_verified,
       avatar_url: user.avatar_url ?? null,
-      // Client inscrit avant le code à 4 chiffres : l'app lui fait choisir
+      // Client inscrit avant le code à 5 chiffres : l'app lui fait choisir
       // son code juste après cette connexion. Un compte Google n'a pas de
       // secret à remplacer.
       must_set_pin:

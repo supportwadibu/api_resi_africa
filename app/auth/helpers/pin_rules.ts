@@ -5,21 +5,22 @@ import { AuthError } from '#utils/auth_error'
 /**
  * Secret de connexion selon le rôle.
  *
- * Un client se connecte avec un code à 4 chiffres, comme dans Wave : c'est le
- * geste que les clients de RESI connaissent. Propriétaires, gérants et
+ * Un client se connecte avec un code à 5 chiffres — le geste du paiement mobile,
+ * que les clients de RESI connaissent, une case de plus pour la sûreté et une
+ * rangée plus équilibrée à l'écran. Propriétaires, gérants et
  * administrateurs gardent un mot de passe — leur compte encaisse de l'argent
  * et gère des tiers.
  *
- * Un code à 4 chiffres n'a que 10 000 valeurs : il ne tient que par le
+ * Un code à 5 chiffres n'a que 100 000 valeurs : il ne tient que par le
  * blocage du compte après `MAX_PIN_ATTEMPTS` codes faux d'affilée, levé
  * seulement par un code de réinitialisation envoyé au titulaire.
  */
 
-export const PIN_LENGTH = 4
+export const PIN_LENGTH = 5
 export const MAX_PIN_ATTEMPTS = 5
 export const MIN_PASSWORD_LENGTH = 8
 
-const PIN_PATTERN = /^\d{4}$/
+const PIN_PATTERN = /^\d{5}$/
 const DIGITS = '0123456789'
 
 /** Le rôle se connecte-t-il avec un code plutôt qu'un mot de passe ? */
@@ -28,8 +29,8 @@ export function secretKindFor(roleName: string): SecretKind {
 }
 
 /**
- * Code trop facile à deviner : chiffres identiques (0000, 7777) ou suite
- * (1234, 9876). Ce sont les premiers qu'essaie quiconque devine, et cinq
+ * Code trop facile à deviner : chiffres identiques (00000, 77777) ou suite
+ * (12345, 98765). Ce sont les premiers qu'essaie quiconque devine, et cinq
  * essais suffiraient alors.
  */
 export function isWeakPin(pin: string): boolean {

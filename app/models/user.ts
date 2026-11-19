@@ -16,7 +16,7 @@ import type { OwnerValidationStatus } from '#utils/enums/owner_validation_status
 export const AUTH_CHANNELS = ['email', 'phone', 'google'] as const
 export type AuthChannel = (typeof AUTH_CHANNELS)[number]
 
-/** `pin` : code à 4 chiffres d'un client. `password` : tout le reste. */
+/** `pin` : code à 5 chiffres d'un client. `password` : tout le reste. */
 export type SecretKind = 'password' | 'pin'
 
 /** Fournisseurs d'identité externes supportés. */
@@ -88,13 +88,13 @@ export interface UserDocument {
    */
   password: string | null
   /**
-   * Nature du secret haché dans `password` : un code à 4 chiffres pour un
+   * Nature du secret haché dans `password` : un code à 5 chiffres pour un
    * client, un mot de passe sinon. Absent de l'historique : `password` —
    * un client inscrit avant le code le choisit à sa prochaine connexion.
    */
   password_kind?: SecretKind
   /**
-   * Codes faux consécutifs. Un code à 4 chiffres n'a que 10 000 valeurs :
+   * Codes faux consécutifs. Un code à 5 chiffres n'a que 10 000 valeurs :
    * au-delà de `MAX_PIN_ATTEMPTS`, le compte se bloque jusqu'à une
    * réinitialisation par code reçu. Absent de l'historique : 0.
    */

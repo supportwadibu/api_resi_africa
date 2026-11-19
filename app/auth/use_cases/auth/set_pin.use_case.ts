@@ -4,7 +4,7 @@ import HashService from '#services/hash_service'
 import { AuthError } from '#utils/auth_error'
 
 /**
- * Le client inscrit avant le code à 4 chiffres le choisit, juste après s'être
+ * Le client inscrit avant le code à 5 chiffres le choisit, juste après s'être
  * connecté avec son ancien mot de passe (`must_set_pin`).
  *
  * Réservé aux clients : propriétaires et gérants gardent un mot de passe. La
