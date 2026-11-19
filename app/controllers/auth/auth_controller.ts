@@ -9,6 +9,7 @@ import {
   RegisterInitUseCase,
   RegisterResendUseCase,
   RegisterVerifyUseCase,
+  SetPinUseCase,
 } from '#auth/use_cases/index'
 import { AuthError } from '#utils/auth_error'
 import {
@@ -21,6 +22,7 @@ import {
   registerInitValidator,
   registerResendValidator,
   registerVerifyValidator,
+  setPinValidator,
 } from '#validators/auth/auth'
 
 import type { HttpContext } from '@adonisjs/core/http'
@@ -143,6 +145,13 @@ export default class AuthController {
     const { refresh_token: refreshToken } = await ctx.request.validateUsing(logoutValidator)
     const { revoked } = await new LogoutUseCase().execute({ refresh_token: refreshToken })
     return ctx.response.ok({ revoked, message: 'Déconnexion effectuée.' })
+  }
+
+  /** POST /auth/pin — le client choisit son code à 4 chiffres. */
+  async setPin(ctx: HttpContext) {
+    const payload = await ctx.request.validateUsing(setPinValidator)
+    const data = await new SetPinUseCase().execute(ctx.authUser!.id, payload.pin)
+    return ctx.response.ok({ data })
   }
 
   async me(ctx: HttpContext) {

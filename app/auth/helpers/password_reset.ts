@@ -31,3 +31,25 @@ export function resetRefusal(
 export function resetChannel(identifier: string): OtpChannel {
   return identifier.includes('@') ? 'email' : 'phone'
 }
+
+/**
+ * Où envoyer un code à un compte existant.
+ *
+ * Un client inscrit par e-mail reçoit ses codes par e-mail, quel que soit
+ * l'identifiant saisi : il ne s'attend pas à un message WhatsApp sur un
+ * numéro qu'il n'a peut-être jamais confirmé. Les autres comptes reçoivent
+ * le code sur le canal saisi, comme avant.
+ *
+ * Seule la *livraison* change : la réponse reste calée sur ce qui a été
+ * saisi, sinon elle trahirait qu'un numéro appartient à un compte e-mail.
+ */
+export function otpDelivery(
+  user: { auth_channel: string; email: string | null },
+  roleName: string,
+  typed: { channel: OtpChannel; target: string }
+): { channel: OtpChannel; target: string } {
+  if (roleName === 'client' && user.auth_channel === 'email' && user.email) {
+    return { channel: 'email', target: user.email }
+  }
+  return typed
+}

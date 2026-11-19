@@ -1,3 +1,4 @@
+import { assertValidSecret, roleNameOf, secretKindFor } from '#auth/helpers/pin_rules'
 import type { AuthTokensOutput, PasswordResetInput } from '#auth/dto/index'
 import { logAuthAttempt } from '#auth/helpers/auth_audit'
 import { issueTokens } from '#auth/helpers/issue_tokens'
@@ -68,7 +69,11 @@ export class PasswordResetUseCase {
       throw new AuthError('account_disabled', 'Compte désactivé.', 403)
     }
 
-    user.password = await HashService.make(input.password)
+    // Règle du rôle : un client choisit un code à 4 chiffres. Le nouveau
+    // secret lève le blocage — c'est la seule voie pour en sortir.
+    const roleName = await roleNameOf(user.role_id)
+    assertValidSecret(roleName, input.password)
+    user.setSecret(await HashService.make(input.password), secretKindFor(roleName))
     user.last_login_at = new Date()
     await user.save()
 

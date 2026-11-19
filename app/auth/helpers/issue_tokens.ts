@@ -1,10 +1,8 @@
 /* eslint-disable prettier/prettier */
-import type {
-  AuthTokensOutput,
-  DeviceContext,
-} from '#auth/dto/index'
+import type { AuthTokensOutput, DeviceContext } from '#auth/dto/index'
 import AuthSession from '#models/auth_session'
 import Role from '#models/role'
+import { secretKindFor } from '#auth/helpers/pin_rules'
 import type { UserEntity } from '#models/user'
 import TokenService from '#services/token_service'
 
@@ -49,6 +47,11 @@ export async function issueTokens(
       role: roleName,
       is_verified: user.is_verified,
       avatar_url: user.avatar_url ?? null,
+      // Client inscrit avant le code à 4 chiffres : l'app lui fait choisir
+      // son code juste après cette connexion. Un compte Google n'a pas de
+      // secret à remplacer.
+      must_set_pin:
+        secretKindFor(roleName) === 'pin' && user.password !== null && user.password_kind !== 'pin',
     },
   }
 }

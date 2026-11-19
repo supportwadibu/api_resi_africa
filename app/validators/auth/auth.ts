@@ -18,6 +18,14 @@ export const phone = () =>
 export const password = () => vine.string().minLength(8).maxLength(64)
 
 /**
+ * Secret de connexion choisi à l'inscription ou à la réinitialisation : un
+ * code à 4 chiffres pour un client, un mot de passe pour les autres. La borne
+ * basse est celle du code ; la règle propre au rôle est vérifiée par
+ * `assertValidSecret`, qui connaît le rôle.
+ */
+export const secret = () => vine.string().minLength(4).maxLength(64)
+
+/**
  * POST /auth/register/init
  * Crée un compte non vérifié et envoie un OTP.
  */
@@ -27,8 +35,8 @@ export const registerInitValidator = vine.compile(
     auth_channel: vine.enum(['email', 'phone'] as const),
     email: email().nullable().optional(),
     phone: phone().nullable().optional(),
-    password: password(),
-    password_confirmation: password().sameAs('password'),
+    password: secret(),
+    password_confirmation: secret().sameAs('password'),
     // `admin` absent à dessein : la route est publique, et l'accepter laissait
     // n'importe qui se créer un compte administrateur. Les administrateurs
     // naissent de `BOOTSTRAP_ADMINS` ou de `node ace admin:create`.
@@ -163,7 +171,18 @@ export const passwordResetValidator = vine.compile(
   vine.object({
     identifier: loginIdentifier(),
     code: vine.string().trim().fixedLength(6),
-    password: password(),
-    password_confirmation: password().sameAs('password'),
+    password: secret(),
+    password_confirmation: secret().sameAs('password'),
+  })
+)
+
+/**
+ * POST /auth/pin
+ * Le client inscrit avant le code à 4 chiffres le choisit.
+ */
+export const setPinValidator = vine.compile(
+  vine.object({
+    pin: vine.string().trim().fixedLength(4),
+    pin_confirmation: vine.string().trim().sameAs('pin'),
   })
 )

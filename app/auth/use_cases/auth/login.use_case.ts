@@ -3,6 +3,7 @@ import { assertNotPendingDeletion } from '#auth/helpers/pending_deletion'
 import User, { type AuthChannel } from '#models/user'
 import { issueTokens } from '#auth/helpers/issue_tokens'
 import { logAuthAttempt } from '#auth/helpers/auth_audit'
+import { MAX_PIN_ATTEMPTS, pinLockedError } from '#auth/helpers/pin_rules'
 import { assertRateLimit } from '#auth/helpers/rate_limit'
 import { AuthError } from '#utils/auth_error'
 import type { AuthTokensOutput, LoginInput } from '#auth/dto/index'
@@ -23,8 +24,14 @@ async function burnPasswordCheck(password: string): Promise<void> {
 }
 
 /**
- * Use case : authentifie un utilisateur par email/phone + password
- * et délivre une nouvelle paire access/refresh.
+ * Use case : authentifie un utilisateur par email/phone + secret — code à 4
+ * chiffres pour un client, mot de passe sinon — et délivre une nouvelle paire
+ * access/refresh.
+ *
+ * Un code se bloque après `MAX_PIN_ATTEMPTS` erreurs d'affilée : la limite de
+ * débit par identifiant laisse encore des centaines d'essais par jour, assez
+ * pour épuiser 10 000 codes en quelques semaines. Le compte ne se rouvre que
+ * par la réinitialisation, avec un code reçu par son titulaire.
  */
 export class LoginUseCase {
   async execute(input: LoginInput): Promise<AuthTokensOutput> {
@@ -67,6 +74,22 @@ export class LoginUseCase {
       )
     }
 
+    const usesPin = user.password_kind === 'pin'
+    // Bloqué : même le bon code est refusé, sinon le blocage ne ferait que
+    // ralentir l'essai des 10 000 valeurs.
+    if (usesPin && user.pin_locked_at) {
+      await logAuthAttempt({
+        user_id: user._id,
+        type: 'verify',
+        status: 'failed',
+        channel,
+        target: input.identifier,
+        failure_reason: 'pin_locked',
+        device: input.device,
+      })
+      throw pinLockedError()
+    }
+
     const passwordOk = await HashService.verify(input.password, user.password)
     if (!passwordOk) {
       await logAuthAttempt({
@@ -78,6 +101,10 @@ export class LoginUseCase {
         failure_reason: 'invalid_password',
         device: input.device,
       })
+      if (usesPin) {
+        const { locked } = await User.recordPinFailure(user._id, MAX_PIN_ATTEMPTS)
+        if (locked) throw pinLockedError()
+      }
       throw new AuthError('invalid_credentials', 'Identifiants invalides.', 401)
     }
 
@@ -97,6 +124,7 @@ export class LoginUseCase {
     }
 
     user.last_login_at = new Date()
+    user.clearPinFailures()
     await user.save()
 
     await logAuthAttempt({

@@ -147,6 +147,7 @@ router
       .group(() => {
         router.post('logout', [AuthController, 'logout'])
         router.get('me', [AuthController, 'me'])
+        router.post('pin', [AuthController, 'setPin']).use(throttle.passwordCheck())
         // Appareils recevant les notifications push, tous rôles confondus.
         router.post('device-tokens', [DeviceTokenController, 'store'])
         router.delete('device-tokens', [DeviceTokenController, 'destroy'])
@@ -310,9 +311,9 @@ router
             router.get('/', [AdminPropertiesController, 'index'])
             router.get(':id', [AdminPropertiesController, 'show'])
             router.get(':id/clients', [AdminPropertiesController, 'clients'])
-          })
             router.patch(':id/publish', [AdminPropertiesController, 'publish'])
             router.patch(':id/unpublish', [AdminPropertiesController, 'unpublish'])
+          })
           .prefix('properties')
           .as('properties')
 
@@ -337,10 +338,10 @@ router
         router
           .group(() => {
             router.get('/', [AdminSubscriptionsController, 'index'])
+            router.post('/', [AdminSubscriptionsController, 'store'])
             router.patch(':id/cancel', [AdminSubscriptionsController, 'cancel'])
             router.patch(':id/extend', [AdminSubscriptionsController, 'extend'])
           })
-            router.post('/', [AdminSubscriptionsController, 'store'])
           .prefix('subscriptions')
           .as('subscriptions')
 

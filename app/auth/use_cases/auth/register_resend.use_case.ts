@@ -1,7 +1,9 @@
+import { roleNameOf } from '#auth/helpers/pin_rules'
 import type { RegisterInitOutput, RegisterResendInput } from '#auth/dto/index'
 import { logAuthAttempt } from '#auth/helpers/auth_audit'
 import { generateAndSendOtp } from '#auth/helpers/otp_dispatch'
 import { assertRateLimit } from '#auth/helpers/rate_limit'
+import { otpDelivery } from '#auth/helpers/password_reset'
 import User from '#models/user'
 import { AuthError } from '#utils/auth_error'
 
@@ -44,10 +46,13 @@ export class RegisterResendUseCase {
       throw new AuthError('already_registered', 'Un compte existe déjà.', 409)
     }
 
+    // Client inscrit par e-mail : le code part à son adresse (`otpDelivery`).
+    const roleName = await roleNameOf(user.role_id)
+    const delivery = otpDelivery(user, roleName, { channel: input.channel, target: input.target })
+
     const plainCode = await generateAndSendOtp({
       userId: user._id,
-      channel: input.channel,
-      target: input.target,
+      ...delivery,
       purpose: 'register',
       device: input.device,
     })

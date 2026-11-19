@@ -7,3 +7,4 @@ export { RegisterResendUseCase } from '#auth/use_cases/auth/register_resend.use_
 export { RegisterVerifyUseCase } from '#auth/use_cases/auth/register_verify.use_case'
 export { PasswordForgotUseCase } from '#auth/use_cases/auth/password_forgot.use_case'
 export { PasswordResetUseCase } from '#auth/use_cases/auth/password_reset.use_case'
+export { SetPinUseCase } from '#auth/use_cases/auth/set_pin.use_case'
