@@ -35,6 +35,8 @@ export interface SubscriptionDto {
   retained_credit: number | null
   /** Résilié sans remboursement : actif jusqu'à `end_date`, puis expiré. */
   cancel_at_period_end: boolean
+  /** Enregistré par un administrateur, sans paiement dans l'application. */
+  recorded_by_admin: boolean
   created_at: Date
   updated_at: Date
 }

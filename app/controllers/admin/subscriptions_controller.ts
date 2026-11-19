@@ -2,12 +2,14 @@ import {
   CancelSubscriptionUseCase,
   ExtendSubscriptionUseCase,
   GrantSubscriptionUseCase,
+  RequestSubscriptionGrantCodeUseCase,
   ListSubscriptionsUseCase,
 } from '#features/subscriptions/use_cases/index'
 import {
   cancelSubscriptionValidator,
   extendSubscriptionValidator,
   grantSubscriptionValidator,
+  requestSubscriptionGrantCodeValidator,
   listSubscriptionsValidator,
 } from '#validators/subscription/subscription'
 
@@ -23,7 +25,17 @@ export default class AdminSubscriptionsController {
     return ctx.response.ok(result)
   }
 
-  /** POST /admin/subscriptions — abonnement ouvert sans paiement. */
+  /** POST /admin/subscriptions/code — code de validation envoyé à l'e-mail de l'admin. */
+  async requestCode(ctx: HttpContext) {
+    const payload = await ctx.request.validateUsing(requestSubscriptionGrantCodeValidator)
+    const result = await new RequestSubscriptionGrantCodeUseCase().execute({
+      ...payload,
+      admin_id: ctx.authUser?.id ?? '',
+    })
+    return ctx.response.ok({ data: result })
+  }
+
+  /** POST /admin/subscriptions — abonnement enregistré sans paiement, code à l'appui. */
   async store(ctx: HttpContext) {
     const payload = await ctx.request.validateUsing(grantSubscriptionValidator)
     const subscription = await new GrantSubscriptionUseCase().execute({

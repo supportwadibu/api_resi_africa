@@ -67,6 +67,13 @@ export interface CancellableSubscription {
    * les paiements sans crédit : 0.
    */
   credit_applied?: number | null
+  /**
+   * Enregistré par un administrateur : l'argent n'est pas passé par Wave, et
+   * le rendre au portefeuille en ferait de l'argent retirable que RESI n'a
+   * peut-être jamais reçu. L'abonnement court jusqu'à l'échéance ; un
+   * remboursement se règle avec l'administrateur.
+   */
+  recorded_by_admin?: boolean | null
 }
 
 /**
@@ -80,6 +87,10 @@ export function cancellationTerms(
   now: Date = new Date(),
   { fullRefundAvailable = true }: { fullRefundAvailable?: boolean } = {}
 ): CancellationTerms {
+  if (subscription.recorded_by_admin) {
+    return { mode: 'period_end', refund: 0, credit: 0, immediate: false }
+  }
+
   const elapsedMs = now.getTime() - subscription.start_date.getTime()
   const paid = Math.max(0, Math.floor(Number(subscription.amount)))
   const creditApplied = Math.max(0, Math.floor(subscription.credit_applied ?? 0))

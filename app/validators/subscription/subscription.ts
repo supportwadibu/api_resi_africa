@@ -4,6 +4,7 @@ import vine from '@vinejs/vine'
 
 import { PAID_PLAN_TIERS } from '#features/plans/plan_tier'
 import { MAX_EXTENSION_DAYS } from '#features/subscriptions/subscription_extension'
+import { MANUAL_PAYMENT_METHODS } from '#features/subscriptions/subscription_grant'
 
 export const subscribeToPlanValidator = vine.compile(
   vine.object({
@@ -60,15 +61,28 @@ export const cancelSubscriptionValidator = vine.compile(
   })
 )
 
-/**
- * POST /admin/subscriptions — abonnement ouvert sans paiement.
- *
- * Identifiants Firestore : longueur libre, bornée par sécurité.
- */
+// Identifiants Firestore : longueur libre, bornée par sécurité.
+const grantTarget = {
+  user_id: vine.string().trim().minLength(1).maxLength(128),
+  plan_id: vine.string().trim().minLength(1).maxLength(128),
+  /** Montant reçu hors application, en francs ; le prix du plan à défaut. */
+  amount: vine.number().min(0).max(10_000_000).withoutDecimals().optional(),
+}
+
+/** POST /admin/subscriptions/code — envoie le code de validation à l'admin. */
+export const requestSubscriptionGrantCodeValidator = vine.compile(vine.object(grantTarget))
+
+/** POST /admin/subscriptions — enregistre l'abonnement, code à l'appui. */
 export const grantSubscriptionValidator = vine.compile(
   vine.object({
-    user_id: vine.string().trim().minLength(1).maxLength(128),
-    plan_id: vine.string().trim().minLength(1).maxLength(128),
-    reason: vine.string().trim().minLength(3).maxLength(500).optional(),
+    ...grantTarget,
+    payment_method: vine.enum(MANUAL_PAYMENT_METHODS).optional(),
+    payment_reference: vine.string().trim().maxLength(120).optional(),
+    note: vine.string().trim().maxLength(500).optional(),
+    code: vine
+      .string()
+      .trim()
+      .fixedLength(6)
+      .regex(/^\d{6}$/),
   })
 )

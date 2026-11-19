@@ -338,6 +338,10 @@ router
         router
           .group(() => {
             router.get('/', [AdminSubscriptionsController, 'index'])
+            // Littéral avant `:id` : voir la règle des routes paramétrées.
+            router
+              .post('code', [AdminSubscriptionsController, 'requestCode'])
+              .use(throttle.otpSend())
             router.post('/', [AdminSubscriptionsController, 'store'])
             router.patch(':id/cancel', [AdminSubscriptionsController, 'cancel'])
             router.patch(':id/extend', [AdminSubscriptionsController, 'extend'])

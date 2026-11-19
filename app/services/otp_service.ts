@@ -17,6 +17,8 @@ export interface GenerateOtpInput {
   channel: OtpChannel
   target: string
   purpose: OtpPurpose
+  /** Voir `OtpCodeRaw.context`. */
+  context?: string
 }
 
 export interface OtpGenerationResult {
@@ -56,6 +58,7 @@ export class OtpService {
       channel: input.channel,
       target: input.target,
       purpose: input.purpose,
+      context: input.context,
       expires_at: new Date(Date.now() + OTP_DEFAULT_TTL_SECONDS * 1000),
       max_attempts: OTP_DEFAULT_MAX_ATTEMPTS,
     })

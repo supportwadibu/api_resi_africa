@@ -47,7 +47,8 @@ les lectures unitaires `{ data }`, les erreurs `{ code, message }`.
 | GET | `bookings?owner_id&property_id&client_id&status` | Réservations, avec `property`, `residence`, `owner`, `client` |
 | GET | `bookings/:id` | Réservation |
 | GET | `subscriptions?status&user_id&is_trial` | Abonnements |
-| POST | `subscriptions` | Ouvre un abonnement sans paiement : `user_id`, `plan_id` (plan actif), `reason` facultative. Montant 0, durée du plan ; clôt un essai ou un paiement en attente ; 409 `subscription_already_active` si un abonnement payant court ; tracé `granted` dans `subscription_events` |
+| POST | `subscriptions/code` | Envoie un code à 6 chiffres sur l'e-mail de l'admin pour `user_id`, `plan_id`, `amount` (prix du plan à défaut) ; refuse d'emblée propriétaire inconnu, plan inactif, abonnement payant en cours. Rend `{ email, expires_at, amount }` |
+| POST | `subscriptions` | Enregistre l'abonnement hors application : `user_id`, `plan_id`, `amount`, `payment_method` (`cash`, `mobile_money`, `bank_transfer`), `payment_reference`, `note`, `code`. Le code ne vaut que pour ce propriétaire, ce forfait et ce montant. Écrit l'abonnement (`recorded_by_admin`, jamais remboursé à la résiliation), le paiement `manual` (revenu de RESI) et la dépense du propriétaire ; clôt essai et paiement en attente ; 409 `subscription_already_active` si un abonnement payant court ; tracé `granted` |
 | PATCH | `subscriptions/:id/cancel` | Annule, `reason` facultative |
 | PATCH | `subscriptions/:id/extend` | Prolonge un abonnement en cours de `days` jours (1 à 365), `reason` facultative ; tracé dans `subscription_events` |
 | GET · POST | `promo-codes` | Codes promo (liste complète, non paginée) · création |

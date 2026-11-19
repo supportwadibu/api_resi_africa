@@ -23,8 +23,13 @@ import { ACTIVE_SUBSCRIPTION_STATUSES } from '#utils/enums/subscription_status'
  * — rien n'a été débité.
  */
 const PAYMENT_STATUSES = ['pending', 'success', 'failed', 'refunded', 'expired'] as const
-const PAYMENT_METHODS = ['mobile_money', 'card', 'bank_transfer'] as const
-const PAYMENT_PROVIDERS = ['wave'] as const
+/** `cash` : espèces reçues hors application, saisies par un administrateur. */
+const PAYMENT_METHODS = ['mobile_money', 'card', 'bank_transfer', 'cash'] as const
+/**
+ * `manual` : paiement reçu hors application et enregistré par un
+ * administrateur — aucune session Wave, rien à confirmer ni à relire.
+ */
+const PAYMENT_PROVIDERS = ['wave', 'manual'] as const
 
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number]
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
