@@ -311,6 +311,8 @@ router
             router.get(':id', [AdminPropertiesController, 'show'])
             router.get(':id/clients', [AdminPropertiesController, 'clients'])
           })
+            router.patch(':id/publish', [AdminPropertiesController, 'publish'])
+            router.patch(':id/unpublish', [AdminPropertiesController, 'unpublish'])
           .prefix('properties')
           .as('properties')
 
