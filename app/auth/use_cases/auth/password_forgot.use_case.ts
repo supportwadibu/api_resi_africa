@@ -1,7 +1,8 @@
 import type { PasswordForgotInput, PasswordForgotOutput } from '#auth/dto/index'
 import { logAuthAttempt } from '#auth/helpers/auth_audit'
 import { generateAndSendOtp } from '#auth/helpers/otp_dispatch'
-import { resetChannel, resetRefusal } from '#auth/helpers/password_reset'
+import { otpDelivery, resetChannel, resetRefusal } from '#auth/helpers/password_reset'
+import Role from '#models/role'
 import { assertRateLimit } from '#auth/helpers/rate_limit'
 import User from '#models/user'
 import logger from '@adonisjs/core/services/logger'
@@ -52,16 +53,23 @@ export class PasswordForgotUseCase {
       return { channel, plain_code: null }
     }
 
-    const delivery = generateAndSendOtp({
-      userId: user._id,
-      channel,
-      target: input.identifier,
-      purpose: 'reset',
-      device: input.device,
-    }).catch((error) => {
-      logger.error({ err: error, user_id: user._id }, 'Échec d’envoi du code de réinitialisation')
-      return null
-    })
+    // Client inscrit par e-mail : le code part à son adresse (`otpDelivery`) ;
+    // la réponse reste celle du canal saisi. Le rôle se lit dans l'envoi, qui
+    // n'est pas attendu : le lire avant ralentirait les seuls comptes
+    // existants, et le chronomètre les trahirait.
+    const delivery = Role.findById(user.role_id)
+      .then((role) =>
+        generateAndSendOtp({
+          userId: user._id,
+          ...otpDelivery(user, role?.name ?? 'client', { channel, target: input.identifier }),
+          purpose: 'reset',
+          device: input.device,
+        })
+      )
+      .catch((error) => {
+        logger.error({ err: error, user_id: user._id }, 'Échec d’envoi du code de réinitialisation')
+        return null
+      })
 
     if (!options.waitForDelivery) return { channel, plain_code: null }
     return { channel, plain_code: await delivery }

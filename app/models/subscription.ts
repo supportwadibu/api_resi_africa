@@ -5,12 +5,14 @@ import {
   toDoc,
   toDocs,
   toPayload,
+  transaction,
   type WithId,
 } from '#firebase/firestore'
 import { ACTIVE_SUBSCRIPTION_STATUSES } from '#utils/enums/subscription_status'
 
 import type { SubscriptionStatus } from '#utils/enums/subscription_status'
 import type { PaidPlanTier, PlanTier } from '#features/plans/plan_tier'
+import type { GrantPlan } from '#features/subscriptions/subscription_grant'
 
 export interface SubscriptionDocument {
   user_id: string
@@ -213,6 +215,45 @@ const Subscription = {
       .get()
 
     return toDocs<SubscriptionDocument>(snapshot.docs)
+  },
+
+  /**
+   * Ouvre un abonnement sans paiement et clôt ceux qu'il remplace, d'un bloc.
+   *
+   * Les abonnements vivants sont relus dans la transaction : un paiement Wave
+   * confirmé au même instant ouvrirait sinon un second abonnement à côté de
+   * celui-ci. `build` peut lever, la transaction n'écrit alors rien.
+   */
+  async grant(
+    userId: string,
+    build: (live: SubscriptionRecord[]) => GrantPlan
+  ): Promise<{ subscription: SubscriptionRecord; closed: GrantPlan['close'] }> {
+    return transaction(async (tx) => {
+      const snapshot = await tx.get(
+        subscriptions()
+          .where('user_id', '==', userId)
+          .where('status', 'in', ACTIVE_SUBSCRIPTION_STATUSES)
+      )
+      const { subscription, close } = build(toDocs<SubscriptionDocument>(snapshot.docs))
+
+      const now = new Date()
+      for (const closing of close) {
+        tx.update(
+          subscriptions().doc(closing.id),
+          toPayload({
+            status: closing.status,
+            cancelled_at: now,
+            cancel_reason: closing.reason,
+            updated_at: now,
+          })
+        )
+      }
+
+      const ref = subscriptions().doc()
+      const payload: SubscriptionDocument = { ...subscription, created_at: now, updated_at: now }
+      tx.set(ref, toPayload(payload) as unknown as SubscriptionDocument)
+      return { subscription: { ...payload, _id: ref.id }, closed: close }
+    })
   },
 
   /** Abonnements d'un statut donné, toute la plateforme confondue. */

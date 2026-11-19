@@ -1,4 +1,12 @@
-import { COLLECTIONS, collection, toDoc, toDocs, toPayload, type WithId } from '#firebase/firestore'
+import {
+  COLLECTIONS,
+  collection,
+  toDoc,
+  toDocs,
+  toPayload,
+  transaction,
+  type WithId,
+} from '#firebase/firestore'
 import { OwnerValidationStatusEnum } from '#utils/enums/owner_validation_status'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -7,6 +15,9 @@ import type { OwnerValidationStatus } from '#utils/enums/owner_validation_status
 
 export const AUTH_CHANNELS = ['email', 'phone', 'google'] as const
 export type AuthChannel = (typeof AUTH_CHANNELS)[number]
+
+/** `pin` : code à 4 chiffres d'un client. `password` : tout le reste. */
+export type SecretKind = 'password' | 'pin'
 
 /** Fournisseurs d'identité externes supportés. */
 export const AUTH_PROVIDERS = ['google'] as const
@@ -76,6 +87,20 @@ export interface UserDocument {
    * L'unique flux qui le lit (login par mot de passe) doit donc gérer le cas null.
    */
   password: string | null
+  /**
+   * Nature du secret haché dans `password` : un code à 4 chiffres pour un
+   * client, un mot de passe sinon. Absent de l'historique : `password` —
+   * un client inscrit avant le code le choisit à sa prochaine connexion.
+   */
+  password_kind?: SecretKind
+  /**
+   * Codes faux consécutifs. Un code à 4 chiffres n'a que 10 000 valeurs :
+   * au-delà de `MAX_PIN_ATTEMPTS`, le compte se bloque jusqu'à une
+   * réinitialisation par code reçu. Absent de l'historique : 0.
+   */
+  pin_failed_attempts?: number
+  /** Blocage après trop de codes faux ; levé par la réinitialisation. */
+  pin_locked_at?: Date | null
   /** Identités externes liées à ce compte. Un provider au plus par utilisateur. */
   auth_providers: AuthProviderLink[]
   is_verified: boolean
@@ -166,6 +191,7 @@ function withDefaults(input: Partial<UserDocument>): UserDocument {
     avatar_url: input.avatar_url ?? null,
     auth_channel: input.auth_channel ?? 'email',
     password: input.password ?? null,
+    ...(input.password_kind ? { password_kind: input.password_kind } : {}),
     auth_providers: providers,
     is_verified: input.is_verified ?? false,
     is_active: input.is_active ?? true,
@@ -277,6 +303,36 @@ export class UserEntity {
     this.data.password = value
     this.dirty.add('password')
   }
+
+  get password_kind(): SecretKind {
+    // Historique : un mot de passe, quel que soit le rôle.
+    return this.data.password_kind ?? 'password'
+  }
+  get pin_locked_at(): Date | null {
+    return this.data.pin_locked_at ?? null
+  }
+
+  /**
+   * Remplace le secret et lève tout blocage : un nouveau secret, choisi
+   * après un code reçu ou une connexion réussie, repart de zéro essai.
+   */
+  setSecret(hash: string, kind: SecretKind) {
+    this.data.password = hash
+    this.data.password_kind = kind
+    this.data.pin_failed_attempts = 0
+    this.data.pin_locked_at = null
+    this.dirty.add('password')
+    this.dirty.add('password_kind')
+    this.dirty.add('pin_failed_attempts')
+    this.dirty.add('pin_locked_at')
+  }
+
+  /** Connexion réussie : le compteur de codes faux repart de zéro. */
+  clearPinFailures() {
+    if (!this.data.pin_failed_attempts) return
+    this.data.pin_failed_attempts = 0
+    this.dirty.add('pin_failed_attempts')
+  }
   set avatar_url(value: string | null) {
     this.data.avatar_url = value
     this.dirty.add('avatar_url')
@@ -345,6 +401,29 @@ export class UserEntity {
  * cases n'ont pas à connaître le moteur de stockage sous-jacent.
  */
 const User = {
+  /**
+   * Compte un code faux et bloque le compte au [max]-ième d'affilée.
+   *
+   * En transaction : deux essais simultanés liraient sinon le même compteur,
+   * et un attaquant qui les enverrait en rafale doublerait ses essais.
+   */
+  async recordPinFailure(id: string, max: number): Promise<{ attempts: number; locked: boolean }> {
+    const ref = users().doc(id)
+    return transaction(async (tx) => {
+      const current = toDoc<UserDocument>(await tx.get(ref))
+      const attempts = (current?.pin_failed_attempts ?? 0) + 1
+      const locked = attempts >= max
+      tx.update(
+        ref,
+        toPayload({
+          pin_failed_attempts: attempts,
+          ...(locked ? { pin_locked_at: new Date() } : {}),
+        })
+      )
+      return { attempts, locked }
+    })
+  },
+
   async findById(id: string): Promise<UserEntity | null> {
     if (!id) return null
     const snapshot = await users().doc(id).get()

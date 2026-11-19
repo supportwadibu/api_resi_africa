@@ -1,4 +1,5 @@
 import HashService from '#services/hash_service'
+import { assertValidSecret, secretKindFor } from '#auth/helpers/pin_rules'
 import Role from '#models/role'
 import User from '#models/user'
 import { logAuthAttempt } from '#auth/helpers/auth_audit'
@@ -23,6 +24,9 @@ export class RegisterInitUseCase {
         `Le champ ${input.auth_channel} est requis pour ce canal d'authentification.`
       )
     }
+
+    // Avant tout envoi : un code refusé ne doit pas coûter un SMS.
+    assertValidSecret(input.role_name, input.password)
 
     await assertRateLimit(target, 'generate')
 
@@ -75,6 +79,7 @@ export class RegisterInitUseCase {
       phone: input.phone ?? null,
       auth_channel: input.auth_channel,
       password: passwordHash,
+      password_kind: secretKindFor(role.name),
       is_verified: false,
       is_active: true,
     })
