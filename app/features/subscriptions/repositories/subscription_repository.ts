@@ -4,6 +4,7 @@ import Subscription, { type SubscriptionRecord } from '#models/subscription'
 import SubscriptionEvent from '#models/subscription_event'
 import { type SubscriptionStatus } from '#utils/enums/subscription_status'
 
+import type { GrantPlan } from '../subscription_grant.ts'
 import type { ListSubscriptionsInput, SubscriptionDto } from '../dto/subscription.dto.ts'
 
 export class SubscriptionRepository {
@@ -143,6 +144,15 @@ export class SubscriptionRepository {
   ): Promise<SubscriptionDto | null> {
     const doc = await Subscription.findByIdAndUpdate(id, patch)
     return doc ? SubscriptionRepository.toDto(doc) : null
+  }
+
+  /** Ouvre un abonnement sans paiement ; voir `planGrant`. */
+  async grant(
+    userId: string,
+    build: (live: SubscriptionRecord[]) => GrantPlan
+  ): Promise<{ subscription: SubscriptionDto; closed: GrantPlan['close'] }> {
+    const { subscription, closed } = await Subscription.grant(userId, build)
+    return { subscription: SubscriptionRepository.toDto(subscription), closed }
   }
 
   /** Trace un événement du cycle de vie dans `subscription_events`. */

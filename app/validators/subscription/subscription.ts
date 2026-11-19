@@ -59,3 +59,16 @@ export const cancelSubscriptionValidator = vine.compile(
     reason: vine.string().trim().minLength(3).maxLength(500).optional(),
   })
 )
+
+/**
+ * POST /admin/subscriptions — abonnement ouvert sans paiement.
+ *
+ * Identifiants Firestore : longueur libre, bornée par sécurité.
+ */
+export const grantSubscriptionValidator = vine.compile(
+  vine.object({
+    user_id: vine.string().trim().minLength(1).maxLength(128),
+    plan_id: vine.string().trim().minLength(1).maxLength(128),
+    reason: vine.string().trim().minLength(3).maxLength(500).optional(),
+  })
+)

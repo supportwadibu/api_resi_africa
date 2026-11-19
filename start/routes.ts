@@ -338,6 +338,7 @@ router
             router.patch(':id/cancel', [AdminSubscriptionsController, 'cancel'])
             router.patch(':id/extend', [AdminSubscriptionsController, 'extend'])
           })
+            router.post('/', [AdminSubscriptionsController, 'store'])
           .prefix('subscriptions')
           .as('subscriptions')
 

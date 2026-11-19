@@ -47,6 +47,7 @@ les lectures unitaires `{ data }`, les erreurs `{ code, message }`.
 | GET | `bookings?owner_id&property_id&client_id&status` | Réservations, avec `property`, `residence`, `owner`, `client` |
 | GET | `bookings/:id` | Réservation |
 | GET | `subscriptions?status&user_id&is_trial` | Abonnements |
+| POST | `subscriptions` | Ouvre un abonnement sans paiement : `user_id`, `plan_id` (plan actif), `reason` facultative. Montant 0, durée du plan ; clôt un essai ou un paiement en attente ; 409 `subscription_already_active` si un abonnement payant court ; tracé `granted` dans `subscription_events` |
 | PATCH | `subscriptions/:id/cancel` | Annule, `reason` facultative |
 | PATCH | `subscriptions/:id/extend` | Prolonge un abonnement en cours de `days` jours (1 à 365), `reason` facultative ; tracé dans `subscription_events` |
 | GET · POST | `promo-codes` | Codes promo (liste complète, non paginée) · création |
