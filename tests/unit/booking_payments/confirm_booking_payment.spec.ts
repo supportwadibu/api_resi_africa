@@ -25,6 +25,7 @@ function useCase(options: {
   const credits: Array<Record<string, unknown>> = []
   const refunds: string[] = []
   const prepaid: Array<{ id: string; amount: number }> = []
+  const notified: Array<Record<string, unknown>> = []
   const confirm = new ConfirmBookingPaymentUseCase(
     {
       findById: async () =>
@@ -50,9 +51,12 @@ function useCase(options: {
         refunds.push(id)
       },
     } as never,
-    { execute: async (input: Record<string, unknown>) => void credits.push(input) } as never
+    { execute: async (input: Record<string, unknown>) => void credits.push(input) } as never,
+    {
+      onlineBookingPaid: async (booking: Record<string, unknown>) => void notified.push(booking),
+    } as never
   )
-  return { confirm, updates, credits, refunds, prepaid }
+  return { confirm, updates, credits, refunds, prepaid, notified }
 }
 
 const paid = {
@@ -89,6 +93,20 @@ test.group('ConfirmBookingPaymentUseCase', () => {
     const { confirm, credits } = useCase({ session: { ...paid, amount: '1000' } })
     await confirm.execute('b1', 'c1')
     assert.lengthOf(credits, 0)
+  })
+
+  test('un paiement réussi prévient le propriétaire, une seule fois', async ({ assert }) => {
+    const { confirm, notified } = useCase({ session: paid })
+    await confirm.execute('b1', 'c1')
+
+    assert.lengthOf(notified, 1)
+    assert.equal(notified[0].id, 'b1')
+  })
+
+  test('un paiement en échec ne prévient personne', async ({ assert }) => {
+    const { confirm, notified } = useCase({ session: { ...paid, amount: '1000' } })
+    await confirm.execute('b1', 'c1')
+    assert.lengthOf(notified, 0)
   })
 
   test('montant divergent : échec, jamais succès', async ({ assert }) => {
