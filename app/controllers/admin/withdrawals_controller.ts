@@ -37,7 +37,7 @@ export default class AdminWithdrawalsController {
     const payload = await ctx.request.validateUsing(markWithdrawalPaidValidator)
     const data = await new ResolveWithdrawalUseCase().execute(ctx.params.id, ctx.authUser!.id, {
       status: 'paid',
-      payout_reference: payload.payout_reference ?? null,
+      payout_reference: payload.payout_reference,
     })
     return ctx.response.ok({ data })
   }

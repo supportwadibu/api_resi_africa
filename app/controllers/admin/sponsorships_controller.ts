@@ -55,7 +55,7 @@ export default class AdminSponsorshipsController {
     const payload = await ctx.request.validateUsing(markRedemptionPaidValidator)
     const data = await new ResolveRedemptionUseCase().execute(ctx.params.id, ctx.authUser!.id, {
       status: 'paid',
-      payout_reference: payload.payout_reference ?? null,
+      payout_reference: payload.payout_reference,
     })
     return ctx.response.ok({ data })
   }

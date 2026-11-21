@@ -736,6 +736,17 @@ const Wallet = {
     return toDoc<WithdrawalRequestDocument>(await withdrawals().doc(id).get())
   },
 
+  /**
+   * Retrait déjà clos avec cette référence Wave. Égalité simple sur un champ :
+   * pas d'index composite à déclarer.
+   */
+  async findWithdrawalByPayoutReference(
+    reference: string
+  ): Promise<WithdrawalRequestRecord | null> {
+    const snapshot = await withdrawals().where('payout_reference', '==', reference).limit(1).get()
+    return toDocs<WithdrawalRequestDocument>(snapshot.docs)[0] ?? null
+  },
+
   async paginateWithdrawals(
     filters: { owner_id?: string; status?: WithdrawalStatus },
     options: { limit: number; offset: number }

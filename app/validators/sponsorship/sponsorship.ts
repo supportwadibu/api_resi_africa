@@ -74,9 +74,12 @@ export const cancelSponsorshipValidator = vine.compile(
 
 /**
  * PATCH /admin/sponsorship-redemptions/:id/paid
+ *
+ * Référence Wave obligatoire, comme pour les retraits de portefeuille : le
+ * versement est manuel, la référence est la seule preuve qu'il a eu lieu.
  */
 export const markRedemptionPaidValidator = vine.compile(
-  vine.object({ payout_reference: vine.string().trim().maxLength(120).optional() })
+  vine.object({ payout_reference: vine.string().trim().minLength(6).maxLength(120) })
 )
 
 /**
