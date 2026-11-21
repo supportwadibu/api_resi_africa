@@ -8,9 +8,10 @@ import { parseWaveError, signWaveRequest, WaveApiError } from './wave_client.ts'
  * Client de l'API Payout de Wave : versements vers un numéro Wave, depuis le
  * compte Wave Business de RESI.
  *
- * Clé distincte de celle du Checkout (`WAVE_PAYOUT_API_KEY`) : Wave accorde
- * les API clé par clé, et une clé qui peut envoyer de l'argent ne doit pas
- * servir à autre chose.
+ * Clé dédiée conseillée (`WAVE_PAYOUT_API_KEY`, seul droit « Payout ») : une
+ * clé qui peut envoyer de l'argent ne doit pas servir à autre chose. À défaut,
+ * la clé principale (`WAVE_API_KEY`) est reprise ; elle doit alors avoir reçu
+ * le droit « Payout » dans Wave Business.
  *
  * Référence : https://docs.wave.com/payout
  */
@@ -62,10 +63,33 @@ export function toWavePayout(raw: Record<string, unknown>): WavePayout {
   }
 }
 
+/**
+ * Clé et secret de signature du versement.
+ *
+ * Le secret suit toujours la clé à laquelle il appartient : la clé dédiée avec
+ * `WAVE_PAYOUT_SIGNING_SECRET`, la clé principale reprise avec
+ * `WAVE_API_SIGNING_SECRET`. Mélanger les deux ferait refuser chaque requête.
+ */
+export function resolvePayoutCredentials(vars: {
+  payoutKey?: string
+  payoutSecret?: string
+  mainKey?: string
+  mainSecret?: string
+}): { apiKey: string | undefined; signingSecret: string | undefined } {
+  if (vars.payoutKey) return { apiKey: vars.payoutKey, signingSecret: vars.payoutSecret }
+  return { apiKey: vars.mainKey, signingSecret: vars.mainSecret }
+}
+
 export class WavePayoutClient {
   private baseUrl = env.get('WAVE_BASE_URL') ?? 'https://api.wave.com'
-  private apiKey = env.get('WAVE_PAYOUT_API_KEY')
-  private signingSecret = env.get('WAVE_PAYOUT_SIGNING_SECRET')
+  private credentials = resolvePayoutCredentials({
+    payoutKey: env.get('WAVE_PAYOUT_API_KEY'),
+    payoutSecret: env.get('WAVE_PAYOUT_SIGNING_SECRET'),
+    mainKey: env.get('WAVE_API_KEY'),
+    mainSecret: env.get('WAVE_API_SIGNING_SECRET'),
+  })
+  private apiKey = this.credentials.apiKey
+  private signingSecret = this.credentials.signingSecret
 
   /** Sans clé, le versement reste manuel : l'équipe saisit la référence. */
   isConfigured(): boolean {
@@ -127,7 +151,7 @@ export class WavePayoutClient {
     idempotencyKey?: string
   ): Promise<unknown> {
     if (!this.apiKey) {
-      throw new WaveApiError(0, 'missing-api-key', 'WAVE_PAYOUT_API_KEY absente')
+      throw new WaveApiError(0, 'missing-api-key', 'Ni WAVE_PAYOUT_API_KEY ni WAVE_API_KEY')
     }
 
     const body = payload === undefined ? '' : JSON.stringify(payload)

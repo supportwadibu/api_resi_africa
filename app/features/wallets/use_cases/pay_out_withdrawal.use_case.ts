@@ -234,6 +234,17 @@ export class PayOutWithdrawalUseCase {
       if (DEFINITE_REFUSALS.has(error.code)) {
         return { kind: 'refused', code: error.code, message: error.message }
       }
+      // 401 et 403 : la requête est écartée à l'entrée, avant tout traitement
+      // — typiquement une clé sans le droit « Payout », quel que soit le code
+      // que Wave choisisse. Rien n'est parti ; l'équipe doit le savoir plutôt
+      // que de voir la demande bloquée « en cours ».
+      if (error.status === 401 || error.status === 403) {
+        return {
+          kind: 'refused',
+          code: error.code,
+          message: `La clé API Wave n'autorise pas le versement (${error.code}). Vérifiez le droit « Payout » de la clé dans Wave Business.`,
+        }
+      }
       return { kind: 'unknown' }
     }
   }

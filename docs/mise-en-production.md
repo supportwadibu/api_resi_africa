@@ -64,12 +64,20 @@ indiqué chez le registraire. Le certificat TLS est émis par Render.
   `https://api.resi.africa/api/v1/payments/wave/webhook` et copier son secret
   dans `WAVE_WEBHOOK_SECRET`. Sans secret, tout webhook est refusé et aucun
   paiement n'aboutit.
-- **Wave — versement des retraits** : dans Wave Business → Développeurs, créer
-  une clé distincte avec le seul droit **Payout** (et, si possible, la liste
-  blanche d'IP de Render), puis la copier dans `WAVE_PAYOUT_API_KEY` (et
-  `WAVE_PAYOUT_SIGNING_SECRET` si la clé signe ses requêtes). Sans elle, le
-  bouton « Verser par Wave » du backoffice répond « non configuré » et les
-  retraits se versent à la main, référence Wave obligatoire. Garder un solde
+- **Wave — versement des retraits** : deux possibilités dans Wave Business →
+  Développeurs.
+  - Conseillé : une clé distincte avec le seul droit **Payout** (et, si
+    possible, la liste blanche d'IP de Render), copiée dans
+    `WAVE_PAYOUT_API_KEY` (et `WAVE_PAYOUT_SIGNING_SECRET` si elle signe ses
+    requêtes).
+  - Ou : ajouter le droit **Payout** à la clé `WAVE_API_KEY` et laisser
+    `WAVE_PAYOUT_API_KEY` vide ; la clé principale est alors reprise, avec
+    `WAVE_API_SIGNING_SECRET`.
+
+  Si la clé utilisée n'a pas le droit Payout, Wave refuse le versement : la
+  demande reste à verser, avec un motif qui le dit. Sans aucune clé, le bouton
+  « Verser par Wave » répond « non configuré » et les retraits se versent à la
+  main, référence Wave obligatoire. Garder un solde
   suffisant sur le compte Wave Business : un solde trop bas fait échouer le
   versement, la demande reste alors à verser avec le motif.
 - **DUGU Sender** : déclarer le webhook `https://api.resi.africa/webhooks/dugu`

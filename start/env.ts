@@ -151,7 +151,7 @@ export default await Env.create(new URL('../', import.meta.url), {
   // Secret de signature des requêtes (`wave_sn_AKS_…`), seulement si la clé
   // API a été créée avec la signature activée.
   WAVE_API_SIGNING_SECRET: Env.schema.string.optional(),
-  /** Clé API Payout (versement des retraits). Absente : versement manuel. */
+  /** Clé API Payout (versement des retraits). Vide : `WAVE_API_KEY` est reprise. */
   WAVE_PAYOUT_API_KEY: Env.schema.string.optional(),
   WAVE_PAYOUT_SIGNING_SECRET: Env.schema.string.optional(),
   WAVE_CURRENCY: Env.schema.string.optional(),

@@ -179,6 +179,19 @@ test.group('PayOutWithdrawalUseCase — versement', () => {
     }
   })
 
+  test('clé sans le droit Payout (403) : rouvert, avec un motif explicite', async ({ assert }) => {
+    const { payOut, calls } = useCase({
+      create: async () => {
+        throw new WaveApiError(403, 'forbidden', 'Forbidden')
+      },
+    })
+    await payOut.execute('w1', 'admin')
+
+    const error = calls.failed[0].error as { code: string; message: string }
+    assert.equal(error.code, 'forbidden')
+    assert.include(error.message, 'droit « Payout »')
+  })
+
   test('déjà en cours : 409, aucun envoi', async ({ assert }) => {
     const { payOut, calls } = useCase({
       start: { request: request({ status: 'processing' }), changed: false },
