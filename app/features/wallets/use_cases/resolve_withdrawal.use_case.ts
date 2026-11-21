@@ -1,8 +1,10 @@
+import NotifyUserUseCase from '#features/notifications/use_cases/notify_user.use_case'
 import Wallet from '#models/wallet'
 import { DomainError } from '#utils/domain_error'
 
 import type { AdminWithdrawalDto } from '../dto/wallet.dto.ts'
 import WalletRepository from '../repositories/wallet_repository.ts'
+import { buildWithdrawalPaidMessage } from './pay_out_withdrawal.use_case.ts'
 
 /**
  * Clôt une demande de retrait : versée par l'équipe, ou refusée — le montant
@@ -19,7 +21,8 @@ export class ResolveWithdrawalUseCase {
     private wallets: Pick<
       typeof Wallet,
       'resolveWithdrawal' | 'findWithdrawalByPayoutReference'
-    > = Wallet
+    > = Wallet,
+    private notifier: Pick<NotifyUserUseCase, 'execute'> = new NotifyUserUseCase()
   ) {}
 
   async execute(
@@ -59,6 +62,13 @@ export class ResolveWithdrawalUseCase {
         'withdrawal_already_processed',
         'Cette demande de retrait a déjà été traitée.',
         409
+      )
+    }
+
+    if (input.status === 'paid') {
+      await this.notifier.execute(
+        result.request.owner_id,
+        buildWithdrawalPaidMessage(result.request.net_amount, result.request.payout_phone)
       )
     }
 

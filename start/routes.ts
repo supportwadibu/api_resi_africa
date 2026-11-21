@@ -199,11 +199,13 @@ router
           .prefix('feedbacks')
           .as('feedbacks')
 
-        // Retraits des portefeuilles : versés à la main par l'équipe.
+        // Retraits des portefeuilles : versés par l'API Payout de Wave, ou à la
+        // main par l'équipe, référence Wave saisie.
         router
           .group(() => {
             router.get('/', [AdminWithdrawalsController, 'index'])
             router.get(':id', [AdminWithdrawalsController, 'show'])
+            router.post(':id/payout', [AdminWithdrawalsController, 'payout'])
             router.patch(':id/paid', [AdminWithdrawalsController, 'markPaid'])
             router.patch(':id/reject', [AdminWithdrawalsController, 'reject'])
           })
@@ -867,6 +869,7 @@ router
         )
         router.route('stay-statuses', ['GET', 'POST'], [CronController, 'stayStatuses'])
         router.route('sponsorship-rewards', ['GET', 'POST'], [CronController, 'sponsorshipRewards'])
+        router.route('withdrawal-payouts', ['GET', 'POST'], [CronController, 'withdrawalPayouts'])
         router.route('purge-sessions', ['GET', 'POST'], [CronController, 'purgeSessions'])
         router.route('purge-audit-logs', ['GET', 'POST'], [CronController, 'purgeAuditLogs'])
         router.route(

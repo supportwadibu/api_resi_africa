@@ -66,6 +66,18 @@ export function registerCronTasks(scheduler: CronScheduler): void {
     },
   })
 
+  // Relecture des versements Wave restés en cours : sans elle, un retrait
+  // dont la réponse de Wave s'est perdue resterait bloqué « en cours ».
+  scheduler.register({
+    name: 'withdrawal-payouts',
+    cronExpression: cronConfig.schedules.withdrawalPayouts,
+    handler: async () => {
+      const { PayOutWithdrawalUseCase } =
+        await import('#features/wallets/use_cases/pay_out_withdrawal.use_case')
+      return new PayOutWithdrawalUseCase().reconcile()
+    },
+  })
+
   // 6. Purge des traces d'audit échues
   scheduler.register({
     name: 'purge-audit-logs',

@@ -195,11 +195,11 @@ test.group('registerCronTasks', (group) => {
     scheduler.clear()
   })
 
-  test('enregistre les 7 tâches cron par défaut avec leurs planifications', ({ assert }) => {
+  test('enregistre les 8 tâches cron par défaut avec leurs planifications', ({ assert }) => {
     registerCronTasks(scheduler)
 
     const tasks = scheduler.getTasks()
-    assert.equal(tasks.length, 7)
+    assert.equal(tasks.length, 8)
 
     const names = tasks.map((t) => t.name).sort()
     assert.deepEqual(names, [
@@ -210,6 +210,7 @@ test.group('registerCronTasks', (group) => {
       'sponsorship-rewards',
       'stay-statuses',
       'subscription-reminders',
+      'withdrawal-payouts',
     ])
   })
 })

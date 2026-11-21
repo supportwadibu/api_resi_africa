@@ -108,6 +108,26 @@ export default class CronController {
   }
 
   /**
+   * POST|GET /api/v1/cron/withdrawal-payouts
+   *
+   * Relit chez Wave les versements de retrait restés en cours. Idempotent.
+   */
+  async withdrawalPayouts(ctx: HttpContext) {
+    const startedAt = Date.now()
+    const { PayOutWithdrawalUseCase } =
+      await import('#features/wallets/use_cases/pay_out_withdrawal.use_case')
+    const result = await new PayOutWithdrawalUseCase().reconcile()
+
+    logger.info({ ...result, duration_ms: Date.now() - startedAt }, 'Cron : versements Wave')
+
+    return ctx.response.ok({
+      task: 'withdrawal-payouts',
+      ...result,
+      duration_ms: Date.now() - startedAt,
+    })
+  }
+
+  /**
    * POST|GET /api/v1/cron/purge-sessions
    *
    * Supprime les sessions d'authentification expirées dans Firestore.

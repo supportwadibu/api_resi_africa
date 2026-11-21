@@ -64,14 +64,22 @@ indiqué chez le registraire. Le certificat TLS est émis par Render.
   `https://api.resi.africa/api/v1/payments/wave/webhook` et copier son secret
   dans `WAVE_WEBHOOK_SECRET`. Sans secret, tout webhook est refusé et aucun
   paiement n'aboutit.
+- **Wave — versement des retraits** : dans Wave Business → Développeurs, créer
+  une clé distincte avec le seul droit **Payout** (et, si possible, la liste
+  blanche d'IP de Render), puis la copier dans `WAVE_PAYOUT_API_KEY` (et
+  `WAVE_PAYOUT_SIGNING_SECRET` si la clé signe ses requêtes). Sans elle, le
+  bouton « Verser par Wave » du backoffice répond « non configuré » et les
+  retraits se versent à la main, référence Wave obligatoire. Garder un solde
+  suffisant sur le compte Wave Business : un solde trop bas fait échouer le
+  versement, la demande reste alors à verser avec le motif.
 - **DUGU Sender** : déclarer le webhook `https://api.resi.africa/webhooks/dugu`
   (Applications → Webhook) et copier son secret dans `DUGU_WEBHOOK_SECRET`.
   Sans secret, tout webhook est refusé — les OTP partent quand même, seul le
   suivi des échecs d'acheminement manque.
 - **Resend** : domaine `resi.africa` vérifié (SPF, DKIM), templates
   `otp_email_verification` et `email_verified` publiés.
-- **Tâches planifiées** : l'ordonnanceur interne les lance (six tâches, une
-  seule instance). Aucun cron-job.org n'est nécessaire ; ne pas en ajouter un
+- **Tâches planifiées** : l'ordonnanceur interne les lance (huit tâches, dont
+  la relecture des versements Wave toutes les 5 minutes, une seule instance). Aucun cron-job.org n'est nécessaire ; ne pas en ajouter un
   en plus, les relances partiraient en double.
 
 ## 4. Déploiement
@@ -101,5 +109,7 @@ curl -s https://api.resi.africa/health
       l'instance.
 - [ ] Paiement Wave réel d'un abonnement, puis réception du webhook.
 - [ ] Notification push reçue sur un téléphone.
+- [ ] Un premier retrait de faible montant versé par « Verser par Wave » :
+      statut « Versé », référence `pt-…` affichée, argent reçu sur le numéro.
 - [ ] Déclenchement manuel d'une tâche :
       `curl -H "X-Cron-Secret: <CRON_SECRET>" https://api.resi.africa/api/v1/cron/sponsorship-rewards`

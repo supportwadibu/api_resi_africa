@@ -45,6 +45,8 @@ export interface WithdrawalDto {
   payout_slot: number | null
   status: WithdrawalStatus
   payout_reference: string | null
+  /** Dernier refus de Wave lors d'un versement automatique ; `null` sinon. */
+  payout_error: { code: string; message: string } | null
   rejection_reason: string | null
   processed_at: Date | null
   created_at: Date

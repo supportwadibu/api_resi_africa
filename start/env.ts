@@ -132,6 +132,7 @@ export default await Env.create(new URL('../', import.meta.url), {
   CRON_PURGE_SESSIONS_SCHEDULE: Env.schema.string.optional(),
   CRON_PURGE_AUDIT_LOGS_SCHEDULE: Env.schema.string.optional(),
   CRON_SPONSORSHIP_REWARDS_SCHEDULE: Env.schema.string.optional(),
+  CRON_WITHDRAWAL_PAYOUTS_SCHEDULE: Env.schema.string.optional(),
   CRON_PURGE_DELETED_ACCOUNTS_SCHEDULE: Env.schema.string.optional(),
 
   /**
@@ -150,6 +151,9 @@ export default await Env.create(new URL('../', import.meta.url), {
   // Secret de signature des requêtes (`wave_sn_AKS_…`), seulement si la clé
   // API a été créée avec la signature activée.
   WAVE_API_SIGNING_SECRET: Env.schema.string.optional(),
+  /** Clé API Payout (versement des retraits). Absente : versement manuel. */
+  WAVE_PAYOUT_API_KEY: Env.schema.string.optional(),
+  WAVE_PAYOUT_SIGNING_SECRET: Env.schema.string.optional(),
   WAVE_CURRENCY: Env.schema.string.optional(),
   /**
    * Banc d'essai Wave (`/admin/wave-test`) en production. Il ouvre de vraies

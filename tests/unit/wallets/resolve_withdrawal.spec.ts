@@ -8,17 +8,27 @@ import {
 
 function useCase(taken: { _id: string } | null = null) {
   const resolved: Array<{ id: string; input: Record<string, unknown> }> = []
+  const notified: string[] = []
   const resolve = new ResolveWithdrawalUseCase(
     { toAdminDtos: async (requests: unknown[]) => requests } as never,
     {
       findWithdrawalByPayoutReference: async () => taken,
       resolveWithdrawal: async (id: string, input: Record<string, unknown>) => {
         resolved.push({ id, input })
-        return { request: { _id: id, ...input }, changed: true }
+        return {
+          request: { _id: id, owner_id: 'o1', net_amount: 990, payout_phone: '07', ...input },
+          changed: true,
+        }
+      },
+    } as never,
+    {
+      execute: async (userId: string) => {
+        notified.push(userId)
+        return true
       },
     } as never
   )
-  return { resolve, resolved }
+  return { resolve, resolved, notified }
 }
 
 test.group('ResolveWithdrawalUseCase — versement', () => {
@@ -37,10 +47,17 @@ test.group('ResolveWithdrawalUseCase — versement', () => {
     assert.lengthOf(resolved, 0)
   })
 
-  test('un refus ne demande aucune référence', async ({ assert }) => {
-    const { resolve, resolved } = useCase({ _id: 'w-autre' })
+  test('un refus ne demande aucune référence et ne notifie pas', async ({ assert }) => {
+    const { resolve, resolved, notified } = useCase({ _id: 'w-autre' })
     await resolve.execute('w1', 'admin', { status: 'rejected', rejection_reason: 'Numéro faux' })
     assert.isNull(resolved[0].input.payout_reference)
+    assert.lengthOf(notified, 0)
+  })
+
+  test('versé : le propriétaire est prévenu', async ({ assert }) => {
+    const { resolve, notified } = useCase()
+    await resolve.execute('w1', 'admin', { status: 'paid', payout_reference: 'T_AB12CD' })
+    assert.deepEqual(notified, ['o1'])
   })
 })
 
