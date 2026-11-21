@@ -46,23 +46,29 @@ function useCase(options: {
   getPayout?: unknown
   search?: unknown[]
   processing?: Array<Record<string, unknown>>
+  claim?: boolean
 }) {
   const calls = {
     created: [] as Array<{ input: Record<string, unknown>; key: string }>,
     paid: [] as Array<{ id: string; input: Record<string, unknown> }>,
-    failed: [] as Array<{ id: string; error: unknown }>,
-    providers: [] as Array<{ id: string; providerId: string }>,
+    failed: [] as Array<{ id: string; attempt: number; error: unknown }>,
+    providers: [] as Array<{ id: string; attempt: number; providerId: string }>,
+    claims: [] as Array<{ id: string; attempt: number }>,
     notified: [] as string[],
   }
   const useCaseInstance = new PayOutWithdrawalUseCase(
     {
       startPayout: async () =>
         options.start === undefined ? { request: request(), changed: true } : options.start,
-      recordPayoutProvider: async (id: string, providerId: string) =>
-        void calls.providers.push({ id, providerId }),
-      failPayout: async (id: string, error: unknown) => {
-        calls.failed.push({ id, error })
+      recordPayoutProvider: async (id: string, attempt: number, providerId: string) =>
+        void calls.providers.push({ id, attempt, providerId }),
+      failPayout: async (id: string, attempt: number, error: unknown) => {
+        calls.failed.push({ id, attempt, error })
         return true
+      },
+      claimPayoutCheck: async (id: string, attempt: number) => {
+        calls.claims.push({ id, attempt })
+        return options.claim ?? true
       },
       resolveWithdrawal: async (id: string, input: Record<string, unknown>) => {
         calls.paid.push({ id, input })
@@ -106,6 +112,7 @@ test.group('PayOutWithdrawalUseCase — versement', () => {
     assert.equal(calls.created[0].key, 'resi-wd-w1-1')
     assert.equal(calls.paid[0].input.payout_reference, 'pt-1')
     assert.equal(calls.paid[0].input.from, 'processing')
+    assert.equal(calls.paid[0].input.attempt, 1)
     assert.deepEqual(calls.notified, ['o1'])
   })
 
@@ -151,8 +158,25 @@ test.group('PayOutWithdrawalUseCase — versement', () => {
   }) => {
     const { payOut, calls } = useCase({ create: async () => payout('processing') })
     await payOut.execute('w1', 'admin')
-    assert.deepEqual(calls.providers, [{ id: 'w1', providerId: 'pt-1' }])
+    assert.deepEqual(calls.providers, [{ id: 'w1', attempt: 1, providerId: 'pt-1' }])
     assert.lengthOf(calls.paid, 0)
+  })
+
+  test('refus au code inconnu ou 409 : issue inconnue, jamais rouvert', async ({ assert }) => {
+    for (const [status, code] of [
+      [409, 'conflict'],
+      [400, 'un-code-nouveau'],
+      [400, 'idempotency-mismatch'],
+    ] as const) {
+      const { payOut, calls } = useCase({
+        create: async () => {
+          throw new WaveApiError(status, code, 'Refus')
+        },
+      })
+      await payOut.execute('w1', 'admin')
+      assert.lengthOf(calls.failed, 0, code)
+      assert.lengthOf(calls.paid, 0, code)
+    }
   })
 
   test('déjà en cours : 409, aucun envoi', async ({ assert }) => {
@@ -197,6 +221,21 @@ test.group('PayOutWithdrawalUseCase — relecture', () => {
     const { payOut, calls } = useCase({ processing: [request({ payout_attempt: 2 })] })
     await payOut.reconcile(NOW)
     assert.equal(calls.created[0].key, 'resi-wd-w1-2')
+  })
+
+  test('déjà réservé par un autre passage : ni relu ni rejoué', async ({ assert }) => {
+    const { payOut, calls } = useCase({ processing: [request()], claim: false })
+    const result = await payOut.reconcile(NOW)
+
+    assert.deepEqual(result, { checked: 0, settled: 0 })
+    assert.lengthOf(calls.created, 0)
+  })
+
+  test('la réservation porte la tentative en cours', async ({ assert }) => {
+    const { payOut, calls } = useCase({ processing: [request({ payout_attempt: 3 })] })
+    await payOut.reconcile(NOW)
+    assert.deepEqual(calls.claims, [{ id: 'w1', attempt: 3 }])
+    assert.equal(calls.created[0].key, 'resi-wd-w1-3')
   })
 
   test('lancé à l’instant : pas encore relu', async ({ assert }) => {

@@ -142,6 +142,8 @@ export interface WithdrawalRequestDocument {
    */
   payout_attempt?: number
   payout_started_at?: Date | null
+  /** Début de la réservation en cours du versement : voir `claimPayoutCheck`. */
+  payout_checked_at?: Date | null
   /** Identifiant Wave d'un versement encore `processing`. */
   payout_provider_id?: string | null
   /** Dernier refus de Wave, montré à l'équipe pour décider : réessayer ou refuser. */
@@ -685,6 +687,8 @@ const Wallet = {
        * en cours paierait deux fois.
        */
       from?: 'pending' | 'processing'
+      /** Avec `from: 'processing'` : la tentative que ce succès conclut. */
+      attempt?: number
     }
   ): Promise<{ request: WithdrawalRequestRecord; changed: boolean } | null> {
     const requestRef = withdrawals().doc(id)
@@ -693,6 +697,9 @@ const Wallet = {
       const request = toDoc<WithdrawalRequestDocument>(await tx.get(requestRef))
       if (!request) return null
       if (request.status !== (input.from ?? 'pending')) return { request, changed: false }
+      if (input.attempt !== undefined && (request.payout_attempt ?? 1) !== input.attempt) {
+        return { request, changed: false }
+      }
 
       const walletRef = wallets().doc(request.wallet_id)
       const wallet = toDoc<WalletDocument>(await tx.get(walletRef))
@@ -775,6 +782,9 @@ const Wallet = {
         status: 'processing' as const,
         payout_attempt: (request.payout_attempt ?? 0) + 1,
         payout_started_at: now,
+        // L'appel de l'équipe tient la réservation : la relecture ne le
+        // double pas pendant qu'il attend Wave.
+        payout_checked_at: now,
         payout_provider_id: null,
         payout_error: null,
         processed_by: adminId,
@@ -785,9 +795,38 @@ const Wallet = {
     })
   },
 
+  /**
+   * Réserve un versement en cours pour la relecture : accordé si la tentative
+   * est toujours [attempt] et qu'aucune réservation de moins de [leaseMs] ne
+   * court. Atomique : deux passages concurrents n'en relisent qu'un.
+   */
+  async claimPayoutCheck(
+    id: string,
+    attempt: number,
+    now: Date,
+    leaseMs: number
+  ): Promise<boolean> {
+    const requestRef = withdrawals().doc(id)
+    return transaction(async (tx) => {
+      const request = toDoc<WithdrawalRequestDocument>(await tx.get(requestRef))
+      if (!request || request.status !== 'processing') return false
+      if ((request.payout_attempt ?? 1) !== attempt) return false
+      const held = request.payout_checked_at
+      if (held && now.getTime() - new Date(held).getTime() < leaseMs) return false
+      tx.update(requestRef, { payout_checked_at: now, updated_at: now })
+      return true
+    })
+  },
+
   /** Wave a accepté le versement sans l'avoir encore exécuté. */
-  async recordPayoutProvider(id: string, providerId: string): Promise<void> {
-    await withdrawals().doc(id).update({ payout_provider_id: providerId, updated_at: new Date() })
+  async recordPayoutProvider(id: string, attempt: number, providerId: string): Promise<void> {
+    const requestRef = withdrawals().doc(id)
+    await transaction(async (tx) => {
+      const request = toDoc<WithdrawalRequestDocument>(await tx.get(requestRef))
+      if (!request || request.status !== 'processing') return
+      if ((request.payout_attempt ?? 1) !== attempt) return
+      tx.update(requestRef, { payout_provider_id: providerId, updated_at: new Date() })
+    })
   },
 
   /**
@@ -795,11 +834,17 @@ const Wallet = {
    * Le montant reste débité — l'équipe réessaie ou refuse, et le refus le
    * recrédite. `false` si la demande n'était plus en cours.
    */
-  async failPayout(id: string, error: { code: string; message: string }): Promise<boolean> {
+  async failPayout(
+    id: string,
+    attempt: number,
+    error: { code: string; message: string }
+  ): Promise<boolean> {
     const requestRef = withdrawals().doc(id)
     return transaction(async (tx) => {
       const request = toDoc<WithdrawalRequestDocument>(await tx.get(requestRef))
       if (!request || request.status !== 'processing') return false
+      // Issue en retard d'une tentative déjà dépassée : elle ne rouvre rien.
+      if ((request.payout_attempt ?? 1) !== attempt) return false
       tx.update(requestRef, {
         status: 'pending',
         payout_error: error,

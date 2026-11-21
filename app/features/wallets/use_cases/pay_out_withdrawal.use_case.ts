@@ -17,6 +17,52 @@ export const PAYOUT_RECHECK_AFTER_MS = 2 * 60 * 1000
 const RECONCILE_BATCH = 50
 
 /**
+ * Durée de la réservation d'un versement par celui qui le traite : l'appel de
+ * l'équipe, ou un passage de la relecture. Bien au-delà du délai d'un appel à
+ * Wave (20 s) : deux traitements ne se chevauchent jamais sur une demande.
+ */
+export const PAYOUT_LEASE_MS = 2 * 60 * 1000
+
+/**
+ * Refus de Wave qui disent avec certitude que rien n'est parti : la requête a
+ * été écartée avant toute exécution — compte bénéficiaire, solde, requête
+ * invalide, clé ou signature refusée.
+ *
+ * Liste blanche, et non noire : un code inconnu, un 409 ou tout autre refus
+ * laissent l'issue **inconnue**. Rouvrir la demande sur un faux refus
+ * permettrait une seconde tentative, avec une autre clé, alors que l'argent
+ * est peut-être parti.
+ */
+export const DEFINITE_REFUSALS: ReadonlySet<string> = new Set([
+  // Contrôle local, avant tout appel.
+  'invalid-amount',
+  'missing-api-key',
+  // Bénéficiaire, solde, monnaie.
+  'insufficient-funds',
+  'recipient-limit-exceeded',
+  'recipient-account-blocked',
+  'recipient-account-inactive',
+  'recipient-minor',
+  'country-mismatch',
+  'currency-mismatch',
+  'request-validation-error',
+  // Authentification et compte : la requête n'a pas été traitée.
+  'missing-auth-header',
+  'invalid-auth',
+  'api-key-not-provided',
+  'no-matching-api-key',
+  'api-key-revoked',
+  'missing-signature',
+  'invalid-signature-format',
+  'invalid-signature',
+  'invalid-signature-timestamp',
+  'expired-signature-timestamp',
+  'invalid-wallet',
+  'disabled-wallet',
+  'ip-not-allowed',
+])
+
+/**
  * Clé d'idempotence et `client_reference` d'une tentative : une par
  * tentative, stable tant que son issue est inconnue.
  */
@@ -60,6 +106,7 @@ type Wallets = Pick<
   | 'recordPayoutProvider'
   | 'failPayout'
   | 'resolveWithdrawal'
+  | 'claimPayoutCheck'
   | 'findProcessingWithdrawals'
   | 'findWithdrawalById'
 >
@@ -130,8 +177,19 @@ export class PayOutWithdrawalUseCase {
     )
 
     let settled = 0
+    let checked = 0
     for (const request of due) {
       try {
+        // Réservée avant d'être relue : un second passage concurrent (appel
+        // manuel de la route cron, autre instance) la laisse de côté.
+        const claimed = await this.wallets.claimPayoutCheck(
+          request._id,
+          attemptOf(request),
+          now,
+          PAYOUT_LEASE_MS
+        )
+        if (!claimed) continue
+        checked++
         const outcome = await this.lookup(request)
         if (await this.apply(request, outcome)) settled++
       } catch (error) {
@@ -140,7 +198,7 @@ export class PayOutWithdrawalUseCase {
         logger.error({ err: error, withdrawal: request._id }, 'Relecture du versement impossible')
       }
     }
-    return { checked: due.length, settled }
+    return { checked, settled }
   }
 
   private async lookup(request: WithdrawalRequestRecord): Promise<Outcome> {
@@ -170,23 +228,34 @@ export class PayOutWithdrawalUseCase {
       return { kind: 'payout', payout }
     } catch (error) {
       if (!(error instanceof WaveApiError)) throw error
-      // Panne, délai, 5xx, 429 : la requête a pu aboutir. Une clé reprise avec
-      // un autre corps (`idempotency-mismatch`) ne dit rien non plus de
-      // l'argent : seule une relecture tranchera.
-      if (error.isTransient || error.code === 'idempotency-mismatch') return { kind: 'unknown' }
-      return { kind: 'refused', code: error.code, message: error.message }
+      // Tout ce qui n'est pas un refus certain — panne, délai, 5xx, 429,
+      // `idempotency-mismatch`, code inconnu — laisse l'issue inconnue : seule
+      // une relecture chez Wave tranchera.
+      if (DEFINITE_REFUSALS.has(error.code)) {
+        return { kind: 'refused', code: error.code, message: error.message }
+      }
+      return { kind: 'unknown' }
     }
   }
 
-  /** Reporte l'issue sur la demande. `true` si elle est close ou rouverte. */
+  /**
+   * Reporte l'issue sur la demande. `true` si elle est close ou rouverte.
+   *
+   * Chaque écriture porte la tentative qu'elle conclut : une issue arrivée en
+   * retard ne touche jamais une tentative plus récente.
+   */
   private async apply(request: WithdrawalRequestRecord, outcome: Outcome): Promise<boolean> {
+    const attempt = attemptOf(request)
     if (outcome.kind === 'unknown') {
       logger.warn({ withdrawal: request._id }, 'Versement Wave à l’issue inconnue, relu plus tard')
       return false
     }
 
     if (outcome.kind === 'refused') {
-      return this.wallets.failPayout(request._id, { code: outcome.code, message: outcome.message })
+      return this.wallets.failPayout(request._id, attempt, {
+        code: outcome.code,
+        message: outcome.message,
+      })
     }
 
     const { payout } = outcome
@@ -194,6 +263,7 @@ export class PayOutWithdrawalUseCase {
       const result = await this.wallets.resolveWithdrawal(request._id, {
         status: 'paid',
         from: 'processing',
+        attempt,
         processed_by: request.processed_by ?? 'wave',
         payout_reference: payout.id,
       })
@@ -209,6 +279,7 @@ export class PayOutWithdrawalUseCase {
     if (payout.status === 'failed') {
       return this.wallets.failPayout(
         request._id,
+        attempt,
         payout.payout_error ?? { code: 'payout-failed', message: 'Versement refusé par Wave' }
       )
     }
@@ -216,7 +287,7 @@ export class PayOutWithdrawalUseCase {
     // `processing`, ou un état que ce code ne connaît pas encore : la demande
     // reste en cours, avec l'identifiant Wave pour la relire.
     if (payout.id && payout.id !== request.payout_provider_id) {
-      await this.wallets.recordPayoutProvider(request._id, payout.id)
+      await this.wallets.recordPayoutProvider(request._id, attempt, payout.id)
     }
     return false
   }
@@ -229,6 +300,10 @@ export class PayOutWithdrawalUseCase {
     const [dto] = await this.repo.toAdminDtos([request])
     return dto
   }
+}
+
+function attemptOf(request: { payout_attempt?: number }): number {
+  return request.payout_attempt ?? 1
 }
 
 export default PayOutWithdrawalUseCase
