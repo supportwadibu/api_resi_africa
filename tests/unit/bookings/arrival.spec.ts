@@ -191,7 +191,8 @@ test.group('FindArrivalBookingUseCase', () => {
         findByCheckInToken: async () => found,
         findByCheckInPin: async () => pin,
       } as never,
-      { findSucceededByBooking: async () => ({ id: 'pay-1' }) } as never
+      { findSucceededByBooking: async () => ({ id: 'pay-1' }) } as never,
+      async () => false
     )
   }
 

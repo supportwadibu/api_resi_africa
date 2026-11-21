@@ -53,6 +53,24 @@ export const updateClientValidator = vine.compile(
   })
 )
 
+/**
+ * Pièce présentée à l'arrivée d'un client de l'app : la nature et le recto
+ * sont exigés, le reste se complète s'il est lisible.
+ */
+export const arrivalDocumentsValidator = vine.compile(
+  vine.object({
+    id_document_type: vine.enum(ID_DOCUMENT_TYPES),
+    id_document_number: vine.string().trim().maxLength(50).optional(),
+    birth_date: calendarDate().optional(),
+    birth_place: vine.string().trim().maxLength(120).optional(),
+    nationality: vine.string().trim().maxLength(60).optional(),
+    address: vine.string().trim().maxLength(200).optional(),
+    id_document_issued_at: calendarDate().optional(),
+    id_document_front: documentFile.clone(),
+    id_document_back: documentFile.clone().optional(),
+  })
+)
+
 export const listClientsValidator = vine.compile(
   vine.object({
     q: vine.string().trim().maxLength(100).optional(),

@@ -1,10 +1,24 @@
 import BookingPaymentRepository from '#features/booking_payments/repositories/booking_payment_repository'
+import ClientRepository from '#features/clients/repositories/client_repository'
+import UserRepository from '#features/users/repositories/user_repository'
 import { DomainError } from '#utils/domain_error'
 
 import { parseArrivalCode } from '../arrival_code.ts'
 import type { BookingDto } from '../dto/booking.dto.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 import { assertArrivalPaid, buildCheckInPatch } from './check_in_booking.use_case.ts'
+import { findArrivalCard, hasArrivalDocuments } from './record_arrival_documents.use_case.ts'
+
+/** Le carnet du propriétaire a-t-il déjà la pièce du client de [booking] ? */
+export type ArrivalDocumentsProbe = (booking: BookingDto, ownerId: string) => Promise<boolean>
+
+const probeCarnet: ArrivalDocumentsProbe = async (booking, ownerId) => {
+  const { card } = await findArrivalCard(booking, ownerId, {
+    clients: new ClientRepository(),
+    users: new UserRepository(),
+  })
+  return hasArrivalDocuments(card)
+}
 
 /** Ce que l'écran d'arrivée affiche en plus de la réservation. */
 export interface ArrivalCheck {
@@ -14,6 +28,12 @@ export interface ArrivalCheck {
   can_check_in: boolean
   /** Première raison d'attendre, au format d'une erreur de l'API ; `null` sinon. */
   blocker: { code: string; message: string } | null
+  /**
+   * Le carnet du propriétaire a déjà la pièce d'identité du client. Sinon,
+   * l'écran d'arrivée la fait enregistrer avant la remise des clés : un client
+   * de l'app réserve sans pièce, et chaque propriétaire tient son propre carnet.
+   */
+  documents_complete: boolean
 }
 
 export interface ArrivalBookingDto {
@@ -41,7 +61,8 @@ export class FindArrivalBookingUseCase {
     private payments: Pick<
       BookingPaymentRepository,
       'findSucceededByBooking'
-    > = new BookingPaymentRepository()
+    > = new BookingPaymentRepository(),
+    private documents: ArrivalDocumentsProbe = probeCarnet
   ) {}
 
   async execute(
@@ -55,7 +76,10 @@ export class FindArrivalBookingUseCase {
       throw new DomainError('arrival_code_unknown', 'Code non reconnu.', 404)
     }
 
-    const payment = await this.payments.findSucceededByBooking(booking.id)
+    const [payment, documentsComplete] = await Promise.all([
+      this.payments.findSucceededByBooking(booking.id),
+      this.documents(booking, ownerId),
+    ])
     let blocker: ArrivalCheck['blocker'] = null
     try {
       buildCheckInPatch(booking, undefined, now)
@@ -67,7 +91,12 @@ export class FindArrivalBookingUseCase {
 
     return {
       booking,
-      check: { online_paid: payment !== null, can_check_in: blocker === null, blocker },
+      check: {
+        online_paid: payment !== null,
+        can_check_in: blocker === null,
+        blocker,
+        documents_complete: documentsComplete,
+      },
     }
   }
 

@@ -598,6 +598,9 @@ router
                 router
                   .patch(':id/check-in', [ProprioBookingController, 'checkIn'])
                   .use(throttle.checkIn())
+                router
+                  .post(':id/arrival-documents', [ProprioBookingController, 'arrivalDocuments'])
+                  .use(throttle.checkIn())
                 router.get(':id/check-out/preview', [ProprioBookingController, 'checkOutPreview'])
                 router.patch(':id/check-out', [ProprioBookingController, 'checkOut'])
                 router.patch(':id/extend', [ProprioBookingController, 'extend'])
@@ -680,6 +683,9 @@ router
               .use(throttle.arrivalCode())
             router
               .patch(':id/check-in', [GerantBookingController, 'checkIn'])
+              .use(throttle.checkIn())
+            router
+              .post(':id/arrival-documents', [GerantBookingController, 'arrivalDocuments'])
               .use(throttle.checkIn())
             router.get(':id/check-out/preview', [GerantBookingController, 'checkOutPreview'])
             router.patch(':id/check-out', [GerantBookingController, 'checkOut'])
