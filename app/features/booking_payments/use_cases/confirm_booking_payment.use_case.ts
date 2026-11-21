@@ -1,5 +1,6 @@
 import logger from '@adonisjs/core/services/logger'
 
+import BookingNotifier from '#features/bookings/booking_notifier'
 import BookingRepository from '#features/bookings/repositories/booking_repository'
 import { CreditBookingPaymentUseCase } from '#features/wallets/use_cases/index'
 import { isPaymentConsistent } from '#features/subscriptions/subscription_checkout'
@@ -32,7 +33,11 @@ export class ConfirmBookingPaymentUseCase {
       WaveClient,
       'getCheckoutSession' | 'refundCheckoutSession'
     > = new WaveClient(),
-    private credit: Pick<CreditBookingPaymentUseCase, 'execute'> = new CreditBookingPaymentUseCase()
+    private credit: Pick<
+      CreditBookingPaymentUseCase,
+      'execute'
+    > = new CreditBookingPaymentUseCase(),
+    private notifier: Pick<BookingNotifier, 'onlineBookingPaid'> = new BookingNotifier()
   ) {}
 
   async execute(bookingId: string, clientId: string): Promise<BookingPaymentDto> {
@@ -120,6 +125,16 @@ export class ConfirmBookingPaymentUseCase {
       // Ce que le comptoir déduira du prix : sans cette trace, l'acompte payé
       // en ligne serait redemandé en espèces à l'arrivée.
       await this.bookingRepo.recordPrepaid(payment.booking_id, ownerAmountOf(payment))
+
+      // Annoncée une seule fois : `confirm` ne passe ici que pour un paiement
+      // encore `pending`, et les confirmations suivantes le trouvent réussi.
+      if (booking) {
+        await this.notifier.onlineBookingPaid({
+          ...booking,
+          id: payment.booking_id,
+          owner_id: payment.owner_id,
+        })
+      }
 
       return paid
     }

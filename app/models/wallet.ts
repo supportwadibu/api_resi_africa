@@ -98,7 +98,11 @@ export interface WalletTransactionDocument {
 
 export type WalletTransactionRecord = WithId<WalletTransactionDocument>
 
-export const WITHDRAWAL_STATUSES = ['pending', 'paid', 'rejected'] as const
+/**
+ * `processing` : versement Wave lancé, issue pas encore connue. Ni versable à
+ * la main ni refusable dans cet état — l'argent est peut-être déjà parti.
+ */
+export const WITHDRAWAL_STATUSES = ['pending', 'processing', 'paid', 'rejected'] as const
 export type WithdrawalStatus = (typeof WITHDRAWAL_STATUSES)[number]
 
 export interface WithdrawalRequestDocument {
@@ -126,8 +130,24 @@ export interface WithdrawalRequestDocument {
    */
   payout_slot?: number | null
   status: WithdrawalStatus
-  /** Référence du transfert Wave saisie par l'équipe. */
+  /** Référence du transfert Wave : saisie par l'équipe, ou rendue par Wave (`pt-…`). */
   payout_reference: string | null
+  /**
+   * Versement automatique, champs absents sur l'historique et sur les retraits
+   * versés à la main.
+   *
+   * `payout_attempt` numérote les tentatives : la clé d'idempotence en dérive,
+   * et ne change qu'après un échec certain. Une tentative à l'issue inconnue
+   * se rejoue donc avec la même clé, sans risque de payer deux fois.
+   */
+  payout_attempt?: number
+  payout_started_at?: Date | null
+  /** Début de la réservation en cours du versement : voir `claimPayoutCheck`. */
+  payout_checked_at?: Date | null
+  /** Identifiant Wave d'un versement encore `processing`. */
+  payout_provider_id?: string | null
+  /** Dernier refus de Wave, montré à l'équipe pour décider : réessayer ou refuser. */
+  payout_error?: { code: string; message: string } | null
   rejection_reason: string | null
   processed_at: Date | null
   processed_by: string | null
@@ -661,6 +681,14 @@ const Wallet = {
       processed_by: string
       payout_reference?: string | null
       rejection_reason?: string | null
+      /**
+       * État attendu : `pending` pour l'équipe, `processing` pour le versement
+       * automatique qui constate un succès. Un clic « Versé » sur un versement
+       * en cours paierait deux fois.
+       */
+      from?: 'pending' | 'processing'
+      /** Avec `from: 'processing'` : la tentative que ce succès conclut. */
+      attempt?: number
     }
   ): Promise<{ request: WithdrawalRequestRecord; changed: boolean } | null> {
     const requestRef = withdrawals().doc(id)
@@ -668,7 +696,10 @@ const Wallet = {
     return transaction(async (tx) => {
       const request = toDoc<WithdrawalRequestDocument>(await tx.get(requestRef))
       if (!request) return null
-      if (request.status !== 'pending') return { request, changed: false }
+      if (request.status !== (input.from ?? 'pending')) return { request, changed: false }
+      if (input.attempt !== undefined && (request.payout_attempt ?? 1) !== input.attempt) {
+        return { request, changed: false }
+      }
 
       const walletRef = wallets().doc(request.wallet_id)
       const wallet = toDoc<WalletDocument>(await tx.get(walletRef))
@@ -676,6 +707,7 @@ const Wallet = {
 
       const patch = {
         status: input.status,
+        payout_error: null,
         payout_reference: input.status === 'paid' ? (input.payout_reference ?? null) : null,
         rejection_reason: input.status === 'rejected' ? (input.rejection_reason ?? null) : null,
         processed_at: now,
@@ -731,9 +763,122 @@ const Wallet = {
     return { data: toDocs<WalletTransactionDocument>(snapshot.docs), total }
   },
 
+  /**
+   * Lance une tentative de versement : `pending` → `processing`, numéro de
+   * tentative incrémenté. Atomique : deux clics simultanés n'en lancent qu'un.
+   */
+  async startPayout(
+    id: string,
+    adminId: string
+  ): Promise<{ request: WithdrawalRequestRecord; changed: boolean } | null> {
+    const requestRef = withdrawals().doc(id)
+    return transaction(async (tx) => {
+      const request = toDoc<WithdrawalRequestDocument>(await tx.get(requestRef))
+      if (!request) return null
+      if (request.status !== 'pending') return { request, changed: false }
+
+      const now = new Date()
+      const patch = {
+        status: 'processing' as const,
+        payout_attempt: (request.payout_attempt ?? 0) + 1,
+        payout_started_at: now,
+        // L'appel de l'équipe tient la réservation : la relecture ne le
+        // double pas pendant qu'il attend Wave.
+        payout_checked_at: now,
+        payout_provider_id: null,
+        payout_error: null,
+        processed_by: adminId,
+        updated_at: now,
+      }
+      tx.update(requestRef, patch)
+      return { request: { ...request, ...patch }, changed: true }
+    })
+  },
+
+  /**
+   * Réserve un versement en cours pour la relecture : accordé si la tentative
+   * est toujours [attempt] et qu'aucune réservation de moins de [leaseMs] ne
+   * court. Atomique : deux passages concurrents n'en relisent qu'un.
+   */
+  async claimPayoutCheck(
+    id: string,
+    attempt: number,
+    now: Date,
+    leaseMs: number
+  ): Promise<boolean> {
+    const requestRef = withdrawals().doc(id)
+    return transaction(async (tx) => {
+      const request = toDoc<WithdrawalRequestDocument>(await tx.get(requestRef))
+      if (!request || request.status !== 'processing') return false
+      if ((request.payout_attempt ?? 1) !== attempt) return false
+      const held = request.payout_checked_at
+      if (held && now.getTime() - new Date(held).getTime() < leaseMs) return false
+      tx.update(requestRef, { payout_checked_at: now, updated_at: now })
+      return true
+    })
+  },
+
+  /** Wave a accepté le versement sans l'avoir encore exécuté. */
+  async recordPayoutProvider(id: string, attempt: number, providerId: string): Promise<void> {
+    const requestRef = withdrawals().doc(id)
+    await transaction(async (tx) => {
+      const request = toDoc<WithdrawalRequestDocument>(await tx.get(requestRef))
+      if (!request || request.status !== 'processing') return
+      if ((request.payout_attempt ?? 1) !== attempt) return
+      tx.update(requestRef, { payout_provider_id: providerId, updated_at: new Date() })
+    })
+  },
+
+  /**
+   * Échec certain du versement : la demande repasse `pending`, motif gardé.
+   * Le montant reste débité — l'équipe réessaie ou refuse, et le refus le
+   * recrédite. `false` si la demande n'était plus en cours.
+   */
+  async failPayout(
+    id: string,
+    attempt: number,
+    error: { code: string; message: string }
+  ): Promise<boolean> {
+    const requestRef = withdrawals().doc(id)
+    return transaction(async (tx) => {
+      const request = toDoc<WithdrawalRequestDocument>(await tx.get(requestRef))
+      if (!request || request.status !== 'processing') return false
+      // Issue en retard d'une tentative déjà dépassée : elle ne rouvre rien.
+      if ((request.payout_attempt ?? 1) !== attempt) return false
+      tx.update(requestRef, {
+        status: 'pending',
+        payout_error: error,
+        payout_provider_id: null,
+        processed_by: null,
+        updated_at: new Date(),
+      })
+      return true
+    })
+  },
+
+  /**
+   * Versements en cours, pour la relecture planifiée. Égalité simple : pas
+   * d'index composite ; ils sont peu nombreux, le tri se fait en mémoire.
+   */
+  async findProcessingWithdrawals(limit: number): Promise<WithdrawalRequestRecord[]> {
+    const snapshot = await withdrawals().where('status', '==', 'processing').limit(limit).get()
+    return toDocs<WithdrawalRequestDocument>(snapshot.docs)
+  },
+
   async findWithdrawalById(id: string): Promise<WithdrawalRequestRecord | null> {
     if (!id) return null
     return toDoc<WithdrawalRequestDocument>(await withdrawals().doc(id).get())
+  },
+
+  /**
+   * Retrait déjà clos avec cette référence Wave. Égalité simple sur un champ :
+   * pas d'index composite à déclarer.
+   */
+  async findWithdrawalByPayoutReference(
+    reference: string
+  ): Promise<WithdrawalRequestRecord | null> {
+    const snapshot = await withdrawals().where('payout_reference', '==', reference).limit(1).get()
+    return toDocs<WithdrawalRequestDocument>(snapshot.docs)[0] ?? null
   },
 
   async paginateWithdrawals(

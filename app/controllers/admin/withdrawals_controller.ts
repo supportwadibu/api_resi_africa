@@ -5,6 +5,8 @@ import {
   updateWithdrawalSettingsValidator,
 } from '#validators/wallet/wallet'
 
+import PayOutWithdrawalUseCase from '#features/wallets/use_cases/pay_out_withdrawal.use_case'
+
 import type { HttpContext } from '@adonisjs/core/http'
 
 import {
@@ -37,8 +39,14 @@ export default class AdminWithdrawalsController {
     const payload = await ctx.request.validateUsing(markWithdrawalPaidValidator)
     const data = await new ResolveWithdrawalUseCase().execute(ctx.params.id, ctx.authUser!.id, {
       status: 'paid',
-      payout_reference: payload.payout_reference ?? null,
+      payout_reference: payload.payout_reference,
     })
+    return ctx.response.ok({ data })
+  }
+
+  /** POST /admin/withdrawals/:id/payout — versement par l'API Payout de Wave. */
+  async payout(ctx: HttpContext) {
+    const data = await new PayOutWithdrawalUseCase().execute(ctx.params.id, ctx.authUser!.id)
     return ctx.response.ok({ data })
   }
 

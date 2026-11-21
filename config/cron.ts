@@ -48,6 +48,12 @@ const cronConfig = {
     sponsorshipRewards: env.get('CRON_SPONSORSHIP_REWARDS_SCHEDULE', '0 1 * * *'),
 
     /**
+     * Relecture chez Wave des versements de retrait restés en cours.
+     * Toutes les 5 minutes.
+     */
+    withdrawalPayouts: env.get('CRON_WITHDRAWAL_PAYOUTS_SCHEDULE', '*/5 * * * *'),
+
+    /**
      * Purge des traces d'audit échues dans Firestore.
      * Tous les jours à 02:30.
      */

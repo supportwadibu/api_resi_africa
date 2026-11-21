@@ -63,6 +63,9 @@ const bodyParserConfig = defineConfig({
       '/api/v1/proprio/clients/:id',
       '/api/v1/gerant/clients',
       '/api/v1/gerant/clients/:id',
+      // Pièces d'identité saisies à l'arrivée d'un client de l'app.
+      '/api/v1/proprio/bookings/:id/arrival-documents',
+      '/api/v1/gerant/bookings/:id/arrival-documents',
       '/api/v1/admin/clients/import',
       '/api/v1/admin/users/import',
     ],

@@ -17,6 +17,7 @@ import {
   resolveLateCheckoutPolicy,
 } from '../stay_pricing.ts'
 import { defaultCheckOutFor, resolveStayTypePrice, type StayType } from '../stay_type.ts'
+import BookingNotifier from '../booking_notifier.ts'
 import BookingRepository from '../repositories/booking_repository.ts'
 import { syncReferrerCommissionExpense } from '../referrer_expense.ts'
 
@@ -179,6 +180,10 @@ export function resolveAgreedAmount(
  * négocié et l'idempotence.
  */
 export class CreateOwnerBookingUseCase {
+  constructor(
+    private notifier: Pick<BookingNotifier, 'counterBookingByManager'> = new BookingNotifier()
+  ) {}
+
   async execute(input: CreateOwnerBookingInput): Promise<BookingDto> {
     // Court-circuit d'un retry déjà abouti : évite de relire le bien et le
     // client pour rien. L'idempotence elle-même ne repose pas sur ce contrôle
@@ -292,7 +297,16 @@ export class CreateOwnerBookingUseCase {
 
     await syncReferrerCommissionExpense(created)
 
-    return BookingRepository.toDto(created)
+    const dto = BookingRepository.toDto(created)
+    // Saisie d'un gérant : le propriétaire l'apprend sans ouvrir l'appli. Le
+    // rejeu d'idempotence, plus haut, ne repasse pas ici et n'annonce rien.
+    if (input.created_by && input.created_by !== input.owner_id) {
+      await this.notifier.counterBookingByManager({
+        ...dto,
+        property: { title: property.title ?? null },
+      })
+    }
+    return dto
   }
 }
 

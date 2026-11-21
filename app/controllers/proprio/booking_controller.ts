@@ -10,6 +10,10 @@ import {
   updateOwnerBookingValidator,
 } from '#validators/booking/booking'
 
+import { arrivalDocumentsValidator } from '#validators/client/client'
+import { readClientIdentity } from '#features/clients/client_identity'
+import RecordArrivalDocumentsUseCase from '#features/bookings/use_cases/record_arrival_documents.use_case'
+
 import type { HttpContext } from '@adonisjs/core/http'
 
 import {
@@ -147,6 +151,28 @@ export default class ProprioBookingController {
       payload.amount
     )
     return ctx.response.ok({ data: booking })
+  }
+
+  /**
+   * Pièce d'identité d'un client de l'app, enregistrée à son arrivée dans le
+   * carnet du propriétaire.
+   */
+  async arrivalDocuments(ctx: HttpContext) {
+    const userId = ctx.authUser?.id
+    if (!userId) return ctx.response.unauthorized({ error: 'Non authentifié' })
+
+    const payload = await ctx.request.validateUsing(arrivalDocumentsValidator)
+    const client = await new RecordArrivalDocumentsUseCase().execute({
+      booking_id: ctx.params.id,
+      owner_id: userId,
+      documents: {
+        id_document_type: payload.id_document_type,
+        id_document_number: payload.id_document_number,
+        ...readClientIdentity(payload),
+      },
+      files: { front: payload.id_document_front, back: payload.id_document_back },
+    })
+    return ctx.response.ok({ data: client })
   }
 
   /** Arrivée du client, enregistrée à partir du jour J du séjour. */

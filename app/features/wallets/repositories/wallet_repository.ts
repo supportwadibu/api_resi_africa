@@ -51,6 +51,7 @@ export class WalletRepository {
       payout_slot: doc.payout_slot ?? null,
       status: doc.status,
       payout_reference: doc.payout_reference ?? null,
+      payout_error: doc.payout_error ?? null,
       rejection_reason: doc.rejection_reason ?? null,
       processed_at: doc.processed_at ?? null,
       created_at: doc.created_at,
@@ -65,17 +66,23 @@ export class WalletRepository {
    * résidence sans encaissement n'en a pas, et la liste ne l'invente pas.
    */
   async listForOwner(ownerId: string): Promise<WalletDto[]> {
-    const [wallets, pending] = await Promise.all([
+    // Un versement en cours n'est pas encore arrivé : il compte comme en
+    // attente pour le propriétaire.
+    const [wallets, pending, processing] = await Promise.all([
       Wallet.findByOwner(ownerId),
       Wallet.paginateWithdrawals(
         { owner_id: ownerId, status: 'pending' },
+        { limit: 500, offset: 0 }
+      ),
+      Wallet.paginateWithdrawals(
+        { owner_id: ownerId, status: 'processing' },
         { limit: 500, offset: 0 }
       ),
     ])
     const names = await this.residenceNames(wallets.map((w) => w.residence_id))
 
     const pendingByWallet = new Map<string, number>()
-    for (const request of pending.data) {
+    for (const request of [...pending.data, ...processing.data]) {
       pendingByWallet.set(
         request.wallet_id,
         (pendingByWallet.get(request.wallet_id) ?? 0) + request.amount

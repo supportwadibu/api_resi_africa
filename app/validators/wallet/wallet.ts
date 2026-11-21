@@ -77,10 +77,14 @@ export const listWithdrawalsValidator = vine.compile(
 
 /**
  * PATCH /admin/withdrawals/:id/paid
+ *
+ * Référence Wave obligatoire : sans elle, « Versé » n'était qu'un clic, et une
+ * demande a été close sans qu'aucun transfert soit parti. L'identifiant de la
+ * transaction se relit dans Wave Business en cas de réclamation.
  */
 export const markWithdrawalPaidValidator = vine.compile(
   vine.object({
-    payout_reference: vine.string().trim().maxLength(120).optional(),
+    payout_reference: vine.string().trim().minLength(6).maxLength(120),
   })
 )
 
