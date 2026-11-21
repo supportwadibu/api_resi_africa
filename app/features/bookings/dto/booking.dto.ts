@@ -66,6 +66,13 @@ export interface BookingDto {
    */
   property?: BookingPropertySummary
   /**
+   * Coordonnées du propriétaire et adresse complète du logement, jointes à la
+   * liste du client seulement, et seulement une fois la réservation payée ou
+   * le séjour commencé : avant, elles permettraient de traiter en direct sans
+   * passer par RESI.
+   */
+  owner_contact?: OwnerContactDto | null
+  /**
    * Dernier état du paiement en ligne, joint à la liste du client seulement :
    * l'historique doit distinguer une réservation payée d'une réservation en
    * attente. `null` si aucun paiement n'a été lancé.
@@ -183,6 +190,15 @@ export interface UpdateOwnerBookingInput {
   deposit_amount?: number
   /** `null` efface le message, absent le conserve. */
   message?: string | null
+}
+
+export interface OwnerContactDto {
+  full_name: string
+  phone: string | null
+  /** Adresse du propriétaire (dossier de validation), ville comprise. */
+  address: string | null
+  /** Adresse complète du logement, masquée sur la fiche publique. */
+  property_address: string | null
 }
 
 export interface BookingPropertySummary {

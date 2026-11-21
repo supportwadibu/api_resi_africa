@@ -2,12 +2,14 @@ import type { BookingPaymentStatus } from '#features/booking_payments/dto/bookin
 
 import { toClientBooking } from '#features/commissions/booking_commission'
 
-import type { BookingDto } from './dto/booking.dto.ts'
+import type { OwnerContact } from '#features/users/repositories/user_repository'
+
+import type { BookingDto, OwnerContactDto } from './dto/booking.dto.ts'
 
 interface PropertyLike {
   id: string
   title: string
-  address?: { city?: string }
+  address?: { street?: string; city?: string }
   media?: { images?: string[] }
 }
 
@@ -26,7 +28,8 @@ interface PaymentLike {
 export function attachClientView(
   bookings: readonly BookingDto[],
   properties: Map<string, PropertyLike>,
-  payments: readonly PaymentLike[]
+  payments: readonly PaymentLike[],
+  owners: Map<string, OwnerContact> = new Map()
 ): BookingDto[] {
   const latest = new Map<string, PaymentLike>()
   for (const payment of payments) {
@@ -54,6 +57,46 @@ export function attachClientView(
           }
         : {}),
       payment_status: latest.get(booking.id)?.status ?? null,
+      owner_contact: isContactRevealed(booking, latest.get(booking.id)?.status ?? null)
+        ? toOwnerContact(owners.get(booking.owner_id), property)
+        : null,
     }
   })
+}
+
+/**
+ * Le client peut-il joindre le propriétaire ?
+ *
+ * Une fois engagé seulement — payé en ligne, ou séjour commencé ou fini —
+ * et jamais pour une réservation annulée : la fiche publique cache le
+ * propriétaire pour que la réservation passe par RESI.
+ */
+export function isContactRevealed(
+  booking: Pick<BookingDto, 'status'>,
+  paymentStatus: BookingPaymentStatus | null
+): boolean {
+  if (booking.status === 'cancelled') return false
+  return (
+    paymentStatus === 'success' ||
+    booking.status === 'in_progress' ||
+    booking.status === 'completed'
+  )
+}
+
+function toOwnerContact(
+  owner: OwnerContact | undefined,
+  property: PropertyLike | undefined
+): OwnerContactDto | null {
+  if (!owner) return null
+  return {
+    full_name: owner.full_name,
+    phone: owner.phone,
+    address: joinAddress(owner.address, owner.city),
+    property_address: joinAddress(property?.address?.street, property?.address?.city),
+  }
+}
+
+function joinAddress(street?: string | null, city?: string | null): string | null {
+  const parts = [street?.trim(), city?.trim()].filter((part): part is string => !!part)
+  return parts.length > 0 ? parts.join(', ') : null
 }

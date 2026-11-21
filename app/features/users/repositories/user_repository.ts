@@ -9,6 +9,14 @@ import User, { type UserDocument, type UserEntity, type UserRecord } from '#mode
 import type { RoleName } from '#models/role'
 import type { ListUsersInput, UserDto, UserSummaryDto } from '../dto/user.dto.ts'
 
+/** Coordonnées brutes d'un propriétaire, mises en forme par la vue client. */
+export interface OwnerContact {
+  full_name: string
+  phone: string | null
+  address: string | null
+  city: string | null
+}
+
 /**
  * Le compte correspond-il au terme recherché ?
  *
@@ -119,6 +127,27 @@ export class UserRepository {
 
     const out = new Map<string, UserSummaryDto>()
     for (const [id, doc] of docs) out.set(id, UserRepository.toSummary(doc))
+    return out
+  }
+
+  /**
+   * Coordonnées des propriétaires cités, pour les séjours payés d'un client :
+   * nom, téléphone et adresse du dossier de validation.
+   */
+  async findOwnerContacts(
+    ids: readonly (string | null | undefined)[]
+  ): Promise<Map<string, OwnerContact>> {
+    const docs = await getByIds<UserDocument>(COLLECTIONS.users, ids)
+    const out = new Map<string, OwnerContact>()
+    for (const [id, doc] of docs) {
+      out.set(id, {
+        full_name: doc.full_name,
+        phone: doc.phone ?? null,
+        // Comptes antérieurs au dossier de validation : pas de `profile`.
+        address: doc.profile?.address ?? null,
+        city: doc.profile?.city ?? null,
+      })
+    }
     return out
   }
 
